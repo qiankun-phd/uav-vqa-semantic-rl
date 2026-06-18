@@ -88,6 +88,9 @@ class EnvTask:
     last_sensed_snr_db: float = 0.0
     last_sinr_db: float = 0.0
     last_snr_bin: str = ""
+    operational_intent_id: str = ""
+    operational_intent_state: str = "accepted"
+    operational_priority: float = 1.0
 
     @property
     def x_m(self) -> float:
@@ -250,6 +253,8 @@ SERVICE_LEVELS: dict[int, dict[str, Any]] = {
     },
 }
 
+OPERATIONAL_INTENT_STATES = ("accepted", "activated", "nonconforming", "contingent")
+
 
 FORMAL_SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "train_nominal": {
@@ -307,6 +312,115 @@ FORMAL_SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "freshness_cycle": ["fresh", "stale", "expired", "fresh"],
         },
     },
+    "test_utm_nominal_planning": {
+        "split": "test",
+        "base_scenario": "nominal",
+        "utm_realistic": True,
+        "description": "UTM-style nominal planning with accepted/activated operational intents and available DSS.",
+        "env": {
+            "tasks_per_episode": 18,
+            "episode_steps": 10,
+            "utm": {
+                "enabled": True,
+                "mode": "nominal_planning",
+                "dss_available": True,
+                "dss_delay_s": 0.05,
+                "subscription_notification_delay_s": 0.08,
+                "spatial_buffer_m": 25.0,
+                "temporal_buffer_steps": 1,
+            },
+        },
+        "task_layout": {"generation_mode": "staggered", "jitter_ratio": 0.12},
+    },
+    "test_utm_off_nominal_planning": {
+        "split": "test",
+        "base_scenario": "mobility-stress",
+        "utm_realistic": True,
+        "description": "UTM-style off-nominal planning with low battery/mobility pressure producing nonconforming intents.",
+        "env": {
+            "tasks_per_episode": 18,
+            "episode_steps": 12,
+            "initial_battery_j": 7_500.0,
+            "return_energy_reserve_j": 1_500.0,
+            "utm": {
+                "enabled": True,
+                "mode": "off_nominal_planning",
+                "dss_available": True,
+                "dss_delay_s": 0.08,
+                "subscription_notification_delay_s": 0.12,
+                "spatial_buffer_m": 30.0,
+                "temporal_buffer_steps": 1,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.18,
+            "risk_cycle": ["critical", "normal", "normal"],
+            "freshness_cycle": ["stale", "expired", "fresh"],
+        },
+    },
+    "test_utm_intent_conflict": {
+        "split": "test",
+        "base_scenario": "conflict-heavy",
+        "utm_realistic": True,
+        "description": "UTM-style strategic conflict detection with spatial/temporal buffers around overlapping intents.",
+        "env": {
+            "tasks_per_episode": 18,
+            "episode_steps": 10,
+            "utm": {
+                "enabled": True,
+                "mode": "flight_intent_validation",
+                "dss_available": True,
+                "dss_delay_s": 0.06,
+                "subscription_notification_delay_s": 0.10,
+                "spatial_buffer_m": 50.0,
+                "altitude_buffer_m": 10.0,
+                "temporal_buffer_steps": 2,
+            },
+        },
+        "task_layout": {"generation_mode": "burst", "force_same_area": True, "jitter_ratio": 0.02},
+    },
+    "test_utm_dss_outage": {
+        "split": "test",
+        "base_scenario": "nominal",
+        "utm_realistic": True,
+        "description": "UTM-style DSS outage abstraction: operational intents enter contingent state and incur DSS delay.",
+        "env": {
+            "tasks_per_episode": 16,
+            "episode_steps": 10,
+            "utm": {
+                "enabled": True,
+                "mode": "dss_outage",
+                "dss_available": False,
+                "dss_delay_s": 0.75,
+                "subscription_notification_delay_s": 0.20,
+                "spatial_buffer_m": 25.0,
+                "temporal_buffer_steps": 1,
+            },
+        },
+        "task_layout": {"generation_mode": "wave", "jitter_ratio": 0.10},
+    },
+    "test_utm_notification_delay": {
+        "split": "test",
+        "base_scenario": "conflict-heavy",
+        "utm_realistic": True,
+        "description": "UTM-style subscription notification delay for delayed strategic conflict updates.",
+        "env": {
+            "tasks_per_episode": 18,
+            "episode_steps": 10,
+            "utm": {
+                "enabled": True,
+                "mode": "subscription_notifications",
+                "dss_available": True,
+                "dss_delay_s": 0.06,
+                "subscription_notification_delay_s": 0.85,
+                "spatial_buffer_m": 45.0,
+                "altitude_buffer_m": 10.0,
+                "temporal_buffer_steps": 2,
+            },
+        },
+        "task_layout": {"generation_mode": "burst", "force_same_area": True, "jitter_ratio": 0.03},
+    },
 }
 
 
@@ -334,8 +448,16 @@ def available_scenarios() -> list[str]:
     return sorted(SCENARIO_PRESETS)
 
 
-def available_formal_scenarios() -> list[str]:
-    return list(FORMAL_SCENARIO_PRESETS)
+def available_formal_scenarios(include_utm: bool = False) -> list[str]:
+    return [
+        name
+        for name, spec in FORMAL_SCENARIO_PRESETS.items()
+        if include_utm or not bool(spec.get("utm_realistic", False))
+    ]
+
+
+def available_utm_realistic_scenarios() -> list[str]:
+    return [name for name, spec in FORMAL_SCENARIO_PRESETS.items() if bool(spec.get("utm_realistic", False))]
 
 
 def scalability_presets() -> dict[str, dict[str, dict[str, Any]]]:
@@ -453,6 +575,17 @@ def _env_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
             "interference_enabled": True,
             "interference_floor_dbm": -120.0,
             "interference_overlap_scale": 0.02,
+        },
+        "utm": {
+            "enabled": True,
+            "mode": "nominal_planning",
+            "spatial_buffer_m": 20.0,
+            "altitude_buffer_m": 0.0,
+            "temporal_buffer_steps": 0,
+            "dss_available": True,
+            "dss_delay_s": 0.05,
+            "subscription_notification_delay_s": 0.10,
+            "contingent_delay_s": 0.50,
         },
         "reward_success": 2.0,
         "reward_delay": 0.20,
@@ -594,6 +727,7 @@ class MultiUAVVQAEnv:
         task.last_sensed_snr_db = float(info["sensed_snr_db"])
         task.last_sinr_db = float(info["sinr_db"])
         task.last_snr_bin = str(info["snr_bin"])
+        task.operational_intent_state = str(info.get("operational_intent_state", task.operational_intent_state))
         if success:
             task.completed = True
             task.cache_age = 0
@@ -697,13 +831,26 @@ class MultiUAVVQAEnv:
         if int(parsed["service_level"]) == 0:
             accuracy *= 0.85 + 0.15 * cache_probability
         delay = self._delay_parts(task, uav, edge, parsed, entry.payload_bytes, link)
+        strategic_conflict_task_ids = self._strategic_conflict_task_ids(task, parsed)
+        airspace_conflict = bool(strategic_conflict_task_ids)
+        utm = self._utm_evaluation(task, parsed, strategic_conflict_task_ids)
+        delay["utm_dss_delay_s"] = float(utm["dss_delay_s"])
+        delay["utm_notification_delay_s"] = float(utm["subscription_notification_delay_s"])
+        delay["total_delay_s"] += delay["utm_dss_delay_s"] + delay["utm_notification_delay_s"]
         energy = self._energy_parts(delay, parsed)
         quality_violation = accuracy < task.epsilon_k
         deadline_violation = delay["total_delay_s"] > task.tau_k
         battery_violation = energy["total_energy_j"] > uav.battery_j - float(self.env_cfg["return_energy_reserve_j"])
         gpu_memory_ok = self._gpu_memory_ok(edge, int(parsed["service_level"]))
-        airspace_conflict = self._airspace_conflict(task, parsed)
-        success = not (quality_violation or deadline_violation or battery_violation or airspace_conflict or not gpu_memory_ok)
+        utm_constraint_violation = bool(utm["utm_constraint_violation"])
+        success = not (
+            quality_violation
+            or deadline_violation
+            or battery_violation
+            or airspace_conflict
+            or utm_constraint_violation
+            or not gpu_memory_ok
+        )
         payload_kb = float(entry.payload_bytes) / 1024.0
         route = self.semantic_service_route(task, parsed, entry, cache_probability)
         utility = self.semantic_utility(
@@ -737,6 +884,20 @@ class MultiUAVVQAEnv:
             "battery_violation": bool(battery_violation),
             "resource_violation": bool(not gpu_memory_ok),
             "airspace_conflict": bool(airspace_conflict),
+            "utm_constraint_violation": bool(utm_constraint_violation),
+            "operational_intent_id": task.operational_intent_id,
+            "operational_intent_state": str(utm["operational_intent_state"]),
+            "operational_priority": round(float(task.operational_priority), 6),
+            "strategic_conflict": bool(airspace_conflict),
+            "strategic_conflict_count": int(utm["strategic_conflict_count"]),
+            "strategic_conflict_task_ids": ";".join(str(item) for item in strategic_conflict_task_ids),
+            "utm_spatial_buffer_m": round(float(utm["spatial_buffer_m"]), 6),
+            "utm_altitude_buffer_m": round(float(utm["altitude_buffer_m"]), 6),
+            "utm_temporal_buffer_steps": int(utm["temporal_buffer_steps"]),
+            "dss_available": bool(utm["dss_available"]),
+            "dss_delay_s": round(float(utm["dss_delay_s"]), 6),
+            "subscription_notification_delay_s": round(float(utm["subscription_notification_delay_s"]), 6),
+            "conflict_notification_pending": bool(utm["conflict_notification_pending"]),
             "snr_bin": snr_bin,
             "sensed_snr_db": round(float(link["snr_db"]), 6),
             "sinr_db": round(float(link["sinr_db"]), 6),
@@ -980,9 +1141,25 @@ class MultiUAVVQAEnv:
                     area_id=area_id,
                     area4d=area,
                     cache_age=cache_age,
+                    operational_intent_id=f"oi_ep{self.episode}_task{idx}_area{area_id}",
+                    operational_intent_state=self._initial_operational_intent_state(idx, risk),
+                    operational_priority=2.0 if risk == "critical" else 1.0,
                 )
             )
         return tasks
+
+    def _initial_operational_intent_state(self, idx: int, risk: str) -> str:
+        layout = self.scenario_cfg.get("task_layout", {})
+        explicit = layout.get("operational_state_cycle")
+        if isinstance(explicit, list) and explicit:
+            state = str(explicit[idx % len(explicit)])
+            return state if state in OPERATIONAL_INTENT_STATES else "accepted"
+        mode = str(self.env_cfg.get("utm", {}).get("mode", "nominal_planning"))
+        if mode == "dss_outage":
+            return "contingent"
+        if mode == "off_nominal_planning" and risk == "critical":
+            return "nonconforming"
+        return "accepted"
 
     def _generation_step(self, idx: int, area_id: int, layout: dict[str, Any]) -> int:
         mode = str(layout.get("generation_mode", "staggered"))
@@ -1288,16 +1465,75 @@ class MultiUAVVQAEnv:
         )
 
     def _airspace_conflict(self, task: EnvTask, action: dict[str, Any]) -> bool:
+        return bool(self._strategic_conflict_task_ids(task, action))
+
+    def _strategic_conflict_task_ids(self, task: EnvTask, action: dict[str, Any]) -> list[str]:
         if not self._requires_operational_intent(action):
-            return False
+            return []
+        conflict_ids: list[str] = []
         for other_raw in action.get("concurrent_actions", []):
             other_task = self._task_by_id(other_raw.get("task_id"))
             if other_task is None or other_task.task_id == task.task_id:
                 continue
             other = self.parse_action(other_raw, other_task)
-            if self._requires_operational_intent(other) and task.area4d.overlaps(other_task.area4d):
-                return True
-        return False
+            if self._requires_operational_intent(other) and self._area4d_overlaps_with_buffer(task.area4d, other_task.area4d):
+                conflict_ids.append(other_task.task_id)
+        return conflict_ids
+
+    def _area4d_overlaps_with_buffer(self, first: Area4D, second: Area4D) -> bool:
+        utm = self.env_cfg.get("utm", {})
+        spatial_buffer = float(utm.get("spatial_buffer_m", 0.0)) if bool(utm.get("enabled", True)) else 0.0
+        altitude_buffer = float(utm.get("altitude_buffer_m", 0.0)) if bool(utm.get("enabled", True)) else 0.0
+        temporal_buffer = int(utm.get("temporal_buffer_steps", 0)) if bool(utm.get("enabled", True)) else 0
+        spatial = first.distance_to(second.center_x_m, second.center_y_m) <= first.radius_m + second.radius_m + spatial_buffer
+        altitude = (
+            first.altitude_min_m - altitude_buffer <= second.altitude_max_m + altitude_buffer
+            and second.altitude_min_m - altitude_buffer <= first.altitude_max_m + altitude_buffer
+        )
+        temporal = first.start_step <= second.end_step + temporal_buffer and second.start_step <= first.end_step + temporal_buffer
+        return spatial and altitude and temporal
+
+    def _utm_evaluation(self, task: EnvTask, action: dict[str, Any], conflict_task_ids: list[str]) -> dict[str, Any]:
+        utm = self.env_cfg.get("utm", {})
+        enabled = bool(utm.get("enabled", True))
+        needs_intent = self._requires_operational_intent(action)
+        dss_available = bool(utm.get("dss_available", True))
+        mode = str(utm.get("mode", "nominal_planning"))
+        dss_delay = float(utm.get("dss_delay_s", 0.0)) if enabled and needs_intent else 0.0
+        if enabled and needs_intent and not dss_available:
+            dss_delay = max(dss_delay, float(utm.get("contingent_delay_s", dss_delay)))
+        notification_delay = (
+            float(utm.get("subscription_notification_delay_s", 0.0))
+            if enabled and needs_intent and bool(conflict_task_ids)
+            else 0.0
+        )
+        if not enabled or not needs_intent:
+            state = task.operational_intent_state if task.operational_intent_state in OPERATIONAL_INTENT_STATES else "accepted"
+        elif not dss_available:
+            state = "contingent"
+        elif mode == "off_nominal_planning" and (
+            task.operational_intent_state == "nonconforming" or task.risk_level == "critical"
+        ):
+            state = "nonconforming"
+        elif conflict_task_ids:
+            state = "nonconforming"
+        else:
+            state = "activated"
+        utm_violation = enabled and needs_intent and (
+            not dss_available or bool(conflict_task_ids) or state in {"nonconforming", "contingent"}
+        )
+        return {
+            "operational_intent_state": state,
+            "strategic_conflict_count": len(conflict_task_ids),
+            "spatial_buffer_m": float(utm.get("spatial_buffer_m", 0.0)),
+            "altitude_buffer_m": float(utm.get("altitude_buffer_m", 0.0)),
+            "temporal_buffer_steps": int(utm.get("temporal_buffer_steps", 0)),
+            "dss_available": dss_available,
+            "dss_delay_s": dss_delay,
+            "subscription_notification_delay_s": notification_delay,
+            "conflict_notification_pending": notification_delay > 0.0,
+            "utm_constraint_violation": utm_violation,
+        }
 
     def _semantic_cache_hit_probability(self, task: EnvTask) -> float:
         base = float(self.env_cfg["cache_hit_probability"].get(task.freshness_bin, 0.0))
@@ -1415,6 +1651,8 @@ class MultiUAVVQAEnv:
                 "risk_level": "",
                 "view_quality_bin": "",
                 "freshness_bin": "",
+                "operational_intent_id": "",
+                "operational_intent_state": "",
                 "sensed_snr_db": 0.0,
                 "snr_bin": "",
                 "uav_state": [asdict(uav) for uav in self.uavs],
@@ -1453,6 +1691,8 @@ class MultiUAVVQAEnv:
             "risk_level": task.risk_level,
             "view_quality_bin": task.view_quality_bin,
             "freshness_bin": task.freshness_bin,
+            "operational_intent_id": task.operational_intent_id,
+            "operational_intent_state": task.operational_intent_state,
             "sensed_snr_db": round(float(link["snr_db"]), 6),
             "sinr_db": round(float(link["sinr_db"]), 6),
             "snr_bin": snr_bin,
@@ -1675,6 +1915,18 @@ class MultiUAVVQAEnv:
             "payload_kb": 0.0,
             "quality_violation": False,
             "deadline_violation": False,
+            "airspace_conflict": False,
+            "utm_constraint_violation": False,
+            "operational_intent_id": "",
+            "operational_intent_state": "",
+            "operational_priority": 0.0,
+            "strategic_conflict": False,
+            "strategic_conflict_count": 0,
+            "strategic_conflict_task_ids": "",
+            "dss_available": True,
+            "dss_delay_s": 0.0,
+            "subscription_notification_delay_s": 0.0,
+            "conflict_notification_pending": False,
             "snr_bin": "",
             "service_level": 0,
             "semantic_service_name": "",
@@ -1771,6 +2023,20 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "quality_violation",
         "deadline_violation",
         "airspace_conflict",
+        "utm_constraint_violation",
+        "operational_intent_id",
+        "operational_intent_state",
+        "operational_priority",
+        "strategic_conflict",
+        "strategic_conflict_count",
+        "strategic_conflict_task_ids",
+        "utm_spatial_buffer_m",
+        "utm_altitude_buffer_m",
+        "utm_temporal_buffer_steps",
+        "dss_available",
+        "dss_delay_s",
+        "subscription_notification_delay_s",
+        "conflict_notification_pending",
         "snr_bin",
         "sensed_snr_db",
         "sinr_db",
@@ -1793,6 +2059,8 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "queue_delay_s",
         "infer_delay_s",
         "load_delay_s",
+        "utm_dss_delay_s",
+        "utm_notification_delay_s",
         "fly_energy_j",
         "hover_energy_j",
         "tx_energy_j",
@@ -1814,6 +2082,8 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
     avg_rate = sum(float(row.get("rate_mbps", 0.0)) for row in rows) / denom
     avg_semantic_utility = sum(float(row.get("semantic_utility", 0.0)) for row in rows) / denom
     conflicts = sum(float(row.get("airspace_conflict", False)) for row in rows) / denom
+    utm_violations = sum(float(row.get("utm_constraint_violation", False)) for row in rows) / denom
+    dss_outage_rate = sum(1.0 - float(bool(row.get("dss_available", True))) for row in rows) / denom
     lines = [
         "# Multi-UAV Environment Smoke Summary",
         "",
@@ -1826,6 +2096,8 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         f"- average_rate_mbps: {avg_rate:.3f}",
         f"- average_semantic_utility: {avg_semantic_utility:.3f}",
         f"- airspace_conflict_rate: {conflicts:.3f}",
+        f"- utm_constraint_violation_rate: {utm_violations:.3f}",
+        f"- dss_outage_rate: {dss_outage_rate:.3f}",
         "",
         "Outputs are environment-thread artifacts and intentionally live under `outputs/env`.",
     ]

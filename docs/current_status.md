@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-06-19 00:15 Asia/Macau
+Last updated: 2026-06-19 00:28 Asia/Macau
 Remote host: qiankun@172.27.57.160
 
 ## Code Locations
@@ -93,6 +93,49 @@ outputs/reports/v1_9_snr_payload_by_snr.csv
 outputs/sim/v1_9_snr_resource_results.csv
 outputs/sim/v1_9_snr_resource_summary.md
 ```
+
+## V1.9 VQA-grounded Semantic Utility Model State
+
+Completed 2026-06-19 00:28 Asia/Macau:
+
+- Added a task-conditioned semantic utility layer on top of the V1.9 measured Qwen/VQA predictions.
+- The original prediction CSV was not modified.
+- The old raw SNR quality LUT remains available as traceable measurement input.
+- The new utility model exposes answer accuracy, conservative LCB, payload, uncertainty, and sample count for each task/service/SNR/view/freshness/risk cell.
+- SNR monotonic sanity checking is applied to reduce RL instability from sparse/noisy measured cells.
+- Cache service cells are forced to be SNR-invariant because cache answer reuse does not transmit visual evidence.
+
+New source and tests:
+
+```text
+src/vqa_semcom/semantic/utility.py
+tests/test_semantic_utility.py
+```
+
+New outputs:
+
+```text
+outputs/lut/v1_9_semantic_utility_with_ci.csv
+outputs/reports/semantic_utility_calibration.md
+```
+
+Latest semantic utility calibration summary:
+
+- utility cells: 648
+- CSV line count including header: 649
+- SNR bins: -5dB, 0dB, 5dB, 10dB, 15dB, 20dB
+- sparse cells: 108
+- SNR monotonic adjusted cells: 48
+- cache SNR-invariant cells: 216
+
+New control-facing API:
+
+```python
+U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level)
+# -> accuracy_mean, accuracy_lcb, payload_kb, uncertainty, sample_count
+```
+
+For algorithm/environment integration, prefer `accuracy_lcb` for conservative QoS checks and keep `uncertainty`/`sample_count` visible in `info`.
 
 Resource simulation headline:
 
@@ -327,30 +370,9 @@ Latest fixed-scenario environment smokes:
 | cache-heavy | `outputs/env/env_smoke_cache_heavy_20260618_234452` | 0.000 | 43.406 | 1.923 | 231.230 |
 | mobility-stress | `outputs/env/env_smoke_mobility_stress_20260618_234452` | 0.000 | 21.248 | 50.225 | 6203.722 |
 
-Semantic network simulator / benchmark update completed 2026-06-19 00:15 Asia/Macau:
-
-- Added architecture documentation: `docs/semantic_network_architecture.md`.
-- Added formal problem definition: `docs/formal_problem_definition.md`.
-- Extended `src/vqa_semcom/sim/multi_uav_env.py` from a multi-UAV env into a semantic communication network simulator interface:
-  - task layer, semantic service layer, semantic utility layer, network layer, and cognitive control layer metadata.
-  - semantic service routing API through `semantic_service_route(...)`.
-  - semantic utility API through `semantic_utility(...)` and `semantic_utility_schema()`.
-  - graph observation export through `obs["graph"]` and `env.graph_observation_schema()`.
-  - formal train/test scenarios and scalability presets.
-- Added benchmark script: `scripts/run_semantic_network_benchmark.py`.
-- Added tests: `tests/test_semantic_network_env.py`.
-- Generated environment-owned benchmark artifacts:
-
-```text
-outputs/env/formal_scenario_specs.md
-outputs/env/scenario_smoke_20260619_001459.csv
-```
-
-- Passed `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests` with 53 tests OK.
-- Service level 3 ROI/crop remains disabled; the benchmark uses only `s=0,1,2`.
-
 ## Current Blockers / Watch Items
 
+- UTM/InterUSS-style realistic flight mapping is being added to `sim.multi_uav_env` as an environment-thread feature; it does not introduce an InterUSS runtime dependency and keeps service level 3 ROI disabled.
 - V1.9 full-SNR prediction/LUT/report/resource simulation refresh is complete as of 2026-06-18 23:34 Asia/Macau.
 - The final report includes all configured SNR bins: -5dB, 0dB, 5dB, 10dB, 15dB, 20dB.
 - Algorithm hybrid TCH-PPO smoke has been rerun against the refreshed full-bin LUT under `outputs/rl/v1_9_hybrid_tch_ppo_smoke`.
@@ -377,3 +399,37 @@ ssh qiankun@172.27.57.160 'ls -lh /home/qiankun/phd_research/vqa_semcom/outputs/
 - Passed: algorithm smoke wrote outputs/rl/v1_9_resource_alloc_verify_smoke/.
 - Cleaned stale root-level mis-sync files by moving multi_uav_env.py, v19_resource_env.py, and test_multi_uav_env.py to outputs/env/codex_misrsync_20260618/root_stale_20260618_1734/. Canonical files remain under src/ and tests/.
 - Completed later: PID 1208659 exited and the full-bin V1.9 LUT/report/resource simulation were refreshed at 2026-06-18 23:34 Asia/Macau.
+
+## UTM Realistic Flight Mapping 2026-06-19 Asia/Shanghai
+
+Environment thread added an InterUSS/ASTM-inspired UTM coordination layer to the canonical simulator:
+
+- New documentation: `docs/interuss_realistic_flight_mapping.md`.
+- Added operational intent fields to `src/vqa_semcom/sim/multi_uav_env.py`: `operational_intent_id`, `operational_intent_state`, and `operational_priority`.
+- Added UTM states: accepted, activated, nonconforming, and contingent.
+- Added buffered strategic conflict detection with spatial, altitude, and temporal buffers.
+- Added DSS availability/delay and subscription notification delay abstractions; UTM delays are included in total task delay and reported separately.
+- Added realistic scenarios accepted by `env.reset(options={"formal_scenario": ...})`: `test_utm_nominal_planning`, `test_utm_off_nominal_planning`, `test_utm_intent_conflict`, `test_utm_dss_outage`, and `test_utm_notification_delay`.
+- Added UTM trace fields: `strategic_conflict_count`, `strategic_conflict_task_ids`, `dss_available`, `dss_delay_s`, `subscription_notification_delay_s`, `conflict_notification_pending`, and `utm_constraint_violation`.
+- Cache-only service still does not create operational intent or airspace conflict; observe/revisit/waypoint actions with `service_level > 0` do.
+
+Environment-owned UTM outputs:
+
+```text
+outputs/env/interuss_mapping_summary.md
+outputs/env/utm_realistic_scenario_smoke.csv
+```
+
+Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 67 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_semantic_network_benchmark.py \
+  --config configs/v1_9_snr_lut.yaml \
+  --steps 5 \
+  --seed 29 \
+  --output-dir outputs/env \
+  --formal-scenarios test_utm_nominal_planning,test_utm_off_nominal_planning,test_utm_intent_conflict,test_utm_dss_outage,test_utm_notification_delay
+# wrote outputs/env/utm_realistic_scenario_smoke.csv with 25 rows
+```

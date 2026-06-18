@@ -1,6 +1,6 @@
 # Experiment TODO
 
-Last updated: 2026-06-19 00:15 Asia/Macau
+Last updated: 2026-06-19 00:28 Asia/Macau
 Primary project root: /home/qiankun/phd_research/vqa_semcom
 
 ## Completed VQA / SNR-LUT Tasks
@@ -21,6 +21,27 @@ Completed 2026-06-18 23:34 Asia/Macau:
 /home/qiankun/phd_research/vqa_semcom/outputs/sim/v1_9_snr_resource_summary.md
 ```
 
+Completed 2026-06-19 00:28 Asia/Macau:
+
+- Promoted the raw SNR-LUT result into a VQA-grounded task-conditioned semantic utility model.
+- Added `src/vqa_semcom/semantic/utility.py` and `tests/test_semantic_utility.py`.
+- Generated:
+
+```text
+outputs/lut/v1_9_semantic_utility_with_ci.csv
+outputs/reports/semantic_utility_calibration.md
+```
+
+- Utility CSV now exposes `sample_count`, `accuracy_mean`, `accuracy_ci_low`, `accuracy_ci_high`, `accuracy_lcb`, `payload_kb`, and `uncertainty`.
+- Calibration report confirms all configured SNR bins are present: -5dB, 0dB, 5dB, 10dB, 15dB, 20dB.
+- SNR monotonic sanity check adjusted 48 cells; 108 sparse cells are explicitly marked; 216 cache cells are SNR-invariant.
+- Verified:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_semantic_utility.py'
+```
+
 ## Immediate Integration Tasks
 
 1. Done: Reran canonical environment smoke against the refreshed full-bin V1.9 LUT.
@@ -32,7 +53,16 @@ outputs/sim/v1_9_snr_resource_results.csv
 outputs/rl/v1_9_formal_hybrid_tch_ppo_20260618/formal_comparison_summary.csv
 ```
 
-4. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
+4. Done: Built the calibrated semantic utility interface for future RL/environment integration:
+
+```text
+outputs/lut/v1_9_semantic_utility_with_ci.csv
+src/vqa_semcom/semantic/utility.py
+```
+
+5. Pending: Update the canonical environment and algorithm wrapper to consume `U_sem(...).accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count` instead of only raw `expected_accuracy`.
+6. Pending: Add `semantic_accuracy_mean`, `semantic_accuracy_lcb`, `semantic_uncertainty`, and `semantic_sample_count` to rollout `info` and CSV outputs.
+7. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
 
 ## Algorithm Thread TODO
 
@@ -164,6 +194,16 @@ Do not overwrite V1.9 VLM/LUT/report files.
 
 ## Environment Thread TODO
 
+Completed 2026-06-19 Asia/Shanghai:
+
+1. Added InterUSS/UTM realistic flight mapping without adding an external InterUSS dependency.
+2. Added `docs/interuss_realistic_flight_mapping.md` covering DSS, USS qualifier, ASTM F3548 scenario families, and environment field mapping.
+3. Extended `src/vqa_semcom/sim/multi_uav_env.py` with operational intent id/state/priority, buffered strategic conflict detection, DSS availability/delay, subscription notification delay, and UTM-specific info fields.
+4. Added realistic UTM formal scenarios: `test_utm_nominal_planning`, `test_utm_off_nominal_planning`, `test_utm_intent_conflict`, `test_utm_dss_outage`, and `test_utm_notification_delay`.
+5. Added `tests/test_interuss_realistic_env.py` for nominal activation, buffered conflict detection, cache-only no-conflict behavior, DSS outage/contingent state, notification delay, and spatial/temporal buffer behavior.
+6. Prepared environment-owned summary outputs under `outputs/env/`: `interuss_mapping_summary.md` and `utm_realistic_scenario_smoke.csv`.
+7. Passed `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests` with 67 tests OK; UTM smoke covered all five realistic scenarios with 25 rows.
+
 Completed 2026-06-18 17:29 Asia/Macau:
 
 1. Read docs/current_status.md, docs/interfaces.md, and docs/thread_contract.md before editing.
@@ -214,52 +254,12 @@ outputs/env/env_smoke_mobility_stress_20260618_234452/trace.csv
 outputs/env/env_smoke_mobility_stress_20260618_234452/summary.md
 ```
 
-Completed 2026-06-19 00:15 Asia/Macau:
-
-1. Promoted the environment-thread scope to a UAV-driven semantic communication network simulator/benchmark while preserving the stable reset/step API.
-2. Added architecture and formal problem docs:
-
-```text
-docs/semantic_network_architecture.md
-docs/formal_problem_definition.md
-```
-
-3. Extended `src/vqa_semcom/sim/multi_uav_env.py` with:
-   - semantic network layer metadata.
-   - semantic service routing API.
-   - semantic utility API.
-   - graph observation schema/export.
-   - formal train/test scenario presets.
-   - scalability presets for UAV count, task arrival, and edge load.
-4. Added benchmark script:
-
-```text
-scripts/run_semantic_network_benchmark.py
-```
-
-5. Added tests:
-
-```text
-tests/test_semantic_network_env.py
-```
-
-6. Generated environment-owned benchmark outputs:
-
-```text
-outputs/env/formal_scenario_specs.md
-outputs/env/scenario_smoke_20260619_001459.csv
-```
-
-7. Passed `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests` with 53 tests OK.
-8. Confirmed service level 3 ROI/crop remains disabled; benchmark service levels are 0/1/2 only.
-
 Next environment steps:
 
-1. Use `outputs/env/scenario_smoke_20260619_001459.csv` to sanity-check formal train/test split behavior before algorithm training.
-2. Run larger benchmark sweeps with `scripts/run_semantic_network_benchmark.py --include-scalability --scalability-mode full` when a full scalability table is needed.
-3. Add a full Gymnasium/DI-engine graph adapter after the graph schema is consumed by a GNN/HPPO design.
-4. Calibrate constants against a concrete UAV platform if platform specs become available; current values are lightweight, explainable defaults.
-5. Extend service level 3 ROI only after the V1.9/V2 LUT explicitly contains ROI/crop rows.
+1. Use the fixed scenarios for algorithm ablations: conflict penalty, interference-aware resource allocation, cache reuse, and mobility/energy stress.
+2. Calibrate constants against a concrete UAV platform if platform specs become available; current values are lightweight, explainable defaults.
+3. Add a full Gymnasium/DI-engine adapter only after the canonical env/action mask stabilizes.
+4. Extend service level 3 ROI only after the V1.9/V2 LUT explicitly contains ROI/crop rows.
 
 ## Integration TODO
 
@@ -269,9 +269,10 @@ Next environment steps:
 4. Done: Reran algorithm hybrid TCH-PPO smoke after the rebuilt full-bin V1.9 LUT under `outputs/rl/v1_9_hybrid_tch_ppo_smoke`.
 5. Done: Reran canonical environment smoke for all fixed scenarios under `outputs/env/env_smoke_*_20260618_234452`.
 6. Done: Reran formal multi-seed algorithm comparison under `outputs/rl/v1_9_formal_hybrid_tch_ppo_20260618`.
-7. Done: Added semantic-network benchmark specs and smoke output under `outputs/env/`.
-8. Pending: Improve PPO/TCH-PPO so it does not collapse to service level 0/cache in the calibrated canonical environment.
-9. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
+7. Done: VQA thread added the calibrated semantic utility model with CI, uncertainty, and SNR monotonic sanity checks.
+8. Pending: Environment thread should query the semantic utility interface and expose conservative utility fields in `info`.
+9. Pending: Improve PPO/TCH-PPO so it does not collapse to service level 0/cache in the calibrated canonical environment.
+10. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
 
 ## Output Naming Convention
 
