@@ -1,0 +1,17 @@
+policy,episodes,tasks,task_success_rate,average_accuracy,average_delay,average_energy,average_payload_kb,payload_reduction_vs_always_image,quality_violation_rate,deadline_violation_rate,battery_violation_rate,resource_violation_rate,airspace_conflict_rate,service_level_0_ratio,service_level_1_ratio,service_level_2_ratio,service_level_3_ratio,average_reward,method,variant_kind,seed
+always_cache,1,2,0.0,0.353165,0.212643,1.61,0.0,1.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,-1.043172,always_cache,heuristic,0
+always_light,1,2,0.0,0.533605,6.217341,837.934655,0.788149,0.995499,1.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,-3.580218,always_light,heuristic,0
+always_image,1,2,0.0,0.490835,8.969791,1019.936402,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.552176,always_image,heuristic,0
+greedy_min_sufficient_evidence,1,2,0.0,0.490835,8.969791,1019.936402,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.552176,greedy_min_sufficient_evidence,heuristic,0
+no_cache_greedy,1,2,0.0,0.490835,8.969791,1019.936402,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.552176,no_cache_greedy,heuristic,0
+no_semantic_tokens_greedy,1,2,0.0,0.490835,8.969791,1019.936402,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.552176,no_semantic_tokens_greedy,heuristic,0
+oracle_best_feasible_evidence,1,2,0.0,0.533605,6.217341,837.934655,0.788149,0.995499,1.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,-3.580218,oracle_best_feasible_evidence,heuristic,0
+ppo,1,2,0.0,0.406689,3.473652,457.572335,0.394074,0.0,1.0,0.5,0.0,0.0,0.0,0.5,0.5,0.0,0.0,-2.378547,service_only_ppo,baseline_rl,0
+ppo,1,2,0.0,0.406689,3.198803,432.934446,0.394074,0.0,1.0,0.5,0.0,0.0,0.0,0.5,0.5,0.0,0.0,-2.313722,hybrid_ppo_no_lagrangian,baseline_rl,0
+ppo,1,2,0.0,0.406689,3.198801,432.934223,0.394074,0.0,1.0,0.5,0.0,0.0,0.0,0.5,0.5,0.0,0.0,-2.313722,hybrid_ppo_lagrangian,baseline_rl,0
+ppo,1,2,0.0,0.490835,8.134089,947.056404,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.355884,proposed_risk_aware_semantic_rl,proposed,0
+ppo,1,2,0.0,0.490835,8.087447,943.269488,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.345041,ablation_no_semantic_utility,ablation,0
+ppo,1,2,0.0,0.490835,8.117224,945.712637,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.351974,ablation_accuracy_only_utility,ablation,0
+ppo,1,2,0.0,0.490835,8.13449,947.129077,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.355994,ablation_uncertainty_aware_utility,ablation,0
+ppo,1,2,0.0,0.490835,8.134089,947.056404,175.121947,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-4.355884,ablation_no_safety_layer,ablation,0
+ppo,1,2,0.0,0.406689,3.198803,432.934446,0.394074,0.0,1.0,0.5,0.0,0.0,0.0,0.5,0.5,0.0,0.0,-2.313722,ablation_no_imitation_warm_start,ablation,0

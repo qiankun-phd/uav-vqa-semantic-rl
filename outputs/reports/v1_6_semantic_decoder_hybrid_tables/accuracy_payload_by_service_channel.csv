@@ -1,0 +1,10 @@
+service_level,evidence,channel,accuracy,mean_payload_kb,samples
+0,cache,bad,0.546081,0.000000,5946
+0,cache,good,0.550454,0.000000,5946
+0,cache,medium,0.551127,0.000000,5946
+1,semantic tokens,bad,0.846620,0.828832,5946
+1,semantic tokens,good,0.846620,0.902346,5946
+1,semantic tokens,medium,0.846620,0.893168,5946
+2,full image,bad,0.573158,35.825073,5946
+2,full image,good,0.635721,178.091730,5946
+2,full image,medium,0.602422,72.199100,5946

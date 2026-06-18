@@ -1,0 +1,2 @@
+policy,episodes,tasks,task_success_rate,average_accuracy,average_delay,average_energy,average_payload_kb,payload_reduction_vs_always_image,quality_violation_rate,deadline_violation_rate,service_level_0_ratio,service_level_1_ratio,service_level_2_ratio,service_level_3_ratio,average_reward
+ppo,200,8000,0.017375,0.411196,0.355817,1.61,0.0,0.0,0.982625,0.0,1.0,0.0,0.0,0.0,-1.003509

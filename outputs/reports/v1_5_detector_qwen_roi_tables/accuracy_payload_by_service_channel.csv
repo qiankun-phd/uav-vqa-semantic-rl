@@ -1,0 +1,13 @@
+service_level,evidence,channel,accuracy,mean_payload_kb,samples
+0,cache,bad,0.526227,0.000000,1182
+0,cache,good,0.533841,0.000000,1182
+0,cache,medium,0.548223,0.000000,1182
+1,semantic tokens,bad,0.723350,0.787305,1182
+1,semantic tokens,good,0.753807,0.883586,1182
+1,semantic tokens,medium,0.763959,0.868556,1182
+2,full image,bad,0.611675,31.175345,1182
+2,full image,good,0.695431,156.288245,1182
+2,full image,medium,0.654822,63.662491,1182
+3,ROI crop,bad,0.576142,17.675115,1182
+3,ROI crop,good,0.639594,96.572583,1182
+3,ROI crop,medium,0.609137,35.850484,1182

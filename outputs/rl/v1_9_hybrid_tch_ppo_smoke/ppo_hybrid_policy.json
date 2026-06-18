@@ -1,0 +1,35 @@
+{
+  "obs_dim": 54,
+  "service_levels": [
+    0,
+    1,
+    2
+  ],
+  "model_type": "hybrid_actor_critic",
+  "resource_keys": [
+    "bandwidth",
+    "power",
+    "cpu_share",
+    "gpu_share"
+  ],
+  "config": {
+    "train_episodes": 2,
+    "update_epochs": 4,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "clip_ratio": 0.2,
+    "entropy_weight": 0.01,
+    "value_weight": 0.5,
+    "hidden_size": 128,
+    "hybrid_actions": true,
+    "constrained": true,
+    "quality_cost_limit": 0.0,
+    "deadline_cost_limit": 0.0,
+    "lambda_lr": 0.05,
+    "lambda_max": 20.0,
+    "bandwidth_floor": 0.02,
+    "share_floor": 0.01,
+    "power_min_w": 0.05,
+    "power_max_w": 1.0
+  }
+}

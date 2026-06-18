@@ -1,0 +1,9 @@
+service_level,evidence_baseline,question_type,accuracy,accuracy_ci_low,accuracy_ci_high,samples
+0,cache answer,counting,0.654090,0.644357,0.663933,9144
+0,cache answer,presence,0.514620,0.507353,0.522171,17613
+1,detector semantic tokens,counting,0.432415,0.422791,0.442038,9144
+1,detector semantic tokens,presence,0.684892,0.678022,0.691421,17613
+2,raw visual evidence,counting,0.274934,0.265420,0.284230,9144
+2,raw visual evidence,presence,0.747402,0.741271,0.753875,17613
+3,detector ROI crop image,counting,0.150000,0.100000,0.200000,180
+3,detector ROI crop image,presence,0.775000,0.733333,0.816667,360

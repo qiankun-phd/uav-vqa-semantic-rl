@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local data and model artifacts
+data/raw/
+data/processed/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# Runtime logs
+logs/
+*.log
+
+# Large/generated VLM and detector outputs
+outputs/vlm/
+outputs/detector/
+outputs/smoke/
+outputs/env/codex_misrsync_*/
+
+# Large rollout traces and binary policies
+outputs/rl/**/v1_9_resource_alloc_rollout.csv
+outputs/rl/**/*.pt
+outputs/rl/**/run.log
+
+# Heavy image/model artifacts at repository root
+yolo*.pt

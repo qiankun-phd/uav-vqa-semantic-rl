@@ -1,0 +1,5 @@
+service_level,evidence,accuracy,mean_payload_kb,mean_latency_sec,samples
+0,cache,0.536097,0.000000,0.000000,3546
+1,semantic tokens,0.747039,0.846482,0.104048,3546
+2,full image,0.653976,83.708694,0.508987,3546
+3,ROI crop,0.608291,50.032727,0.353015,3546

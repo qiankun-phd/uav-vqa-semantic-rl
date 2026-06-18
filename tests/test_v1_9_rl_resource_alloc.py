@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from vqa_semcom.config import load_config, resolve_path
+from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, train_ppo
+from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
+from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
+
+
+class V19RLResourceAllocTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.cfg = load_config(ROOT / "configs" / "v1_9_snr_lut.yaml")
+        cls.lut = load_lut(ROOT / "outputs" / "lut" / "v1_9_snr_semantic_quality_lut.csv")
+        tasks = read_csv(resolve_path(cls.cfg["paths"]["tasks_csv"]))
+        cls.tasks = filter_tasks_supported_by_lut(tasks, cls.lut)
+
+    def test_env_exposes_interface_contract_fields(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=0, tasks_per_episode=3)
+        obs = env.reset(seed=0)
+        for key in [
+            "task_type",
+            "risk_level",
+            "view_quality_bin",
+            "freshness_bin",
+            "sensed_snr_db",
+            "snr_bin",
+            "uav_state",
+            "edge_load",
+            "cache_state",
+            "vector",
+        ]:
+            self.assertIn(key, obs)
+        action = env.candidate_action(1, obs)
+        next_obs, reward, done, info = env.step(action)
+        self.assertIn("answer_accuracy_est", info)
+        self.assertIn("delay_s", info)
+        self.assertIn("energy_j", info)
+        self.assertIn("payload_kb", info)
+        self.assertIn("quality_violation", info)
+        self.assertIn("deadline_violation", info)
+        self.assertIn("battery_violation", info)
+        self.assertIn("resource_violation", info)
+        self.assertIn("airspace_conflict", info)
+        self.assertIn("gpu_memory_ok", info)
+        self.assertIn("service_level", info)
+        self.assertEqual(info["bandwidth_unit"], "Hz")
+        self.assertIsInstance(float(reward), float)
+        self.assertFalse(done)
+        self.assertEqual(next_obs["episode_step"], 1)
+
+    def test_action_contract_accepts_minimal_action(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=1, tasks_per_episode=1)
+        env.reset(seed=1)
+        _obs, _reward, done, info = env.step(
+            {
+                "service_level": 0,
+                "bandwidth": 1_000_000.0,
+                "power": 0.1,
+                "cpu_share": 0.0,
+                "gpu_share": 0.0,
+                "uav_assignment": 0,
+                "waypoint": None,
+            }
+        )
+        self.assertTrue(done)
+        self.assertEqual(info["service_level"], 0)
+
+    def test_tiny_ppo_training_runs(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=2, tasks_per_episode=4)
+        try:
+            model, trace = train_ppo(
+                env,
+                PPOTrainConfig(train_episodes=2, update_epochs=1, hidden_size=32),
+                seed=2,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 2)
+        self.assertIn("success_rate", trace[0])
+        self.assertIn("lambda_quality", trace[0])
+        self.assertIn("lambda_deadline", trace[0])
+        self.assertIn("lambda_quality_normal", trace[0])
+        self.assertIn("lambda_deadline_critical", trace[0])
+
+        obs = env.reset(seed=22)
+        action = PPOServicePolicy(env, model, PPOTrainConfig(hidden_size=32)).act(obs)
+        for key in ["service_level", "bandwidth", "power", "cpu_share", "gpu_share", "uav_assignment"]:
+            self.assertIn(key, action)
+        self.assertGreaterEqual(float(action["bandwidth"]), 0.0)
+        self.assertLessEqual(float(action["bandwidth"]), env.base_bandwidth_hz)
+        self.assertGreaterEqual(float(action["power"]), 0.05)
+        self.assertLessEqual(float(action["power"]), 1.0)
+        self.assertGreaterEqual(float(action["cpu_share"]), 0.01)
+        self.assertLessEqual(float(action["cpu_share"]), 1.0)
+        self.assertGreaterEqual(float(action["gpu_share"]), 0.01)
+        self.assertLessEqual(float(action["gpu_share"]), 1.0)
+
+    def test_tiny_proposed_semantic_controller_runs(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=3, tasks_per_episode=3)
+        try:
+            _model, trace = train_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=1,
+                    update_epochs=1,
+                    hidden_size=32,
+                    risk_aware_constraints=True,
+                    semantic_reward_mode="semantic_utility",
+                    imitation_warm_start=True,
+                    demo_episodes=1,
+                    bc_epochs=1,
+                    bc_aux_weight=0.1,
+                ),
+                seed=3,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 1)
+        self.assertGreater(trace[0]["demo_samples"], 0.0)
+        self.assertIn("lambda_conflict", trace[0])
+        self.assertIn("lambda_battery", trace[0])
+        self.assertIn("lambda_gpu", trace[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

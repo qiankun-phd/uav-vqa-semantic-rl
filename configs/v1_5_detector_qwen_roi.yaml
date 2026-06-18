@@ -1,0 +1,229 @@
+{
+  "paths": {
+    "visdrone_train": "data/raw/visdrone/DET/train",
+    "visdrone_val": "data/raw/visdrone/DET/val",
+    "tasks_csv": "outputs/tasks/v0_tasks.csv",
+    "lut_csv": "outputs/lut/v0_semantic_quality_lut.csv",
+    "lut_json": "outputs/lut/v0_semantic_quality_summary.json",
+    "lut_md": "outputs/lut/v0_semantic_quality_summary.md",
+    "sim_results_csv": "outputs/sim/v1_5_detector_qwen_roi_results.csv",
+    "sim_summary_md": "outputs/sim/v1_5_detector_qwen_roi_summary.md",
+    "vlm_predictions_csv": "outputs/vlm/v1_5_detector_qwen_roi_predictions.csv",
+    "vlm_lut_csv": "outputs/lut/v1_5_detector_qwen_roi_semantic_quality_lut.csv",
+    "vlm_report_md": "outputs/reports/v1_5_detector_qwen_roi_eval_report.md",
+    "qwen_model_status_md": "outputs/reports/qwen_model_setup_status.md",
+    "degraded_image_dir": "outputs/vlm/degraded_images_v1_5_roi",
+    "detector_diagnostic_md": "outputs/reports/v1_5_detector_qwen_roi_detector_diagnostics.md",
+    "detector_diagnostic_csv": "outputs/reports/v1_5_detector_qwen_roi_detector_count_diagnostics.csv",
+    "paper_figures_dir": "outputs/figures/v1_5_detector_qwen_roi",
+    "paper_tables_dir": "outputs/reports/v1_5_detector_qwen_roi_tables"
+  },
+  "download": {
+    "det_train_file_id": "1a2oHjcEcwXP8oUF95qiwrqzACb2YlUhn",
+    "det_train_zip": "data/raw/visdrone/VisDrone2019-DET-train.zip",
+    "det_val_file_id": "1bxK5zgLn0_L8x276eKkuYA_FzwCIjb59",
+    "det_val_zip": "data/raw/visdrone/VisDrone2019-DET-val.zip"
+  },
+  "bins": {
+    "channel": [
+      "bad",
+      "medium",
+      "good"
+    ],
+    "view_quality": [
+      "poor",
+      "medium",
+      "good"
+    ],
+    "freshness": [
+      "fresh",
+      "stale",
+      "expired"
+    ],
+    "service_levels": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "question_types": [
+      "presence",
+      "counting",
+      "risk"
+    ],
+    "risk_levels": [
+      "normal",
+      "critical"
+    ]
+  },
+  "thresholds": {
+    "epsilon_normal": 0.65,
+    "epsilon_critical": 0.82,
+    "tau_normal": 5.0,
+    "tau_critical": 3.0
+  },
+  "evaluator": {
+    "seed": 7,
+    "ci_noise_scale": 0.035,
+    "base_accuracy": {
+      "presence": 0.93,
+      "counting": 0.84,
+      "risk": 0.82
+    },
+    "service_gain": {
+      "0": 0.76,
+      "1": 0.9,
+      "2": 1.0
+    },
+    "light_evidence_boost": {
+      "presence": 1.12,
+      "counting": 1.1,
+      "risk": 1.0
+    },
+    "channel_quality": {
+      "bad": 0.68,
+      "medium": 0.86,
+      "good": 0.98
+    },
+    "view_quality": {
+      "poor": 0.58,
+      "medium": 0.8,
+      "good": 0.97
+    },
+    "freshness_quality": {
+      "0": {
+        "fresh": 0.96,
+        "stale": 0.76,
+        "expired": 0.52
+      },
+      "1": {
+        "fresh": 0.98,
+        "stale": 0.9,
+        "expired": 0.78
+      },
+      "2": {
+        "fresh": 0.99,
+        "stale": 0.97,
+        "expired": 0.92
+      }
+    },
+    "risk_penalty": {
+      "normal": 1.0,
+      "critical": 0.94
+    }
+  },
+  "simulation": {
+    "seed": 13,
+    "tasks_per_episode": 40,
+    "policies": [
+      "always_cache",
+      "always_light",
+      "always_image",
+      "always_roi",
+      "greedy_min_sufficient_evidence",
+      "no_cache_greedy",
+      "no_semantic_tokens_greedy",
+      "no_roi_greedy",
+      "oracle_best_feasible_evidence"
+    ],
+    "delay_by_level": {
+      "0": 0.6,
+      "1": 1.8,
+      "2": 3.4,
+      "3": 2.6
+    },
+    "energy_by_level": {
+      "0": 0.2,
+      "1": 1.0,
+      "2": 2.5,
+      "3": 1.8
+    },
+    "channel_delay_multiplier": {
+      "bad": 1.45,
+      "medium": 1.1,
+      "good": 0.9
+    },
+    "service_level_order": [
+      0,
+      1,
+      3,
+      2
+    ]
+  },
+  "vlm": {
+    "seed": 23,
+    "model_name": "Qwen/Qwen2-VL-2B-Instruct",
+    "model_local_path": "/home/qiankun/.cache/huggingface/hub/models--Qwen--Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+    "fallback_model_name": "Qwen/Qwen2-VL-2B-Instruct",
+    "device": "cuda",
+    "torch_dtype": "auto",
+    "processor_use_fast": false,
+    "min_pixels": 200704,
+    "max_pixels": 802816,
+    "max_new_tokens": 24,
+    "question_types": [
+      "presence",
+      "counting"
+    ],
+    "max_tasks_per_image": 4,
+    "count_tolerance_ratio": 0.1,
+    "image_degradation": {
+      "good": {
+        "jpeg_quality": 90,
+        "resize_scale": 1.0,
+        "blur_radius": 0.0,
+        "packet_loss_mask_rate": 0.0
+      },
+      "medium": {
+        "jpeg_quality": 50,
+        "resize_scale": 0.75,
+        "blur_radius": 0.0,
+        "packet_loss_mask_rate": 0.015
+      },
+      "bad": {
+        "jpeg_quality": 25,
+        "resize_scale": 0.5,
+        "blur_radius": 0.8,
+        "packet_loss_mask_rate": 0.04
+      }
+    },
+    "light_evidence_degradation": {
+      "good": {
+        "drop_rate": 0.0,
+        "class_corrupt_rate": 0.0,
+        "bbox_quantization": 1,
+        "confidence_threshold": 0.0
+      },
+      "medium": {
+        "drop_rate": 0.1,
+        "class_corrupt_rate": 0.0,
+        "bbox_quantization": 8,
+        "confidence_threshold": 0.25
+      },
+      "bad": {
+        "drop_rate": 0.3,
+        "class_corrupt_rate": 0.1,
+        "bbox_quantization": 16,
+        "confidence_threshold": 0.45
+      }
+    }
+  },
+  "detector": {
+    "yolo_dataset_dir": "data/processed/visdrone_yolo",
+    "dataset_yaml": "data/processed/visdrone_yolo/visdrone.yaml",
+    "class_mapping_json": "data/processed/visdrone_yolo/detector_classes.json",
+    "base_model": "yolov8n.pt",
+    "weights_path": "outputs/detector/visdrone_yolov8n/weights/best.pt",
+    "train_project": "outputs/detector",
+    "train_name": "visdrone_yolov8n",
+    "detections_csv": "outputs/detector/v1_5_detector_qwen_roi_detections.csv",
+    "epochs": 50,
+    "imgsz": 640,
+    "batch_fallback": [
+      16,
+      8,
+      4
+    ],
+    "conf": 0.25
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "obs_dim": 26,
+  "service_levels": [
+    0,
+    1,
+    2
+  ]
+}

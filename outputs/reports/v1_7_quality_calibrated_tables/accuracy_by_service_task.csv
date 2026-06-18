@@ -1,0 +1,7 @@
+service_level,evidence,question_type,accuracy,samples
+0,cache,counting,0.654090,9144
+0,cache,presence,0.514620,17613
+1,semantic tokens,counting,0.432415,9144
+1,semantic tokens,presence,0.684892,17613
+2,full image,counting,0.274934,9144
+2,full image,presence,0.747402,17613

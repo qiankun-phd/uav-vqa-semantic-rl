@@ -1,0 +1,11 @@
+failure_type,count
+cache: presence false negative,1034
+ROI crop: counting undercount,801
+full image: counting undercount,765
+cache: counting overcount,611
+ROI crop: presence false negative,588
+full image: presence false negative,459
+semantic tokens: counting undercount,435
+semantic tokens: counting invalid,366
+semantic tokens: counting overcount,96
+full image: counting overcount,3

@@ -1,0 +1,8 @@
+failure_type,count
+cache: presence false negative,5769
+full image: counting undercount,3873
+full image: presence false negative,3192
+cache: counting overcount,2272
+semantic tokens: counting undercount,1926
+semantic tokens: counting overcount,810
+full image: counting overcount,3

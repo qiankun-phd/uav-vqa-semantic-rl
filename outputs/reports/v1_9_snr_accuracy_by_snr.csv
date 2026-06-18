@@ -1,0 +1,19 @@
+service_level,service_name,snr_bin,snr_db,accuracy,samples
+0,cache answer,-5dB,-5,0.566319,8919
+0,cache answer,0dB,0,0.566319,8919
+0,cache answer,5dB,5,0.566319,8919
+0,cache answer,10dB,10,0.566319,8919
+0,cache answer,15dB,15,0.566319,8919
+0,cache answer,20dB,20,0.566319,8919
+1,detector semantic tokens,-5dB,-5,0.545913,8919
+1,detector semantic tokens,0dB,0,0.564749,8919
+1,detector semantic tokens,5dB,5,0.594013,8919
+1,detector semantic tokens,10dB,10,0.608140,8919
+1,detector semantic tokens,15dB,15,0.617222,8919
+1,detector semantic tokens,20dB,20,0.631685,8919
+2,raw image evidence,-5dB,-5,0.571477,8919
+2,raw image evidence,0dB,0,0.579886,8919
+2,raw image evidence,5dB,5,0.585267,8919
+2,raw image evidence,10dB,10,0.585940,8919
+2,raw image evidence,15dB,15,0.591658,8919
+2,raw image evidence,20dB,20,0.596704,8919

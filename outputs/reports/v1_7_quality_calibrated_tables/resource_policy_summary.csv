@@ -1,0 +1,8 @@
+policy,episodes,tasks,task_success_rate,average_accuracy,average_delay,average_energy,average_payload_kb,payload_reduction_vs_always_image,quality_violation_rate,deadline_violation_rate,service_level_0_ratio,service_level_1_ratio,service_level_2_ratio,service_level_3_ratio
+always_cache,200,8000,0.262125,0.547667,0.688215,0.2,0.0,1.0,0.737875,0.0,1.0,0.0,0.0,0.0
+always_light,200,8000,0.202125,0.60656,2.074916,1.0,0.840725,0.991202,0.797875,0.0,0.0,1.0,0.0,0.0
+always_image,200,8000,0.41725,0.596299,3.908555,2.5,95.560076,0.0,0.440625,0.322875,0.0,0.0,1.0,0.0
+greedy_min_sufficient_evidence,200,8000,0.697375,0.700028,2.74259,1.617663,50.612994,0.470354,0.30225,0.053375,0.258,0.192625,0.549375,0.0
+no_cache_greedy,200,8000,0.57125,0.592284,3.533184,2.19625,76.595245,0.19846,0.428375,0.180375,0.0,0.2025,0.7975,0.0
+no_semantic_tokens_greedy,200,8000,0.54425,0.703806,3.069021,1.897113,69.6026,0.271635,0.31425,0.195875,0.262125,0.0,0.737875,0.0
+oracle_best_feasible_evidence,200,8000,0.697,0.715412,2.265546,1.2517,30.781642,0.677882,0.302875,0.05225,0.351,0.294,0.355,0.0

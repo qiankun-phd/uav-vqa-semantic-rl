@@ -1,0 +1,7 @@
+step,task_id,uav_id,service_level,answer_accuracy_est,delay_s,energy_j,payload_kb,quality_violation,deadline_violation,snr_bin,sensed_snr_db,success,reward
+0,task_0,0,0,1.0,23.459324,3358.675304,0.0,False,True,10dB,14.233116,False,-7.035335
+1,task_0,1,1,0.266667,20.482084,2858.114787,1.111198,True,True,20dB,16.793218,False,-7.241885
+2,task_0,2,2,0.0,8.605707,939.946272,412.655859,True,True,20dB,25.958593,False,-4.922432
+3,task_0,0,0,0.733333,22.555097,3214.675304,0.0,True,True,10dB,14.321541,False,-7.79689
+4,task_0,1,1,0.266667,19.544502,2714.114812,1.111198,True,True,20dB,15.184683,False,-6.996769
+5,task_0,2,2,0.0,7.60144,795.937326,412.655859,True,True,20dB,29.311006,False,-4.663975

@@ -1,0 +1,65 @@
+# V1.6 Success Breakdown
+
+This report separates answer correctness, semantic quality satisfaction, deadline satisfaction, and final task success.
+Quality satisfaction uses the measured LUT accuracy `A_k >= epsilon_k`; deadline satisfaction uses the configured delay proxy.
+
+## by_service
+
+| service_level | service_name | samples | answer_correctness | quality_satisfaction | deadline_satisfaction | final_success |
+|---|---|---|---|---|---|---|
+| 0 | cache | 3546 | 0.536097 | 0.254371 | 1.000000 | 0.254371 |
+| 1 | semantic-token decoder | 3546 | 0.654822 | 0.472081 | 1.000000 | 0.472081 |
+| 2 | full image Qwen | 3546 | 0.653976 | 0.614213 | 0.733503 | 0.439086 |
+
+## by_service_task
+
+| service_level | service_name | question_type | samples | answer_correctness | quality_satisfaction | deadline_satisfaction | final_success |
+|---|---|---|---|---|---|---|---|
+| 0 | cache | counting | 1323 | 0.538171 | 0.241119 | 1.000000 | 0.241119 |
+| 0 | cache | presence | 2223 | 0.534863 | 0.262258 | 1.000000 | 0.262258 |
+| 1 | semantic-token decoder | counting | 1323 | 0.598639 | 0.312925 | 1.000000 | 0.312925 |
+| 1 | semantic-token decoder | presence | 2223 | 0.688259 | 0.566802 | 1.000000 | 0.566802 |
+| 2 | full image Qwen | counting | 1323 | 0.419501 | 0.208617 | 0.755102 | 0.208617 |
+| 2 | full image Qwen | presence | 2223 | 0.793522 | 0.855601 | 0.720648 | 0.576248 |
+
+## by_service_risk
+
+| service_level | service_name | risk_level | samples | answer_correctness | quality_satisfaction | deadline_satisfaction | final_success |
+|---|---|---|---|---|---|---|---|
+| 0 | cache | critical | 945 | 0.622222 | 0.200000 | 1.000000 | 0.200000 |
+| 0 | cache | normal | 2601 | 0.504806 | 0.274125 | 1.000000 | 0.274125 |
+| 1 | semantic-token decoder | critical | 945 | 0.771429 | 0.657143 | 1.000000 | 0.657143 |
+| 1 | semantic-token decoder | normal | 2601 | 0.612457 | 0.404844 | 1.000000 | 0.404844 |
+| 2 | full image Qwen | critical | 945 | 0.634921 | 0.657143 | 0.000000 | 0.000000 |
+| 2 | full image Qwen | normal | 2601 | 0.660900 | 0.598616 | 1.000000 | 0.598616 |
+
+## by_service_channel
+
+| service_level | service_name | channel_bin | samples | answer_correctness | quality_satisfaction | deadline_satisfaction | final_success |
+|---|---|---|---|---|---|---|---|
+| 0 | cache | bad | 1182 | 0.526227 | 0.176819 | 1.000000 | 0.176819 |
+| 0 | cache | good | 1182 | 0.533841 | 0.293570 | 1.000000 | 0.293570 |
+| 0 | cache | medium | 1182 | 0.548223 | 0.292724 | 1.000000 | 0.292724 |
+| 1 | semantic-token decoder | bad | 1182 | 0.654822 | 0.472081 | 1.000000 | 0.472081 |
+| 1 | semantic-token decoder | good | 1182 | 0.654822 | 0.472081 | 1.000000 | 0.472081 |
+| 1 | semantic-token decoder | medium | 1182 | 0.654822 | 0.472081 | 1.000000 | 0.472081 |
+| 2 | full image Qwen | bad | 1182 | 0.611675 | 0.355330 | 0.733503 | 0.180203 |
+| 2 | full image Qwen | good | 1182 | 0.695431 | 0.743655 | 0.733503 | 0.568528 |
+| 2 | full image Qwen | medium | 1182 | 0.654822 | 0.743655 | 0.733503 | 0.568528 |
+
+## by_service_task_risk
+
+| service_level | service_name | question_type | risk_level | samples | answer_correctness | quality_satisfaction | deadline_satisfaction | final_success |
+|---|---|---|---|---|---|---|---|---|
+| 0 | cache | counting | critical | 324 | 0.820988 | 0.583333 | 1.000000 | 0.583333 |
+| 0 | cache | counting | normal | 999 | 0.446446 | 0.130130 | 1.000000 | 0.130130 |
+| 0 | cache | presence | critical | 621 | 0.518519 | 0.000000 | 1.000000 | 0.000000 |
+| 0 | cache | presence | normal | 1602 | 0.541199 | 0.363920 | 1.000000 | 0.363920 |
+| 1 | semantic-token decoder | counting | critical | 324 | 0.361111 | 0.000000 | 1.000000 | 0.000000 |
+| 1 | semantic-token decoder | counting | normal | 999 | 0.675676 | 0.414414 | 1.000000 | 0.414414 |
+| 1 | semantic-token decoder | presence | critical | 621 | 0.985507 | 1.000000 | 1.000000 | 1.000000 |
+| 1 | semantic-token decoder | presence | normal | 1602 | 0.573034 | 0.398876 | 1.000000 | 0.398876 |
+| 2 | full image Qwen | counting | critical | 324 | 0.000000 | 0.000000 | 0.000000 | 0.000000 |
+| 2 | full image Qwen | counting | normal | 999 | 0.555556 | 0.276276 | 1.000000 | 0.276276 |
+| 2 | full image Qwen | presence | critical | 621 | 0.966184 | 1.000000 | 0.000000 | 0.000000 |
+| 2 | full image Qwen | presence | normal | 1602 | 0.726592 | 0.799625 | 1.000000 | 0.799625 |

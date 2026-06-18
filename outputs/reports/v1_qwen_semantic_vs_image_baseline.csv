@@ -1,0 +1,5 @@
+service_level,evidence_baseline,accuracy,accuracy_ci_low,accuracy_ci_high,mean_payload_kb,p95_payload_kb,mean_latency_sec,samples
+0,cache answer,0.562283,0.556565,0.568113,0.000000,0.000000,0.000000,26757
+1,detector semantic tokens,0.598610,0.592779,0.604365,0.833000,1.217773,0.036680,26757
+2,raw visual evidence,0.585940,0.579661,0.592219,95.371968,230.066406,0.582793,26757
+3,detector ROI crop image,0.566667,0.527778,0.607407,168.784229,522.300781,0.525281,540

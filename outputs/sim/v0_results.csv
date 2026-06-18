@@ -1,0 +1,6 @@
+policy,episodes,tasks,task_success_rate,average_accuracy,average_delay,average_energy,quality_violation_rate,deadline_violation_rate
+always_cache,2,80,0.575,0.602083,0.687375,0.2,0.425,0.0
+always_light,2,80,0.7875,0.75,2.019375,1.0,0.2125,0.0
+always_image,2,80,0.5,0.78125,4.046,2.5,0.2875,0.25
+greedy_min_sufficient_evidence,2,80,0.9875,0.925,1.34725,0.58625,0.0,0.0125
+oracle_best_feasible_evidence,2,80,0.9875,0.941667,1.26,0.54625,0.0125,0.0

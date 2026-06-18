@@ -1,0 +1,24 @@
+protocol,role,policy,task_success_rate,average_accuracy,average_delay,average_energy,average_payload_kb,payload_reduction_vs_always_image,quality_violation_rate,deadline_violation_rate,service_level_0_ratio,service_level_1_ratio,service_level_2_ratio,service_level_3_ratio
+Protocol-A,operational positive-query,always_cache,0.276625,0.566324,0.688916,0.2,0.0,1.0,0.723375,0.0,1.0,0.0,0.0,0.0
+Protocol-A,operational positive-query,always_light,0.6245,0.780616,2.069471,1.0,0.873779,0.990817,0.3755,0.0,0.0,1.0,0.0,0.0
+Protocol-A,operational positive-query,always_image,0.107625,0.54169,3.909256,2.5,95.152538,0.0,0.723375,0.338625,0.0,0.0,1.0,0.0
+Protocol-A,operational positive-query,greedy_min_sufficient_evidence,0.794125,0.81568,2.075528,1.086912,19.412313,0.795987,0.205875,0.0,0.277375,0.51675,0.205875,0.0
+Protocol-A,operational positive-query,no_cache_greedy,0.6245,0.697506,2.758924,1.56325,35.516419,0.626742,0.3755,0.169625,0.0,0.6245,0.3755,0.0
+Protocol-A,operational positive-query,no_semantic_tokens_greedy,0.365125,0.704136,3.005613,1.847088,66.854315,0.297399,0.465875,0.169,0.283875,0.0,0.716125,0.0
+Protocol-A,operational positive-query,oracle_best_feasible_evidence,0.794125,0.833808,1.634498,0.7415,0.566601,0.994045,0.205875,0.0,0.323125,0.676875,0.0,0.0
+Protocol-B,balanced presence calibration,always_cache,0.262125,0.547667,0.688215,0.2,0.0,1.0,0.737875,0.0,1.0,0.0,0.0,0.0
+Protocol-B,balanced presence calibration,always_light,0.202125,0.60656,2.074916,1.0,0.840725,0.991202,0.797875,0.0,0.0,1.0,0.0,0.0
+Protocol-B,balanced presence calibration,always_image,0.41725,0.596299,3.908555,2.5,95.560076,0.0,0.440625,0.322875,0.0,0.0,1.0,0.0
+Protocol-B,balanced presence calibration,greedy_min_sufficient_evidence,0.697375,0.700028,2.74259,1.617663,50.612994,0.470354,0.30225,0.053375,0.258,0.192625,0.549375,0.0
+Protocol-B,balanced presence calibration,no_cache_greedy,0.57125,0.592284,3.533184,2.19625,76.595245,0.19846,0.428375,0.180375,0.0,0.2025,0.7975,0.0
+Protocol-B,balanced presence calibration,no_semantic_tokens_greedy,0.54425,0.703806,3.069021,1.897113,69.6026,0.271635,0.31425,0.195875,0.262125,0.0,0.737875,0.0
+Protocol-B,balanced presence calibration,oracle_best_feasible_evidence,0.697,0.715412,2.265546,1.2517,30.781642,0.677882,0.302875,0.05225,0.351,0.294,0.355,0.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,always_cache,0.2665,0.551059,0.690829,0.2,0.0,1.0,0.7335,0.0,1.0,0.0,0.0,0.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,always_light,0.201,0.603821,2.06874,1.0,0.845716,0.99102,0.799,0.0,0.0,1.0,0.0,0.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,always_image,0.42125,0.588747,3.930719,2.5,94.176592,0.0,0.437375,0.32675,0.0,0.0,1.0,0.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,always_roi,0.419875,0.513707,2.992243,1.8,146.973783,-0.560619,0.5665,0.10725,0.0,0.0,0.0,1.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,greedy_min_sufficient_evidence,0.712625,0.729083,2.451839,1.412325,77.068422,0.181661,0.27275,0.047,0.266375,0.1905,0.27275,0.270375
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,no_cache_greedy,0.575,0.621047,3.182314,1.925462,114.94831,-0.220561,0.41025,0.184875,0.0,0.20225,0.410375,0.387375
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,no_semantic_tokens_greedy,0.603375,0.724383,2.740256,1.651537,96.379389,-0.02339,0.286125,0.144625,0.27725,0.0,0.421625,0.301125
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,no_roi_greedy,0.713375,0.703375,2.671683,1.581225,50.745504,0.461166,0.2865,0.046875,0.27425,0.192,0.53375,0.0
+Protocol-B+ROI,balanced calibration with crop/tile image evidence,oracle_best_feasible_evidence,0.71275,0.72318,2.202814,1.207713,33.886857,0.640177,0.2705,0.01775,0.353375,0.2995,0.303875,0.04325

@@ -1,0 +1,9 @@
+policy,episodes,tasks,task_success_rate,average_accuracy,average_delay,average_energy,average_payload_kb,payload_reduction_vs_always_image,quality_violation_rate,deadline_violation_rate,battery_violation_rate,resource_violation_rate,airspace_conflict_rate,service_level_0_ratio,service_level_1_ratio,service_level_2_ratio,service_level_3_ratio,average_reward,method,scenario,seed
+always_cache,1,12,0.083333,0.410626,0.121414,1.61,0.0,1.0,0.916667,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,-0.655202,always_cache,conflict-heavy,0
+always_light,1,12,0.0,0.401361,1.681841,186.728351,1.158229,0.993713,1.0,0.083333,0.0,0.0,0.0,0.0,1.0,0.0,0.0,-1.496709,always_light,conflict-heavy,0
+always_image,1,12,0.0,0.0,4.441477,360.894128,184.215198,0.0,1.0,0.333333,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-2.734417,always_image,conflict-heavy,0
+greedy_min_sufficient_evidence,1,4,0.5,0.889794,3.440999,440.13244,0.596362,0.996763,0.0,0.5,0.0,0.0,0.0,0.25,0.75,0.0,0.0,-0.056272,greedy_min_sufficient_evidence,conflict-heavy,0
+no_cache_greedy,1,12,0.0,0.0,4.441477,360.894128,184.215198,0.0,1.0,0.333333,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-2.734417,no_cache_greedy,conflict-heavy,0
+no_semantic_tokens_greedy,1,6,0.333333,0.726529,5.296248,514.511187,128.334825,0.303343,0.0,0.666667,0.0,0.0,0.0,0.166667,0.0,0.833333,0.0,-1.382274,no_semantic_tokens_greedy,conflict-heavy,0
+oracle_best_feasible_evidence,1,4,0.5,0.889794,3.440999,440.13244,0.596362,0.996763,0.0,0.5,0.0,0.0,0.0,0.25,0.75,0.0,0.0,-0.056272,oracle_best_feasible_evidence,conflict-heavy,0
+ppo,1,12,0.0,0.0,4.178098,337.595265,184.215198,0.0,1.0,0.333333,0.0,0.0,0.0,0.0,0.0,1.0,0.0,-2.672421,proposed_risk_aware_semantic_rl,conflict-heavy,0
