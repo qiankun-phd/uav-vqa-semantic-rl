@@ -165,16 +165,45 @@ info = {
     'semantic_accuracy_lcb': float,
     'semantic_uncertainty': float,
     'semantic_sample_count': int,
+    'semantic_payload_kb': float,
+    'semantic_quality_gap': float,  # epsilon_k - semantic_accuracy_lcb
+    'semantic_success': bool,       # semantic_accuracy_lcb >= epsilon_k
     'success': bool,
+    'deadline_s': float,
+    'epsilon_k': float,
+    'risk_level': str,
+    'view_quality_bin': str,
+    'freshness_bin': str,
     'delay_s': float,
     'energy_j': float,
     'payload_kb': float,
     'quality_violation': bool,
     'deadline_violation': bool,
+    'risk_violation': bool,
+    'utm_delay_s': float,
+    'utm_conflict_violation': bool,
+    'utm_constraint_violation': bool,
+    'airspace_state': str,
+    'dss_delay_s': float,
     'snr_bin': str,
     'service_level': int,
 }
 ```
+
+QoS semantics:
+
+- `semantic_accuracy_mean` is the calibrated expected correctness.
+- `semantic_accuracy_lcb` is the conservative control-facing QoS estimate and should be used for hard semantic QoS checks.
+- `semantic_quality_gap > 0` means the task is below its required semantic threshold.
+- `semantic_success` is the semantic-only success flag before deadline/resource/UTM constraints.
+- `payload_kb` and `semantic_payload_kb` should match for the selected service; both are exposed for backward compatibility.
+
+UTM/risk cost semantics for TWC-style constrained control:
+
+- `utm_delay_s = utm_dss_delay_s + utm_notification_delay_s`.
+- `utm_conflict_violation` is true when strategic airspace conflict or UTM coordination violation is active.
+- `risk_violation` is true when a critical/high-risk task violates semantic QoS, deadline, or UTM coordination.
+- `airspace_state` mirrors the operational intent state: accepted, activated, nonconforming, or contingent.
 
 Suggested scalar reward:
 

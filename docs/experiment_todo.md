@@ -94,7 +94,40 @@ src/vqa_semcom/semantic/utility.py
 
 5. Pending: Update the canonical environment and algorithm wrapper to consume `U_sem(...).accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count` instead of only raw `expected_accuracy`.
 6. Pending: Add `semantic_accuracy_mean`, `semantic_accuracy_lcb`, `semantic_uncertainty`, and `semantic_sample_count` to rollout `info` and CSV outputs.
-7. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
+7. Pending: Expose `semantic_payload_kb` and `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` for Semantic-Lyapunov queue updates.
+8. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
+
+## TWC Mainline TODO
+
+Target paper mainline:
+
+```text
+Conservative VQA-grounded Semantic-Lyapunov Hybrid Control for UAV Semantic Communications
+```
+
+Algorithm thread responsibilities:
+
+1. Implement Semantic-Lyapunov virtual queues for quality, deadline, energy, and UTM/risk pressure.
+2. Build hybrid control around semantic evidence routing plus feasible resource projection.
+3. Keep the action contract unchanged: `service_level`, `bandwidth`, `power`, `cpu_share`, `gpu_share`, `uav_assignment`, `waypoint`.
+4. Treat RL as a residual/learned policy on top of queue/projection structure, not as the only contribution.
+5. Keep algorithm outputs under `outputs/rl`, `outputs/hppo`, or `runs`.
+
+Environment thread responsibilities:
+
+1. Consume the semantic utility interface and expose semantic QoS fields in `info`.
+2. Add queue-ready metrics: `semantic_quality_gap`, deadline gap, energy pressure, and UTM/risk pressure.
+3. Preserve environment dynamics compatibility; do not change UAV mobility/channel dynamics for this documentation-only TWC planning step.
+4. Keep environment outputs under `outputs/env`.
+
+Final ablations required for the paper:
+
+- without LCB: use `accuracy_mean` instead of `accuracy_lcb`,
+- without queue: remove Semantic-Lyapunov virtual queues,
+- without projection: remove resource/action projection,
+- without semantic tokens: disable `s=1`,
+- oracle and greedy semantic-utility baselines,
+- fixed-service baselines: always cache, always semantic tokens, always image.
 
 ## Algorithm Thread TODO
 
@@ -304,7 +337,10 @@ Next environment steps:
 7. Done: VQA thread added the calibrated semantic utility model with CI, uncertainty, and SNR monotonic sanity checks.
 8. Done: Algorithm-facing environment wrapper queries the semantic utility interface when `outputs/lut/v1_9_semantic_utility_with_ci.csv` is available and exposes conservative `accuracy_lcb`, uncertainty, and sample count in `info`/CSV records.
 9. Done: Added the first cache-collapse fix for PPO/TCH-PPO: reward scaling through semantic LCB, entropy schedule, decaying service-level imitation prior, oracle warm-start, service-dependent resource floors, semantic feasibility projection, and UTM/DSS/off-nominal cost hooks.
-10. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
+10. Done: TWC mainline documentation defines Conservative VQA-grounded Semantic-Lyapunov Hybrid Control as the paper-level problem/algorithm direction.
+11. Pending: Environment thread should expose the full TWC semantic info fields, including `semantic_payload_kb` and `semantic_quality_gap`.
+12. Pending: Algorithm thread should implement explicit Semantic-Lyapunov queue states and the without-LCB/without-queue/without-projection ablations.
+13. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
 
 ## RL Cache-Collapse Follow-Up
 

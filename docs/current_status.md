@@ -183,6 +183,32 @@ outputs/reports/semantic_utility_api_examples.md
 
 - The demo queries representative cache, semantic-token, and image-evidence cells and reports `accuracy_mean`, `accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count`.
 
+TWC mainline documentation completed 2026-06-22 Asia/Macau:
+
+- Defined the paper-level mainline as:
+
+```text
+Conservative VQA-grounded Semantic-Lyapunov Hybrid Control for UAV Semantic Communications
+```
+
+- Added/updated:
+
+```text
+docs/twc_algorithm_plan.md
+docs/formal_problem_definition.md
+docs/interfaces.md
+docs/experiment_todo.md
+```
+
+- The formal problem now uses conservative semantic QoS:
+
+```text
+accuracy_lcb,k >= epsilon_k
+```
+
+- The interface now requires `semantic_payload_kb` and `semantic_quality_gap` in addition to semantic accuracy/uncertainty/sample-count fields.
+- This was a documentation/interface-planning step only; no RL core algorithm or environment dynamics were changed.
+
 Resource simulation headline:
 
 | policy | success | accuracy | delay | energy | payload KB | payload reduction |

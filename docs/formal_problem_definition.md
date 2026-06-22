@@ -1,6 +1,6 @@
 # Formal Problem Definition
 
-Last updated: 2026-06-19 Asia/Macau
+Last updated: 2026-06-22 Asia/Macau
 
 ## System
 
@@ -30,16 +30,36 @@ where:
 - `rho_k` is task priority
 - `risk_k` is normal or critical
 
-## Semantic Quality Model
+## Semantic Utility and QoS Model
 
-VQA answer accuracy and payload are provided by the empirical V1.9 LUT:
+VQA answer accuracy, payload, and confidence are provided by the calibrated semantic utility interface:
 
 ```text
-A_k = LUT[l_k, s_k, snr_bin, view_quality_bin, freshness_bin, risk_k]
-D_k = LUT_payload[l_k, s_k, snr_bin, view_quality_bin, freshness_bin, risk_k]
+U_sem(l_k, s_k, snr_bin, view_quality_bin, freshness_bin, risk_k)
+  -> accuracy_mean,k, accuracy_lcb,k, payload_kb,k, uncertainty_k, sample_count_k
 ```
 
-No online Qwen/VLM call is performed inside the simulator.
+No online Qwen/VLM call is performed inside the simulator. The measured VQA utility is calibrated offline from answer correctness.
+
+The semantic QoS constraint is conservative:
+
+```text
+accuracy_lcb,k(t) >= epsilon_k
+```
+
+This replaces traditional rate-only or SINR-only QoS. SINR/SNR still affects transmission rate and the selected SNR bin, but task success is defined by VQA answer reliability.
+
+## Semantic Evidence Routing
+
+The service decision `s_k(t)` selects what semantic evidence is transmitted or reused:
+
+```text
+s_k = 0: cache answer
+s_k = 1: semantic token / compact evidence
+s_k = 2: image evidence
+```
+
+Service level 3, ROI/crop evidence, remains reserved and disabled until the utility model includes calibrated ROI rows.
 
 ## Decision Variables
 
@@ -66,7 +86,7 @@ where:
 
 - fly delay depends on UAV position, target area, and speed
 - sense delay depends on semantic service level
-- tx delay depends on LUT payload and A2G SINR/rate
+- tx delay depends on semantic utility payload and A2G SINR/rate
 - queue and infer delay depend on edge CPU/GPU load and resource shares
 - load delay depends on edge model-cache hit/miss
 
@@ -80,10 +100,10 @@ E_k = E_k^fly + E_k^hover/sense + E_k^tx + E_k^compute
 
 ## Constraints
 
-Quality:
+Semantic quality:
 
 ```text
-A_k >= epsilon_k
+accuracy_lcb,k >= epsilon_k
 ```
 
 Deadline:
@@ -111,32 +131,39 @@ Only service levels requiring an operational intent, such as observe/revisit, ge
 
 ## Objective
 
-The benchmark minimizes semantic-network cost while maximizing task-oriented success:
+The benchmark maximizes conservative VQA success while minimizing semantic-network cost:
 
 ```text
-success_k = 1[A_k >= epsilon_k and T_k <= tau_k and no hard resource/airspace violation]
+success_k = 1[accuracy_lcb,k >= epsilon_k
+              and T_k <= tau_k
+              and no hard resource/airspace violation]
 ```
 
 The inspectable scalar reward is:
 
 ```text
-r_k = rho_k A_k success_k
+r_k = rho_k accuracy_lcb,k success_k
       - lambda_T T_k
       - lambda_E E_k
-      - lambda_D D_k
-      - lambda_Q 1[A_k < epsilon_k]
+      - lambda_D payload_kb,k
+      - lambda_U uncertainty_k
+      - lambda_Q 1[accuracy_lcb,k < epsilon_k]
       - lambda_deadline 1[T_k > tau_k]
       - lambda_conflict 1[airspace conflict]
 ```
 
-The simulator also exposes a semantic utility API:
+The paper-level objective can be stated as:
 
 ```text
-semantic_utility = semantic_gain * deadline_factor
-                   - resource_cost
-                   - quality_shortfall
-                   + success_bonus
+maximize  sum_t sum_k rho_k success_k(t)
+          - delay cost
+          - energy cost
+          - payload cost
+          - semantic uncertainty cost
+          - UTM/risk cost
 ```
+
+This makes the communication objective semantic: the controller is rewarded for correct, timely, low-payload VQA service rather than for maximizing raw rate.
 
 ## Formal Scenarios
 
