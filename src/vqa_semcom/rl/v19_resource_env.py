@@ -34,6 +34,13 @@ class V19StepRecord:
     semantic_accuracy_lcb: float
     semantic_uncertainty: float
     semantic_sample_count: int
+    semantic_payload_kb: float
+    semantic_quality_gap: float
+    q_quality: float
+    q_deadline: float
+    q_energy: float
+    q_risk: float
+    q_utm: float
     success: bool
     delay_s: float
     energy_j: float
@@ -76,6 +83,7 @@ class V19LUTResourceEnv:
         snr_bins_db: list[float] | None = None,
         tasks_per_episode: int | None = None,
         service_levels: list[int] | None = None,
+        formal_scenario: str | None = None,
         policy_name: str = "policy",
     ) -> None:
         if not tasks:
@@ -87,6 +95,7 @@ class V19LUTResourceEnv:
         self.cfg = cfg
         self.seed_value = int(seed)
         self.policy_name = policy_name
+        self.formal_scenario = str(formal_scenario or "")
         sim_cfg = cfg.get("simulation", {})
         self.tasks_per_episode = int(tasks_per_episode or sim_cfg.get("tasks_per_episode", 40))
         self._env_cfg = self._cfg_with_overrides(cfg, snr_bins_db, service_levels)
@@ -103,6 +112,10 @@ class V19LUTResourceEnv:
         self._last_obs: dict[str, Any] | None = None
         self._last_record: V19StepRecord | None = None
         self._semantic_utility = self._load_semantic_utility_model(cfg)
+        rl_cfg = cfg.get("rl", {}) if isinstance(cfg, dict) else {}
+        env_cfg = self._env_cfg.get("multi_uav_env", {}) if isinstance(self._env_cfg, dict) else {}
+        self.energy_budget_j = float(rl_cfg.get("energy_budget_j", env_cfg.get("energy_budget_j", 500.0)))
+        self._queue_state = self._empty_queue_state()
 
     @property
     def obs_dim(self) -> int:
@@ -117,7 +130,10 @@ class V19LUTResourceEnv:
         options = dict(options or {})
         self.policy_name = str(options.get("policy_name", self.policy_name))
         options.setdefault("tasks_per_episode", self.tasks_per_episode)
+        if self.formal_scenario:
+            options.setdefault("formal_scenario", self.formal_scenario)
         options["policy_name"] = self.policy_name
+        self._queue_state = self._empty_queue_state()
         obs = self._env.reset(seed=self.seed_value, options=options)
         self.service_levels = self._env.service_levels()
         self.base_bandwidth_hz = float(self._env.env_cfg["bandwidth_hz"])
@@ -132,6 +148,7 @@ class V19LUTResourceEnv:
         prev_obs = self._last_obs
         obs, reward, done, info = self._env.step(parsed)
         info = self._enrich_semantic_info(dict(info), prev_obs)
+        self._update_virtual_queues(info)
         record = self._record_from_info(info, float(reward))
         self._last_record = record
         info.update(
@@ -141,6 +158,13 @@ class V19LUTResourceEnv:
                 "semantic_accuracy_lcb": record.semantic_accuracy_lcb,
                 "semantic_uncertainty": record.semantic_uncertainty,
                 "semantic_sample_count": record.semantic_sample_count,
+                "semantic_payload_kb": record.semantic_payload_kb,
+                "semantic_quality_gap": record.semantic_quality_gap,
+                "q_quality": record.q_quality,
+                "q_deadline": record.q_deadline,
+                "q_energy": record.q_energy,
+                "q_risk": record.q_risk,
+                "q_utm": record.q_utm,
                 "success": record.success,
                 "delay_s": record.delay_s,
                 "energy_j": record.energy_j,
@@ -233,6 +257,13 @@ class V19LUTResourceEnv:
             semantic_accuracy_lcb=float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))),
             semantic_uncertainty=float(info.get("semantic_uncertainty", 0.0)),
             semantic_sample_count=int(info.get("semantic_sample_count", 0)),
+            semantic_payload_kb=float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))),
+            semantic_quality_gap=float(info.get("semantic_quality_gap", 0.0)),
+            q_quality=float(info.get("q_quality", 0.0)),
+            q_deadline=float(info.get("q_deadline", 0.0)),
+            q_energy=float(info.get("q_energy", 0.0)),
+            q_risk=float(info.get("q_risk", 0.0)),
+            q_utm=float(info.get("q_utm", 0.0)),
             success=bool(info.get("success", False)),
             delay_s=float(info.get("delay_s", info.get("total_delay_s", 0.0))),
             energy_j=float(info.get("energy_j", info.get("total_energy_j", 0.0))),
@@ -288,8 +319,21 @@ class V19LUTResourceEnv:
             info["answer_accuracy_raw"] = raw_accuracy
             info["answer_accuracy_est"] = float(estimate.accuracy_lcb)
             info["payload_kb"] = float(estimate.payload_kb)
+            info["semantic_payload_kb"] = float(estimate.payload_kb)
 
         epsilon = self._epsilon_from_obs_or_info(info, obs)
+        accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
+        delay_s = float(info.get("delay_s", info.get("total_delay_s", 0.0)))
+        deadline_s = self._deadline_from_obs_or_info(info, obs)
+        energy_j = float(info.get("energy_j", info.get("total_energy_j", 0.0)))
+        energy_budget_j = self._energy_budget_from_obs_or_info(info, obs)
+        info.setdefault("semantic_payload_kb", float(info.get("payload_kb", 0.0)))
+        info["semantic_quality_gap"] = float(accuracy_lcb - epsilon)
+        info["deadline_s"] = float(deadline_s)
+        info["energy_budget_j"] = float(energy_budget_j)
+        info["q_quality_increment"] = max(0.0, epsilon - accuracy_lcb)
+        info["q_deadline_increment"] = max(0.0, delay_s - deadline_s)
+        info["q_energy_increment"] = max(0.0, energy_j - energy_budget_j)
         info["quality_violation"] = bool(float(info.get("answer_accuracy_est", 0.0)) < epsilon)
         info.setdefault("utm_constraint_violation", False)
         info.setdefault("dss_available", True)
@@ -300,6 +344,8 @@ class V19LUTResourceEnv:
         state = str(info.get("operational_intent_state", "accepted"))
         info["operational_intent_state"] = state
         info["off_nominal_planning_penalty"] = 1.0 if state in {"nonconforming", "contingent"} else 0.0
+        info["q_risk_increment"] = self._risk_increment(info)
+        info["q_utm_increment"] = float(bool(info.get("utm_constraint_violation", False)))
         info["success"] = not (
             bool(info.get("quality_violation", False))
             or bool(info.get("deadline_violation", False))
@@ -308,6 +354,7 @@ class V19LUTResourceEnv:
             or bool(info.get("airspace_conflict", False))
             or bool(info.get("utm_constraint_violation", False))
         )
+        self._attach_queue_state(info)
         return info
 
     def _semantic_query(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:
@@ -330,6 +377,25 @@ class V19LUTResourceEnv:
         return 0.0
 
     @staticmethod
+    def _deadline_from_obs_or_info(info: dict[str, Any], obs: dict[str, Any] | None) -> float:
+        if "deadline_s" in info:
+            return float(info["deadline_s"])
+        if "tau_k" in info:
+            return float(info["tau_k"])
+        if obs and "deadline_s" in obs:
+            return float(obs["deadline_s"])
+        if obs and "tau_k" in obs:
+            return float(obs["tau_k"])
+        return 5.0
+
+    def _energy_budget_from_obs_or_info(self, info: dict[str, Any], obs: dict[str, Any] | None) -> float:
+        if "energy_budget_j" in info:
+            return float(info["energy_budget_j"])
+        if obs and "energy_budget_j" in obs:
+            return float(obs["energy_budget_j"])
+        return float(self.energy_budget_j)
+
+    @staticmethod
     def _load_semantic_utility_model(cfg: dict[str, Any]) -> SemanticUtilityModel | None:
         paths = cfg.get("paths", {}) if isinstance(cfg, dict) else {}
         candidates = [
@@ -349,11 +415,49 @@ class V19LUTResourceEnv:
             return int(level)
         return min(self.service_levels, key=lambda item: abs(item - int(level)))
 
-    @staticmethod
-    def _normalize_obs(obs: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_obs(self, obs: dict[str, Any]) -> dict[str, Any]:
         out = dict(obs)
-        out["vector"] = [float(value) for value in out.get("vector", [])]
+        out["vector"] = [float(value) for value in out.get("vector", [])] + self._queue_vector()
+        out["lyapunov_queues"] = dict(self._queue_state)
         return out
+
+    @staticmethod
+    def _empty_queue_state() -> dict[str, float]:
+        return {"quality": 0.0, "deadline": 0.0, "energy": 0.0, "risk": 0.0, "utm": 0.0}
+
+    def _queue_vector(self) -> list[float]:
+        return [
+            float(self._queue_state["quality"]),
+            float(self._queue_state["deadline"]),
+            float(self._queue_state["energy"]) / max(1.0, float(self.energy_budget_j)),
+            float(self._queue_state["risk"]),
+            float(self._queue_state["utm"]),
+        ]
+
+    def _attach_queue_state(self, info: dict[str, Any]) -> None:
+        info["q_quality"] = float(self._queue_state["quality"])
+        info["q_deadline"] = float(self._queue_state["deadline"])
+        info["q_energy"] = float(self._queue_state["energy"])
+        info["q_risk"] = float(self._queue_state["risk"])
+        info["q_utm"] = float(self._queue_state["utm"])
+
+    def _update_virtual_queues(self, info: dict[str, Any]) -> None:
+        self._queue_state["quality"] = max(0.0, self._queue_state["quality"] + float(info.get("q_quality_increment", 0.0)))
+        self._queue_state["deadline"] = max(0.0, self._queue_state["deadline"] + float(info.get("q_deadline_increment", 0.0)))
+        self._queue_state["energy"] = max(0.0, self._queue_state["energy"] + float(info.get("q_energy_increment", 0.0)))
+        self._queue_state["risk"] = max(0.0, self._queue_state["risk"] + float(info.get("q_risk_increment", 0.0)))
+        self._queue_state["utm"] = max(0.0, self._queue_state["utm"] + float(info.get("q_utm_increment", 0.0)))
+        self._attach_queue_state(info)
+
+    @staticmethod
+    def _risk_increment(info: dict[str, Any]) -> float:
+        return float(
+            bool(info.get("airspace_conflict", False))
+            or bool(info.get("battery_violation", False))
+            or bool(info.get("resource_violation", False))
+            or bool(info.get("utm_constraint_violation", False))
+            or float(info.get("off_nominal_planning_penalty", 0.0)) > 0.0
+        )
 
     @staticmethod
     def _obs_context(obs: dict[str, Any]) -> dict[str, Any]:

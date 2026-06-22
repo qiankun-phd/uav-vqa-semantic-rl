@@ -543,3 +543,37 @@ Small-scale result in `outputs/rl/v1_9_rl_fix_cache_collapse/`:
 - `ppo` service mix: cache 0.417, semantic tokens 0.479, image 0.104; the policy no longer collapses to all cache in this validation.
 
 Next required algorithm step: rerun formal multi-seed comparison with the fixed controller and include unseen conflict/interference/mobility scenarios.
+
+## TWC Semantic-Lyapunov Hybrid Control 2026-06-22 Asia/Shanghai
+
+Algorithm thread implemented the first Sem-Lyapunov Hybrid Control v1 skeleton for the paper main method:
+
+- `src/vqa_semcom/rl/v19_resource_env.py` now exposes `semantic_payload_kb`, `semantic_quality_gap`, and virtual queue states `q_quality`, `q_deadline`, `q_energy`, `q_risk`, and `q_utm` in step info and rollout records.
+- The environment observation vector now appends the normalized Lyapunov queue state and also exposes `obs["lyapunov_queues"]`.
+- The queue increments follow the CMDP constraints: quality gap from `epsilon_k - accuracy_lcb`, deadline overrun from `delay_s - deadline_s`, energy overrun from `energy_j - energy_budget_j`, plus risk/UTM violation queues.
+- `src/vqa_semcom/rl/v19_ppo.py` adds a drift-plus-penalty reward path using semantic LCB utility, delay/energy/payload costs, queue-weighted penalties, and uncertainty penalty.
+- PPO remains the high-level semantic routing controller; continuous bandwidth/power/cpu/gpu values are corrected through service-dependent resource floors and projection unless the ablation disables projection.
+- Added runner support for `semantic_lcb_greedy`, `lyapunov_greedy`, `ppo_without_lcb`, `ppo_without_queues`, and `ppo_without_projection`.
+- Smoke outputs are isolated under `outputs/rl/twc_sem_lcb_lyapunov_smoke/`.
+
+Validation:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 10 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --smoke \
+  --policy ppo \
+  --episodes 1 \
+  --train-episodes 2 \
+  --tasks-per-episode 4 \
+  --output-dir outputs/rl/twc_sem_lcb_lyapunov_smoke
+```
+
+Smoke artifact check:
+
+- `v1_9_resource_alloc_rollout.csv` contains semantic mean/LCB/uncertainty/sample count/payload/gap and queue fields.
+- `ppo_training_trace.csv` contains mean/max `q_quality`, `q_deadline`, `q_energy`, `q_risk`, and `q_utm`.
+- The smoke still uses a tiny 2-episode training budget and is only an interface/algorithm-path validation, not a paper result.

@@ -67,6 +67,16 @@ class PPOTrainConfig:
     utm_conflict_cost_weight: float = 1.5
     dss_delay_cost_weight: float = 0.25
     off_nominal_cost_weight: float = 1.0
+    use_semantic_lcb: bool = True
+    lyapunov_reward: bool = False
+    use_lyapunov_queues: bool = True
+    queue_quality_weight: float = 1.5
+    queue_deadline_weight: float = 0.8
+    queue_energy_weight: float = 0.25
+    queue_risk_weight: float = 1.0
+    queue_utm_weight: float = 1.0
+    uncertainty_cost_weight: float = 0.35
+    energy_budget_j: float = 500.0
     quality_cost_limit: float = 0.0
     deadline_cost_limit: float = 0.0
     quality_cost_limit_normal: float = 0.05
@@ -95,6 +105,7 @@ class PPOTrainConfig:
     power_min_w: float = 0.05
     power_max_w: float = 1.0
     semantic_projection: bool = True
+    resource_projection: bool = True
     service_prior_weight: float = 0.25
     service_prior_decay_episodes: int = 200
     imitation_warm_start: bool = False
@@ -249,6 +260,18 @@ def train_ppo(
             "mean_shaped_reward": float(_mean(rollout["rewards"])),
             "mean_semantic_accuracy_lcb": float(_mean(rollout["semantic_accuracy_lcbs"])),
             "mean_semantic_uncertainty": float(_mean(rollout["semantic_uncertainties"])),
+            "mean_semantic_payload_kb": float(_mean(rollout["semantic_payload_kbs"])),
+            "mean_semantic_quality_gap": float(_mean(rollout["semantic_quality_gaps"])),
+            "mean_q_quality": float(_mean(rollout["q_quality"])),
+            "mean_q_deadline": float(_mean(rollout["q_deadline"])),
+            "mean_q_energy": float(_mean(rollout["q_energy"])),
+            "mean_q_risk": float(_mean(rollout["q_risk"])),
+            "mean_q_utm": float(_mean(rollout["q_utm"])),
+            "max_q_quality": float(max(rollout["q_quality"] or [0.0])),
+            "max_q_deadline": float(max(rollout["q_deadline"] or [0.0])),
+            "max_q_energy": float(max(rollout["q_energy"] or [0.0])),
+            "max_q_risk": float(max(rollout["q_risk"] or [0.0])),
+            "max_q_utm": float(max(rollout["q_utm"] or [0.0])),
             "non_cache_ratio": float(_mean(rollout["non_cache_actions"])),
             "quality_cost": float(_mean(rollout["quality_costs"])),
             "deadline_cost": float(_mean(rollout["deadline_costs"])),
@@ -345,6 +368,13 @@ def _collect_episode(
         "gpu_costs": [],
         "semantic_accuracy_lcbs": [],
         "semantic_uncertainties": [],
+        "semantic_payload_kbs": [],
+        "semantic_quality_gaps": [],
+        "q_quality": [],
+        "q_deadline": [],
+        "q_energy": [],
+        "q_risk": [],
+        "q_utm": [],
         "non_cache_actions": [],
         "bandwidth_shares": [],
         "power_w": [],
@@ -403,6 +433,13 @@ def _collect_episode(
         rollout["gpu_costs"].append(float(bool(info.get("resource_violation", False))))
         rollout["semantic_accuracy_lcbs"].append(float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))))
         rollout["semantic_uncertainties"].append(float(info.get("semantic_uncertainty", 0.0)))
+        rollout["semantic_payload_kbs"].append(float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))))
+        rollout["semantic_quality_gaps"].append(float(info.get("semantic_quality_gap", 0.0)))
+        rollout["q_quality"].append(float(info.get("q_quality", 0.0)))
+        rollout["q_deadline"].append(float(info.get("q_deadline", 0.0)))
+        rollout["q_energy"].append(float(info.get("q_energy", 0.0)))
+        rollout["q_risk"].append(float(info.get("q_risk", 0.0)))
+        rollout["q_utm"].append(float(info.get("q_utm", 0.0)))
         rollout["non_cache_actions"].append(float(int(action["service_level"]) != 0))
         rollout["bandwidth_shares"].append(float(action["bandwidth"]) if float(action["bandwidth"]) <= 1.0 else float(action["bandwidth"]) / max(1.0, env.base_bandwidth_hz))
         rollout["power_w"].append(float(action["power"]))
@@ -470,10 +507,10 @@ def _build_hybrid_action(
 ) -> dict[str, Any]:
     action = env.candidate_action(service_level, obs)
     if cfg.hybrid_actions and int(service_level) > 0:
-        bandwidth_floor = _service_resource_floor(cfg, service_level, "bandwidth")
-        power_floor = _service_resource_floor(cfg, service_level, "power")
-        cpu_floor = _service_resource_floor(cfg, service_level, "cpu_share")
-        gpu_floor = _service_resource_floor(cfg, service_level, "gpu_share")
+        bandwidth_floor = _resource_floor(cfg, service_level, "bandwidth")
+        power_floor = _resource_floor(cfg, service_level, "power")
+        cpu_floor = _resource_floor(cfg, service_level, "cpu_share")
+        gpu_floor = _resource_floor(cfg, service_level, "gpu_share")
         action.update(
             {
                 "bandwidth": _scaled_unit(resources[0], bandwidth_floor, 1.0),
@@ -493,7 +530,7 @@ def _build_hybrid_action(
 def _project_safe_action(env: V19LUTResourceEnv, obs: dict[str, Any], action: dict[str, Any], cfg: PPOTrainConfig) -> dict[str, Any]:
     info = env.evaluate_action(action, obs)
     if not _has_hard_safety_violation(info):
-        if cfg.semantic_projection:
+        if cfg.semantic_projection or cfg.resource_projection:
             return _project_semantic_feasible_action(env, obs, action, cfg, current_info=info)
         return env.parse_action(action)
     current = int(action["service_level"])
@@ -549,10 +586,10 @@ def _project_semantic_feasible_action(
 def _resource_floor_candidate(env: V19LUTResourceEnv, obs: dict[str, Any], service_level: int, cfg: PPOTrainConfig) -> dict[str, Any]:
     candidate = env.candidate_action(service_level, obs)
     if int(service_level) > 0 and cfg.hybrid_actions:
-        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _service_resource_floor(cfg, service_level, "bandwidth"))
-        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _service_resource_floor(cfg, service_level, "power"), cfg.power_min_w)
-        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _service_resource_floor(cfg, service_level, "cpu_share"))
-        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), _service_resource_floor(cfg, service_level, "gpu_share"))
+        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _resource_floor(cfg, service_level, "bandwidth"))
+        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _resource_floor(cfg, service_level, "power"), cfg.power_min_w)
+        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _resource_floor(cfg, service_level, "cpu_share"))
+        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), _resource_floor(cfg, service_level, "gpu_share"))
     candidate["service_level"] = int(service_level)
     candidate["sensing_decision"] = "reuse_cache" if int(service_level) == 0 else "observe"
     return candidate
@@ -649,13 +686,13 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     if cfg.semantic_reward_mode == "env":
         return float(raw_reward)
     risk_weight = 1.6 if str(info.get("risk_level", obs.get("risk_level", "normal"))) == "critical" else 1.0
-    accuracy = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
+    accuracy = _control_accuracy(info, cfg)
     accuracy_mean = float(info.get("semantic_accuracy_mean", accuracy))
     uncertainty = float(info.get("semantic_uncertainty", 0.0))
     epsilon = float(obs.get("epsilon_k", 0.0))
     success = float(bool(info.get("success", False)))
     delay_norm = float(info.get("delay_s", 0.0)) / max(0.5, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))
-    energy_norm = float(info.get("energy_j", 0.0)) / 500.0
+    energy_norm = float(info.get("energy_j", 0.0)) / max(1.0, float(info.get("energy_budget_j", cfg.energy_budget_j)))
     payload_norm = float(info.get("payload_kb", 0.0)) / 200.0
     dss_delay_norm = (
         float(info.get("dss_delay_s", 0.0)) + float(info.get("subscription_notification_delay_s", 0.0))
@@ -684,7 +721,29 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     )
     if cfg.semantic_reward_mode == "uncertainty_aware":
         utility += 0.5 * risk_weight * max(0.0, margin) - 0.4 * uncertainty
+    if cfg.lyapunov_reward and cfg.use_lyapunov_queues:
+        queue_penalty = (
+            cfg.queue_quality_weight * float(info.get("q_quality", 0.0)) * max(0.0, -margin)
+            + cfg.queue_deadline_weight * float(info.get("q_deadline", 0.0)) * max(0.0, delay_norm - 1.0)
+            + cfg.queue_energy_weight * float(info.get("q_energy", 0.0)) / max(1.0, float(cfg.energy_budget_j))
+            + cfg.queue_risk_weight * float(info.get("q_risk", 0.0))
+            + cfg.queue_utm_weight * float(info.get("q_utm", 0.0))
+        )
+        utility -= queue_penalty
+    if cfg.lyapunov_reward:
+        utility -= cfg.uncertainty_cost_weight * risk_weight * uncertainty
     return float(utility)
+
+
+def _control_accuracy(info: dict[str, Any], cfg: PPOTrainConfig) -> float:
+    if cfg.use_semantic_lcb:
+        return float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
+    return float(
+        info.get(
+            "answer_accuracy_raw",
+            info.get("semantic_accuracy_mean", info.get("answer_accuracy_est", 0.0)),
+        )
+    )
 
 
 def _snr_scaled(obs: dict[str, Any]) -> float:
@@ -848,6 +907,18 @@ def _service_resource_floor(cfg: PPOTrainConfig, service_level: int, key: str) -
             3: float(cfg.roi_gpu_floor),
         }.get(level, float(cfg.share_floor))
     raise KeyError(key)
+
+
+def _resource_floor(cfg: PPOTrainConfig, service_level: int, key: str) -> float:
+    if not cfg.resource_projection:
+        if key == "bandwidth":
+            return float(cfg.bandwidth_floor)
+        if key == "power":
+            return float(cfg.power_min_w)
+        if key in {"cpu_share", "gpu_share"}:
+            return float(cfg.share_floor)
+        raise KeyError(key)
+    return _service_resource_floor(cfg, service_level, key)
 
 
 def _scaled_unit(value: float, low: float, high: float) -> float:

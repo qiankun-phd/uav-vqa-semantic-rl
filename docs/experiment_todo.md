@@ -338,8 +338,8 @@ Next environment steps:
 8. Done: Algorithm-facing environment wrapper queries the semantic utility interface when `outputs/lut/v1_9_semantic_utility_with_ci.csv` is available and exposes conservative `accuracy_lcb`, uncertainty, and sample count in `info`/CSV records.
 9. Done: Added the first cache-collapse fix for PPO/TCH-PPO: reward scaling through semantic LCB, entropy schedule, decaying service-level imitation prior, oracle warm-start, service-dependent resource floors, semantic feasibility projection, and UTM/DSS/off-nominal cost hooks.
 10. Done: TWC mainline documentation defines Conservative VQA-grounded Semantic-Lyapunov Hybrid Control as the paper-level problem/algorithm direction.
-11. Pending: Environment thread should expose the full TWC semantic info fields, including `semantic_payload_kb` and `semantic_quality_gap`.
-12. Pending: Algorithm thread should implement explicit Semantic-Lyapunov queue states and the without-LCB/without-queue/without-projection ablations.
+11. Done: Algorithm-facing environment wrapper exposes the TWC semantic info fields, including `semantic_payload_kb`, `semantic_quality_gap`, and Lyapunov queue state fields.
+12. Done: Algorithm thread implemented explicit Semantic-Lyapunov queue states and added without-LCB/without-queue/without-projection ablation switches.
 13. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
 
 ## RL Cache-Collapse Follow-Up
@@ -360,6 +360,43 @@ Next algorithm steps:
 2. Include fixed unseen scenarios: `conflict-heavy`, `interference-heavy`, `cache-heavy`, and `mobility-stress`.
 3. Report `ppo_training_trace.csv` non-cache ratio, entropy schedule, service prior, semantic LCB, uncertainty, and lambda trace alongside success/accuracy/delay/energy/payload.
 4. Tune deadline feasibility separately if formal runs still show high deadline violation for evidence-rich actions.
+
+## TWC Semantic-Lyapunov Control Follow-Up
+
+Completed 2026-06-22 Asia/Shanghai:
+
+1. Added virtual queues to `src/vqa_semcom/rl/v19_resource_env.py`: `Q_quality`, `Q_deadline`, `Q_energy`, `Q_risk`, and `Q_utm`.
+2. Appended queue state to the numeric observation vector and wrote queue state into rollout records.
+3. Added semantic rollout fields: `semantic_payload_kb` and `semantic_quality_gap`.
+4. Added drift-plus-penalty reward support in `src/vqa_semcom/rl/v19_ppo.py` with semantic LCB reward, resource costs, queue-weighted penalties, and uncertainty penalty.
+5. Kept PPO as high-level service/evidence/UAV routing while retaining resource floors/projection for bandwidth/power/cpu/gpu.
+6. Added baselines/ablations in the runner: `semantic_lcb_greedy`, `lyapunov_greedy`, `ppo_without_lcb`, `ppo_without_queues`, and `ppo_without_projection`.
+7. Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 10 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --smoke --policy ppo --episodes 1 --train-episodes 2 --tasks-per-episode 4 \
+  --output-dir outputs/rl/twc_sem_lcb_lyapunov_smoke
+```
+
+New artifacts:
+
+```text
+outputs/rl/twc_sem_lcb_lyapunov_smoke/v1_9_resource_alloc_results.csv
+outputs/rl/twc_sem_lcb_lyapunov_smoke/v1_9_resource_alloc_summary.md
+outputs/rl/twc_sem_lcb_lyapunov_smoke/ppo_training_trace.csv
+outputs/rl/twc_sem_lcb_lyapunov_smoke/ppo_lambda_trace.csv
+```
+
+Next algorithm steps:
+
+1. Run the formal Sem-Lyapunov comparison under `outputs/rl/twc_sem_lcb_lyapunov_formal/` after reviewing the smoke traces.
+2. Use the formal runner to compare heuristic, semantic LCB greedy, Lyapunov greedy, service-only PPO, hybrid PPO, Lagrangian PPO, and Sem-Lyapunov hybrid control.
+3. Include ablation tables for no-LCB, no-queue, and no-projection variants.
+4. Keep `.pt`, large rollout CSV, and `run.log` out of commits; retain only summary/report/trace CSV artifacts.
 
 ## Output Naming Convention
 

@@ -39,6 +39,8 @@ class V19RLResourceAllocTest(unittest.TestCase):
             "vector",
         ]:
             self.assertIn(key, obs)
+        self.assertIn("lyapunov_queues", obs)
+        self.assertEqual(set(obs["lyapunov_queues"]), {"quality", "deadline", "energy", "risk", "utm"})
         action = env.candidate_action(1, obs)
         next_obs, reward, done, info = env.step(action)
         self.assertIn("answer_accuracy_est", info)
@@ -46,6 +48,13 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("semantic_accuracy_lcb", info)
         self.assertIn("semantic_uncertainty", info)
         self.assertIn("semantic_sample_count", info)
+        self.assertIn("semantic_payload_kb", info)
+        self.assertIn("semantic_quality_gap", info)
+        self.assertIn("q_quality", info)
+        self.assertIn("q_deadline", info)
+        self.assertIn("q_energy", info)
+        self.assertIn("q_risk", info)
+        self.assertIn("q_utm", info)
         self.assertIn("delay_s", info)
         self.assertIn("energy_j", info)
         self.assertIn("payload_kb", info)
@@ -63,6 +72,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIsInstance(float(reward), float)
         self.assertFalse(done)
         self.assertEqual(next_obs["episode_step"], 1)
+        self.assertIn("lyapunov_queues", next_obs)
 
     def test_action_contract_accepts_minimal_action(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=1, tasks_per_episode=1)
@@ -81,6 +91,21 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertTrue(done)
         self.assertEqual(info["service_level"], 0)
 
+    def test_wrapper_passes_formal_scenario_to_canonical_env(self) -> None:
+        env = V19LUTResourceEnv(
+            self.tasks,
+            self.lut,
+            self.cfg,
+            seed=4,
+            tasks_per_episode=2,
+            formal_scenario="test_utm_dss_outage",
+        )
+        obs = env.reset(seed=4)
+        self.assertEqual(obs["formal_scenario"], "test_utm_dss_outage")
+        _obs, _reward, _done, info = env.step(env.candidate_action(1, obs))
+        self.assertEqual(info["formal_scenario"], "test_utm_dss_outage")
+        self.assertIn("utm_constraint_violation", info)
+
     def test_tiny_ppo_training_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=2, tasks_per_episode=4)
         try:
@@ -97,6 +122,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("lambda_deadline", trace[0])
         self.assertIn("lambda_quality_normal", trace[0])
         self.assertIn("lambda_deadline_critical", trace[0])
+        self.assertIn("mean_q_quality", trace[0])
+        self.assertIn("mean_q_deadline", trace[0])
+        self.assertIn("mean_semantic_quality_gap", trace[0])
 
         obs = env.reset(seed=22)
         action = PPOServicePolicy(env, model, PPOTrainConfig(hidden_size=32)).act(obs)
@@ -122,6 +150,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
                     hidden_size=32,
                     risk_aware_constraints=True,
                     semantic_reward_mode="semantic_utility",
+                    lyapunov_reward=True,
                     imitation_warm_start=True,
                     demo_episodes=1,
                     bc_epochs=1,
@@ -140,6 +169,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("service_prior_weight", trace[0])
         self.assertIn("non_cache_ratio", trace[0])
         self.assertIn("mean_semantic_accuracy_lcb", trace[0])
+        self.assertIn("mean_q_utm", trace[0])
 
 
 if __name__ == "__main__":
