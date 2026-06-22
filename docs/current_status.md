@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-06-19 00:28 Asia/Macau
+Last updated: 2026-06-22 Asia/Macau
 Remote host: qiankun@172.27.57.160
 
 ## Code Locations
@@ -136,6 +136,30 @@ U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_l
 ```
 
 For algorithm/environment integration, prefer `accuracy_lcb` for conservative QoS checks and keep `uncertainty`/`sample_count` visible in `info`.
+
+Revalidated 2026-06-22 Asia/Macau:
+
+- Confirmed `outputs/lut/v1_9_semantic_utility_with_ci.csv` and `outputs/reports/semantic_utility_calibration.md` already exist.
+- Confirmed semantic utility API/test files are present:
+
+```text
+src/vqa_semcom/semantic/utility.py
+tests/test_semantic_utility.py
+```
+
+- Passed targeted semantic utility tests:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_semantic_utility.py'
+# Ran 6 tests OK
+```
+
+- Passed full project tests:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 67 tests OK
+```
 
 Resource simulation headline:
 

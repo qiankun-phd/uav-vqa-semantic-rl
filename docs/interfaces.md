@@ -31,7 +31,7 @@ Each observation must contain these fields or a documented numeric encoding of t
 | view_quality_bin | str/int | poor, medium, good. |
 | freshness_bin | str/int | fresh, stale, expired. |
 | sensed_snr_db | float | Continuous sensed SNR used by physical delay/rate model. |
-| snr_bin | str/float/int | Nearest LUT SNR bin label/value. Current V1.9 report uses 0dB, 10dB, 20dB; config also lists -5, 0, 5, 10, 15, 20. |
+| snr_bin | str/float/int | Nearest semantic-utility SNR bin label/value. Current V1.9 utility model uses -5dB, 0dB, 5dB, 10dB, 15dB, 20dB. |
 | uav_state | dict/vector | UAV position, velocity/heading, battery, remaining compute or flight budget. |
 | edge_load | float/vector | Edge/server compute congestion or queue load. |
 | cache_state | dict/vector | Whether cache answer exists, age/freshness, cache confidence if available. |
@@ -43,40 +43,6 @@ Recommended additional fields:
 - task_id
 - episode_step
 - feasible_uavs
-- scenario
-- formal_scenario
-- benchmark_split
-- scalability_profile
-- graph
-
-## Semantic Network Observation Extension
-
-The canonical simulator is also a semantic communication network benchmark. Observations may include:
-
-| field | type | notes |
-|---|---|---|
-| network_layers | dict | task, semantic service, semantic utility, network, and cognitive control layers. |
-| graph | dict | Graph observation export with UAV/task/edge node sets and link/compute edge sets. |
-| formal_scenario | str | One of the formal train/test scenarios, if selected. |
-| scalability_profile | dict | Selected UAV count, task arrival, and edge load presets. |
-
-Graph schema:
-
-```python
-graph = obs["graph"]
-schema = env.graph_observation_schema()
-```
-
-Node sets:
-
-- `uav`
-- `task`
-- `edge`
-
-Edge sets:
-
-- `uav_task_link`
-- `task_edge_compute`
 
 ## Action Contract
 
@@ -106,27 +72,60 @@ action = {
 }
 ```
 
-## LUT Query Contract
+## Semantic Utility Interface
 
-The VQA/SNR-LUT thread provides an empirical answer-quality lookup table:
+The VQA/SNR thread now provides a VQA-grounded, task-conditioned semantic utility model, not only a raw lookup table:
 
 ```text
-A_k = LUT[question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level]
+U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level)
+  -> accuracy_mean, accuracy_lcb, payload_kb, uncertainty, sample_count
 ```
 
-Current LUT path:
+Primary calibrated utility path:
+
+```text
+/home/qiankun/phd_research/vqa_semcom/outputs/lut/v1_9_semantic_utility_with_ci.csv
+```
+
+Primary calibration report:
+
+```text
+/home/qiankun/phd_research/vqa_semcom/outputs/reports/semantic_utility_calibration.md
+```
+
+API implementation:
+
+```text
+/home/qiankun/phd_research/vqa_semcom/src/vqa_semcom/semantic/utility.py
+```
+
+The raw measured V1.9 quality table remains available for traceability:
 
 ```text
 /home/qiankun/phd_research/vqa_semcom/outputs/lut/v1_9_snr_semantic_quality_lut.csv
 ```
 
-Current report path:
+The new utility CSV extends raw answer accuracy with:
 
 ```text
-/home/qiankun/phd_research/vqa_semcom/outputs/reports/v1_9_snr_eval_report.md
+sample_count
+accuracy_mean
+accuracy_ci_low
+accuracy_ci_high
+accuracy_lcb
+payload_kb
+uncertainty
 ```
 
-Nearest-bin helper exists in:
+Semantics:
+
+- `accuracy_mean`: calibrated expected answer correctness for the task/service/SNR/view/freshness/risk condition.
+- `accuracy_lcb`: conservative lower confidence bound for QoS decisions.
+- `payload_kb`: measured communication load for the selected visual/semantic evidence.
+- `uncertainty`: finite-sample/statistical uncertainty; sparse cells should be treated cautiously by RL.
+- `sample_count`: number of measured VQA prediction samples behind the cell.
+
+Nearest-bin SNR helpers still live in:
 
 ```text
 /home/qiankun/phd_research/vqa_semcom/src/vqa_semcom/snr.py
@@ -140,6 +139,21 @@ snr_db_to_bin_label(sensed_snr_db, snr_bins_db)
 channel_bin_from_snr(snr_db)
 ```
 
+Recommended control usage:
+
+```python
+from vqa_semcom.semantic.utility import SemanticUtilityModel
+
+utility = SemanticUtilityModel.from_csv(Path("outputs/lut/v1_9_semantic_utility_with_ci.csv"))
+u = utility.U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level)
+
+A_k = u.accuracy_lcb  # conservative control-facing quality estimate
+payload_kb = u.payload_kb
+semantic_uncertainty = u.uncertainty
+```
+
+For paper writing, describe this as a task-conditioned semantic utility model calibrated from measured VQA correctness under sensed SNR, view quality, freshness, and service-level evidence. Do not describe it as an image-quality score.
+
 ## Reward Contract
 
 Algorithm and environment threads should keep reward components inspectable through info:
@@ -147,6 +161,10 @@ Algorithm and environment threads should keep reward components inspectable thro
 ```python
 info = {
     'answer_accuracy_est': A_k,
+    'semantic_accuracy_mean': float,
+    'semantic_accuracy_lcb': float,
+    'semantic_uncertainty': float,
+    'semantic_sample_count': int,
     'success': bool,
     'delay_s': float,
     'energy_j': float,
@@ -156,23 +174,6 @@ info = {
     'snr_bin': str,
     'service_level': int,
 }
-```
-
-Extended semantic-network `info` fields:
-
-- `semantic_service_name`
-- `semantic_evidence_type`
-- `semantic_utility`
-- `semantic_efficiency`
-- `formal_scenario`
-- `benchmark_split`
-
-The semantic utility API is available through:
-
-```python
-env.semantic_service_route(...)
-env.semantic_utility(...)
-env.semantic_utility_schema()
 ```
 
 Suggested scalar reward:
@@ -210,31 +211,3 @@ Algorithm experiments should output the same metrics so they can be compared dir
 - no_cache_greedy
 - no_semantic_tokens_greedy
 - oracle_best_feasible_evidence
-
-## Formal Benchmark Scenarios
-
-Train scenarios:
-
-- `train_nominal`
-- `train_mixed_random`
-
-Test scenarios:
-
-- `test_conflict_heavy`
-- `test_interference_heavy`
-- `test_cache_heavy`
-- `test_mobility_stress`
-- `test_unseen_mixed`
-
-Scalability presets:
-
-- UAV count: `M2`, `M4`, `M6`, `M8`
-- task arrival: `low`, `medium`, `high`
-- edge load: `light`, `medium`, `heavy`
-
-Environment-owned benchmark outputs:
-
-```text
-outputs/env/formal_scenario_specs.md
-outputs/env/scenario_smoke_*.csv
-```

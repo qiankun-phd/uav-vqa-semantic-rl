@@ -1,6 +1,6 @@
 # Experiment TODO
 
-Last updated: 2026-06-19 00:28 Asia/Macau
+Last updated: 2026-06-22 Asia/Macau
 Primary project root: /home/qiankun/phd_research/vqa_semcom
 
 ## Completed VQA / SNR-LUT Tasks
@@ -41,6 +41,21 @@ outputs/reports/semantic_utility_calibration.md
 cd /home/qiankun/phd_research/vqa_semcom
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_semantic_utility.py'
 ```
+
+Revalidated 2026-06-22 Asia/Macau:
+
+- Confirmed semantic utility API, test, calibrated utility CSV, and calibration report are present.
+- Passed:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_semantic_utility.py'
+# Ran 6 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 67 tests OK
+```
+
+- Ready to commit and push the semantic utility interface and generated calibration artifacts.
 
 ## Immediate Integration Tasks
 
