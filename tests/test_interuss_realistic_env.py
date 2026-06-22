@@ -112,6 +112,9 @@ class InterUSSRealisticEnvTest(unittest.TestCase):
         )
         self.assertTrue(info["strategic_conflict"])
         self.assertTrue(info["airspace_conflict"])
+        self.assertTrue(info["utm_conflict_violation"])
+        self.assertGreaterEqual(info["utm_delay_s"], 0.0)
+        self.assertEqual(info["airspace_state"], info["operational_intent_state"])
         self.assertGreaterEqual(info["strategic_conflict_count"], 1)
         self.assertEqual(info["operational_intent_state"], "nonconforming")
 
@@ -134,6 +137,7 @@ class InterUSSRealisticEnvTest(unittest.TestCase):
         self.assertFalse(info["strategic_conflict"])
         self.assertFalse(info["airspace_conflict"])
         self.assertFalse(info["utm_constraint_violation"])
+        self.assertFalse(info["utm_conflict_violation"])
 
     def test_dss_outage_sets_contingent_state_and_violation(self) -> None:
         env = self._env()
@@ -147,7 +151,23 @@ class InterUSSRealisticEnvTest(unittest.TestCase):
         self.assertFalse(info["dss_available"])
         self.assertEqual(info["operational_intent_state"], "contingent")
         self.assertTrue(info["utm_constraint_violation"])
+        self.assertTrue(info["utm_conflict_violation"])
         self.assertGreater(info["utm_dss_delay_s"], 0.0)
+        self.assertGreater(info["utm_delay_s"], 0.0)
+
+    def test_critical_utm_violation_sets_risk_violation(self) -> None:
+        env = self._env()
+        env.reset(seed=17, options={"formal_scenario": "test_utm_dss_outage"})
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.risk_level = "critical"
+        task.epsilon_k = 0.75
+        info = env.evaluate_action(
+            {"task_id": task.task_id, "service_level": 1, "sensing_decision": "observe"},
+            task_id=task.task_id,
+        )
+        self.assertTrue(info["utm_constraint_violation"])
+        self.assertTrue(info["risk_violation"])
 
     def test_notification_delay_is_reported_for_conflict_updates(self) -> None:
         env = self._env()

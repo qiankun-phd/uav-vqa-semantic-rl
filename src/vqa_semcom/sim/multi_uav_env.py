@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from vqa_semcom.config import load_config, resolve_path
+from vqa_semcom.semantic.utility import SemanticUtilityEstimate, SemanticUtilityModel
 from vqa_semcom.sim.resource_env import LUTEntry, load_lut, read_csv
 from vqa_semcom.snr import channel_bin_from_snr, snr_bins_from_config, snr_db_from_label, snr_db_to_bin_label
 
@@ -557,6 +558,7 @@ def _env_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
         "semantic_cache_reuse_boost": 0.18,
         "cache_hit_probability": {"fresh": 0.96, "stale": 0.68, "expired": 0.28},
         "freshness_slots": {"fresh": 1, "stale": 3},
+        "semantic_threshold_by_risk": {"normal": 0.50, "critical": 0.75, "high": 0.75},
         "a2g": {
             "carrier_mhz": 2400.0,
             "reference_distance_m": 1.0,
@@ -612,6 +614,7 @@ class MultiUAVVQAEnv:
         lut: dict[tuple[str, int, str, str, str, str], LUTEntry],
         cfg: dict[str, Any],
         seed: int | None = None,
+        semantic_utility_model: SemanticUtilityModel | None = None,
     ) -> None:
         if not tasks:
             raise ValueError("MultiUAVVQAEnv needs at least one task")
@@ -619,6 +622,7 @@ class MultiUAVVQAEnv:
             raise ValueError("MultiUAVVQAEnv needs a non-empty LUT")
         self.raw_tasks = list(tasks)
         self.lut = lut
+        self.semantic_utility_model = semantic_utility_model
         self.cfg = cfg
         self.env_cfg = _env_cfg(cfg)
         self.default_scenario = _normalize_scenario_name(str(self.env_cfg.get("scenario", "nominal")))
@@ -827,10 +831,14 @@ class MultiUAVVQAEnv:
         snr_bin = str(obs.get("snr_bin")) if obs and obs.get("snr_bin") else snr_db_to_bin_label(float(link["sinr_db"]), self.snr_bins_db)
         cache_probability = self._semantic_cache_hit_probability(task)
         entry = self._lookup_entry(task, int(parsed["service_level"]), snr_bin)
-        accuracy = float(entry.accuracy)
+        semantic_estimate = self._semantic_estimate(task, int(parsed["service_level"]), snr_bin, entry)
+        accuracy = float(semantic_estimate.accuracy_mean)
         if int(parsed["service_level"]) == 0:
             accuracy *= 0.85 + 0.15 * cache_probability
-        delay = self._delay_parts(task, uav, edge, parsed, entry.payload_bytes, link)
+        semantic_lcb = float(semantic_estimate.accuracy_lcb)
+        semantic_payload_kb = float(semantic_estimate.payload_kb)
+        payload_bytes = semantic_payload_kb * 1024.0
+        delay = self._delay_parts(task, uav, edge, parsed, payload_bytes, link)
         strategic_conflict_task_ids = self._strategic_conflict_task_ids(task, parsed)
         airspace_conflict = bool(strategic_conflict_task_ids)
         utm = self._utm_evaluation(task, parsed, strategic_conflict_task_ids)
@@ -838,11 +846,14 @@ class MultiUAVVQAEnv:
         delay["utm_notification_delay_s"] = float(utm["subscription_notification_delay_s"])
         delay["total_delay_s"] += delay["utm_dss_delay_s"] + delay["utm_notification_delay_s"]
         energy = self._energy_parts(delay, parsed)
-        quality_violation = accuracy < task.epsilon_k
+        semantic_quality_gap = task.epsilon_k - semantic_lcb
+        semantic_success = semantic_lcb >= task.epsilon_k
+        quality_violation = not semantic_success
         deadline_violation = delay["total_delay_s"] > task.tau_k
         battery_violation = energy["total_energy_j"] > uav.battery_j - float(self.env_cfg["return_energy_reserve_j"])
         gpu_memory_ok = self._gpu_memory_ok(edge, int(parsed["service_level"]))
         utm_constraint_violation = bool(utm["utm_constraint_violation"])
+        risk_violation = bool(task.risk_level == "critical" and (quality_violation or deadline_violation or utm_constraint_violation))
         success = not (
             quality_violation
             or deadline_violation
@@ -851,7 +862,7 @@ class MultiUAVVQAEnv:
             or utm_constraint_violation
             or not gpu_memory_ok
         )
-        payload_kb = float(entry.payload_bytes) / 1024.0
+        payload_kb = semantic_payload_kb
         route = self.semantic_service_route(task, parsed, entry, cache_probability)
         utility = self.semantic_utility(
             task=task,
@@ -873,9 +884,19 @@ class MultiUAVVQAEnv:
             "risk_level": task.risk_level,
             "view_quality_bin": task.view_quality_bin,
             "freshness_bin": task.freshness_bin,
+            "deadline_s": round(float(task.tau_k), 6),
+            "epsilon_k": round(float(task.epsilon_k), 6),
+            "priority": round(float(task.priority), 6),
             "uav_id": uav.uav_id,
             "edge_id": edge.edge_id,
             "answer_accuracy_est": round(accuracy, 6),
+            "semantic_accuracy_mean": round(accuracy, 6),
+            "semantic_accuracy_lcb": round(semantic_lcb, 6),
+            "semantic_uncertainty": round(float(semantic_estimate.uncertainty), 6),
+            "semantic_sample_count": int(semantic_estimate.sample_count),
+            "semantic_payload_kb": round(semantic_payload_kb, 6),
+            "semantic_quality_gap": round(semantic_quality_gap, 6),
+            "semantic_success": bool(semantic_success),
             "delay_s": round(delay["total_delay_s"], 6),
             "energy_j": round(energy["total_energy_j"], 6),
             "payload_kb": round(payload_kb, 6),
@@ -883,10 +904,13 @@ class MultiUAVVQAEnv:
             "deadline_violation": bool(deadline_violation),
             "battery_violation": bool(battery_violation),
             "resource_violation": bool(not gpu_memory_ok),
+            "risk_violation": bool(risk_violation),
             "airspace_conflict": bool(airspace_conflict),
             "utm_constraint_violation": bool(utm_constraint_violation),
+            "utm_conflict_violation": bool(airspace_conflict or utm_constraint_violation),
             "operational_intent_id": task.operational_intent_id,
             "operational_intent_state": str(utm["operational_intent_state"]),
+            "airspace_state": str(utm["operational_intent_state"]),
             "operational_priority": round(float(task.operational_priority), 6),
             "strategic_conflict": bool(airspace_conflict),
             "strategic_conflict_count": int(utm["strategic_conflict_count"]),
@@ -896,6 +920,7 @@ class MultiUAVVQAEnv:
             "utm_temporal_buffer_steps": int(utm["temporal_buffer_steps"]),
             "dss_available": bool(utm["dss_available"]),
             "dss_delay_s": round(float(utm["dss_delay_s"]), 6),
+            "utm_delay_s": round(delay["utm_dss_delay_s"] + delay["utm_notification_delay_s"], 6),
             "subscription_notification_delay_s": round(float(utm["subscription_notification_delay_s"]), 6),
             "conflict_notification_pending": bool(utm["conflict_notification_pending"]),
             "snr_bin": snr_bin,
@@ -1132,7 +1157,7 @@ class MultiUAVVQAEnv:
                     task_type=row.get("question_type", "presence"),
                     question=row.get("question", ""),
                     risk_level=risk,
-                    epsilon_k=float(row.get("epsilon_k", 0.82 if risk == "critical" else 0.65)),
+                    epsilon_k=self._epsilon_for_task(row, risk),
                     tau_k=tau,
                     priority=2.0 if risk == "critical" else 1.0,
                     view_quality_bin=view_quality,
@@ -1147,6 +1172,13 @@ class MultiUAVVQAEnv:
                 )
             )
         return tasks
+
+    def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
+        default = 0.82 if risk == "critical" else 0.65
+        base = float(row.get("epsilon_k", default))
+        thresholds = self.env_cfg.get("semantic_threshold_by_risk", {})
+        floor = float(thresholds.get(risk, thresholds.get("normal", 0.0)))
+        return max(base, floor)
 
     def _initial_operational_intent_state(self, idx: int, risk: str) -> str:
         layout = self.scenario_cfg.get("task_layout", {})
@@ -1407,6 +1439,50 @@ class MultiUAVVQAEnv:
                 payload_bytes=sum(entry.payload_bytes for entry in candidates) / len(candidates),
             )
         return LUTEntry(accuracy=0.0, payload_bytes={0: 0.0, 1: 2048.0, 2: 300000.0, 3: 80000.0}.get(int(service_level), 0.0))
+
+    def _semantic_estimate(
+        self,
+        task: EnvTask,
+        service_level: int,
+        snr_bin: str,
+        entry: LUTEntry,
+    ) -> SemanticUtilityEstimate:
+        if self.semantic_utility_model is not None:
+            return self.semantic_utility_model.U_sem(
+                task.task_type,
+                int(service_level),
+                snr_bin,
+                task.view_quality_bin,
+                task.freshness_bin,
+                task.risk_level,
+            )
+        if int(service_level) == 0:
+            candidates = [
+                candidate
+                for (qtype, level, _link, view, fresh, risk), candidate in self.lut.items()
+                if qtype == task.task_type
+                and level == 0
+                and view == task.view_quality_bin
+                and fresh == task.freshness_bin
+                and risk == task.risk_level
+            ]
+            if candidates:
+                accuracy = sum(candidate.accuracy for candidate in candidates) / len(candidates)
+                payload_kb = sum(candidate.payload_bytes for candidate in candidates) / len(candidates) / 1024.0
+                return SemanticUtilityEstimate(
+                    accuracy_mean=accuracy,
+                    accuracy_lcb=accuracy,
+                    payload_kb=payload_kb,
+                    uncertainty=0.0,
+                    sample_count=len(candidates),
+                )
+        return SemanticUtilityEstimate(
+            accuracy_mean=float(entry.accuracy),
+            accuracy_lcb=float(entry.accuracy),
+            payload_kb=float(entry.payload_bytes) / 1024.0,
+            uncertainty=0.0,
+            sample_count=1 if entry.accuracy > 0.0 or entry.payload_bytes > 0.0 else 0,
+        )
 
     def _delay_parts(
         self,
@@ -1910,6 +1986,16 @@ class MultiUAVVQAEnv:
             "scenario": "",
             "formal_scenario": "",
             "benchmark_split": "",
+            "deadline_s": 0.0,
+            "epsilon_k": 0.0,
+            "priority": 0.0,
+            "semantic_accuracy_mean": 0.0,
+            "semantic_accuracy_lcb": 0.0,
+            "semantic_uncertainty": 1.0,
+            "semantic_sample_count": 0,
+            "semantic_payload_kb": 0.0,
+            "semantic_quality_gap": 0.0,
+            "semantic_success": False,
             "delay_s": 0.0,
             "energy_j": 0.0,
             "payload_kb": 0.0,
@@ -1917,14 +2003,18 @@ class MultiUAVVQAEnv:
             "deadline_violation": False,
             "airspace_conflict": False,
             "utm_constraint_violation": False,
+            "utm_conflict_violation": False,
+            "risk_violation": False,
             "operational_intent_id": "",
             "operational_intent_state": "",
+            "airspace_state": "",
             "operational_priority": 0.0,
             "strategic_conflict": False,
             "strategic_conflict_count": 0,
             "strategic_conflict_task_ids": "",
             "dss_available": True,
             "dss_delay_s": 0.0,
+            "utm_delay_s": 0.0,
             "subscription_notification_delay_s": 0.0,
             "conflict_notification_pending": False,
             "snr_bin": "",
@@ -1945,7 +2035,16 @@ def load_multi_uav_env(config_path: str | Path, seed: int | None = None, scenari
         cfg["multi_uav_env"] = env_cfg
     tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
     lut = load_lut(resolve_path(cfg["paths"]["vlm_lut_csv"]))
-    return MultiUAVVQAEnv(tasks, lut, cfg, seed=seed)
+    return MultiUAVVQAEnv(tasks, lut, cfg, seed=seed, semantic_utility_model=_load_semantic_utility_model(cfg))
+
+
+def _load_semantic_utility_model(cfg: dict[str, Any]) -> SemanticUtilityModel | None:
+    utility_path = resolve_path(
+        cfg.get("paths", {}).get("semantic_utility_csv", "outputs/lut/v1_9_semantic_utility_with_ci.csv")
+    )
+    if not utility_path.exists():
+        return None
+    return SemanticUtilityModel.from_csv(utility_path)
 
 
 def formal_scenario_specs_markdown() -> str:
@@ -2017,15 +2116,28 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "semantic_utility",
         "semantic_efficiency",
         "answer_accuracy_est",
+        "semantic_accuracy_mean",
+        "semantic_accuracy_lcb",
+        "semantic_uncertainty",
+        "semantic_sample_count",
+        "semantic_payload_kb",
+        "semantic_quality_gap",
+        "semantic_success",
+        "deadline_s",
+        "epsilon_k",
+        "priority",
         "delay_s",
         "energy_j",
         "payload_kb",
         "quality_violation",
         "deadline_violation",
+        "risk_violation",
         "airspace_conflict",
         "utm_constraint_violation",
+        "utm_conflict_violation",
         "operational_intent_id",
         "operational_intent_state",
+        "airspace_state",
         "operational_priority",
         "strategic_conflict",
         "strategic_conflict_count",
@@ -2035,6 +2147,7 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "utm_temporal_buffer_steps",
         "dss_available",
         "dss_delay_s",
+        "utm_delay_s",
         "subscription_notification_delay_s",
         "conflict_notification_pending",
         "snr_bin",

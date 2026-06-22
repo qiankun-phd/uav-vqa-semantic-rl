@@ -90,17 +90,31 @@ class MultiUAVEnvTest(unittest.TestCase):
         self.assertIn("task_queue", obs)
         for field in [
             "answer_accuracy_est",
+            "semantic_accuracy_mean",
+            "semantic_accuracy_lcb",
+            "semantic_uncertainty",
+            "semantic_sample_count",
+            "semantic_payload_kb",
+            "semantic_quality_gap",
+            "semantic_success",
             "delay_s",
             "energy_j",
             "payload_kb",
             "quality_violation",
             "deadline_violation",
+            "deadline_s",
+            "epsilon_k",
+            "risk_level",
+            "view_quality_bin",
+            "freshness_bin",
             "snr_bin",
             "service_level",
         ]:
             self.assertIn(field, info)
         self.assertEqual(info["service_level"], 1)
         self.assertGreaterEqual(info["answer_accuracy_est"], 0.0)
+        self.assertEqual(info["quality_violation"], not info["semantic_success"])
+        self.assertAlmostEqual(info["semantic_payload_kb"], info["payload_kb"])
 
     def test_uav_moves_and_energy_is_spent(self) -> None:
         env = self._env()
@@ -183,6 +197,62 @@ class MultiUAVEnvTest(unittest.TestCase):
             task_id=task.task_id,
         )
         self.assertLessEqual(interfered["sinr_db"], no_interference["sinr_db"])
+
+    def test_cache_service_semantic_qos_is_snr_invariant(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env.tasks[0]
+        low = env.evaluate_action({"service_level": 0}, task_id=task.task_id, obs={"task_id": task.task_id, "snr_bin": "0dB"})
+        high = env.evaluate_action({"service_level": 0}, task_id=task.task_id, obs={"task_id": task.task_id, "snr_bin": "20dB"})
+        self.assertAlmostEqual(low["semantic_accuracy_mean"], high["semantic_accuracy_mean"])
+        self.assertAlmostEqual(low["semantic_accuracy_lcb"], high["semantic_accuracy_lcb"])
+        self.assertAlmostEqual(low["semantic_payload_kb"], high["semantic_payload_kb"])
+
+    def test_high_risk_task_has_stricter_semantic_threshold(self) -> None:
+        tasks = [
+            {
+                "question_type": "presence",
+                "question": "Normal task?",
+                "risk_level": "normal",
+                "epsilon_k": "0.50",
+                "tau_k": "30.0",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+            },
+            {
+                "question_type": "presence",
+                "question": "Critical task?",
+                "risk_level": "critical",
+                "epsilon_k": "0.50",
+                "tau_k": "30.0",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+            },
+        ]
+        lut = {
+            ("presence", 0, "10dB", "good", "fresh", "normal"): LUTEntry(0.40, 0.0),
+            ("presence", 1, "10dB", "good", "fresh", "normal"): LUTEntry(0.70, 2048.0),
+            ("presence", 2, "10dB", "good", "fresh", "normal"): LUTEntry(0.90, 300000.0),
+            ("presence", 0, "10dB", "good", "fresh", "critical"): LUTEntry(0.40, 0.0),
+            ("presence", 1, "10dB", "good", "fresh", "critical"): LUTEntry(0.70, 2048.0),
+            ("presence", 2, "10dB", "good", "fresh", "critical"): LUTEntry(0.90, 300000.0),
+        }
+        cfg = {
+            "bins": {"snr_db": [10], "freshness": ["fresh"], "service_levels": [0, 1, 2]},
+            "simulation": {"seed": 9, "bandwidth_hz": 1_000_000},
+            "multi_uav_env": {
+                "num_uavs": 1,
+                "episode_steps": 2,
+                "tasks_per_episode": 2,
+                "num_areas": 1,
+                "task_layout": {},
+            },
+        }
+        env = MultiUAVVQAEnv(tasks, lut, cfg, seed=9)
+        normal = env._epsilon_for_task(tasks[0], "normal")
+        critical = env._epsilon_for_task(tasks[1], "critical")
+        self.assertGreater(critical, normal)
+        self.assertGreaterEqual(critical, 0.75)
 
     def test_semantic_cache_and_model_cache_effects(self) -> None:
         env = self._env()
@@ -273,6 +343,15 @@ class MultiUAVEnvTest(unittest.TestCase):
             float(interference.env_cfg["a2g"]["interference_overlap_scale"]),
             float(nominal.env_cfg["a2g"]["interference_overlap_scale"]),
         )
+
+    def test_interfaces_doc_matches_service_and_semantic_qos_fields(self) -> None:
+        doc = (ROOT / "docs" / "interfaces.md").read_text(encoding="utf-8")
+        self.assertIn("0 cache answer", doc)
+        self.assertIn("1 detector semantic tokens", doc)
+        self.assertIn("2 raw image evidence", doc)
+        self.assertIn("semantic_accuracy_lcb", doc)
+        self.assertIn("semantic_uncertainty", doc)
+        self.assertIn("semantic_sample_count", doc)
 
 
 if __name__ == "__main__":
