@@ -75,6 +75,7 @@ class InterUSSRealisticEnvTest(unittest.TestCase):
             "test_utm_intent_conflict",
             "test_utm_dss_outage",
             "test_utm_notification_delay",
+            "test_utm_conflict",
         }
         self.assertEqual(set(available_utm_realistic_scenarios()), expected)
 

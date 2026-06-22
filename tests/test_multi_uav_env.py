@@ -9,7 +9,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vqa_semcom.sim.multi_uav_env import Area4D, MultiUAVVQAEnv, SemanticCacheEntry, available_scenarios
+from vqa_semcom.sim.multi_uav_env import (
+    Area4D,
+    MultiUAVVQAEnv,
+    SemanticCacheEntry,
+    available_scenarios,
+    semantic_scenario_preset_names,
+)
 from vqa_semcom.sim.resource_env import LUTEntry
 
 
@@ -296,6 +302,81 @@ class MultiUAVEnvTest(unittest.TestCase):
             obs = env.reset(seed=5, options={"scenario": scenario})
             self.assertEqual(obs["action_mask"]["service_level_allowed"], {0: True, 1: True, 2: True})
             self.assertNotIn(3, env.service_levels())
+
+    def test_paper_scenario_presets_reset_step_and_export_semantic_risk_fields(self) -> None:
+        expected = {
+            "nominal_patrol",
+            "disaster_hotspot",
+            "low_snr_blockage",
+            "edge_overload",
+            "utm_conflict",
+        }
+        self.assertEqual(set(semantic_scenario_preset_names()), expected)
+        self.assertTrue(expected.issubset(set(available_scenarios())))
+
+        required_info = [
+            "semantic_accuracy_lcb",
+            "semantic_quality_gap",
+            "epsilon_k",
+            "deadline_s",
+            "energy_j",
+            "utm_delay_s",
+            "utm_conflict_violation",
+            "risk_violation",
+            "airspace_state",
+        ]
+        env = self._env()
+        for scenario in semantic_scenario_preset_names():
+            env.reset(seed=5, options={"scenario": scenario})
+            task = env._front_task()
+            self.assertIsNotNone(task)
+            info = env.evaluate_action(env.default_action(1), task_id=task.task_id)
+            for field in required_info:
+                self.assertIn(field, info)
+            self.assertGreaterEqual(info["semantic_quality_gap"], 0.0)
+            self.assertAlmostEqual(
+                info["semantic_quality_gap"],
+                max(0.0, info["epsilon_k"] - info["semantic_accuracy_lcb"]),
+                places=6,
+            )
+            self.assertNotIn(3, env.service_levels())
+
+    def test_paper_scenario_presets_have_distinct_stress_knobs(self) -> None:
+        disaster = self._env()
+        disaster.reset(seed=5, options={"scenario": "disaster_hotspot"})
+        critical_ratio = sum(task.risk_level == "critical" for task in disaster.tasks) / len(disaster.tasks)
+        self.assertGreaterEqual(critical_ratio, 0.6)
+        self.assertGreaterEqual(disaster.env_cfg["semantic_threshold_by_risk"]["critical"], 0.84)
+
+        low_snr = self._env()
+        low_snr.reset(seed=5, options={"scenario": "low_snr_blockage"})
+        self.assertGreater(float(low_snr.env_cfg["a2g"]["excess_loss_db"]), 10.0)
+        self.assertGreater(float(low_snr.env_cfg["a2g"]["nlos_excess_loss_db"]), 20.0)
+
+        edge = self._env()
+        edge.reset(seed=5, options={"scenario": "edge_overload"})
+        self.assertGreaterEqual(edge.edges[0].load, 0.70)
+        self.assertGreaterEqual(edge.edges[0].gpu_load, 0.70)
+        self.assertEqual(edge.env_cfg["model_cache_capacity"], 1)
+
+        utm = self._env()
+        utm.reset(seed=5, options={"scenario": "utm_conflict"})
+        active = utm._active_tasks()
+        self.assertGreaterEqual(len(active), 2)
+        info = utm.evaluate_action(
+            {
+                "task_id": active[0].task_id,
+                "service_level": 1,
+                "sensing_decision": "observe",
+                "concurrent_actions": [
+                    {"task_id": active[1].task_id, "service_level": 1, "sensing_decision": "observe"}
+                ],
+            },
+            task_id=active[0].task_id,
+        )
+        self.assertTrue(info["utm_conflict_violation"])
+        self.assertGreater(info["utm_delay_s"], 0.0)
+        self.assertIn(info["airspace_state"], {"accepted", "activated", "nonconforming", "contingent"})
 
     def test_conflict_heavy_has_overlapping_burst_tasks(self) -> None:
         env = self._env()

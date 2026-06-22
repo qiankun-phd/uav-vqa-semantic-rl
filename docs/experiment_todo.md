@@ -259,6 +259,31 @@ Do not overwrite V1.9 VLM/LUT/report files.
 
 ## Environment Thread TODO
 
+Completed 2026-06-22 Asia/Shanghai:
+
+1. Added five paper-facing UAV semantic VQA scenario presets in `src/vqa_semcom/sim/multi_uav_env.py`: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
+2. Kept the presets as ordinary `scenario` entries so the existing formal train/test split remains stable.
+3. Standardized queue-ready semantic QoS gap as `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)`.
+4. Added `docs/scenario_presets.md` and linked the scenario library from `docs/semantic_network_architecture.md`.
+5. Generated small preset smoke summaries under:
+
+```text
+outputs/env/semantic_scenario_presets/scenario_preset_summary.csv
+outputs/env/semantic_scenario_presets/summary.md
+```
+
+6. Updated tests so all five presets reset/evaluate successfully, expose semantic/UTM/risk fields, and keep service level 3 disabled.
+7. Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_multi_uav_env.py'
+# Ran 17 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_interuss_realistic_env.py'
+# Ran 8 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 74 tests OK
+```
+
 Completed 2026-06-19 Asia/Shanghai:
 
 1. Added InterUSS/UTM realistic flight mapping without adding an external InterUSS dependency.

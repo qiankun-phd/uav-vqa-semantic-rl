@@ -105,3 +105,17 @@ outputs/env/
 ```
 
 The simulator must not overwrite VQA LUT/report artifacts or algorithm outputs.
+
+## Paper Scenario Library
+
+The canonical simulator now exposes five paper-facing stress presets through `env.reset(options={"scenario": ...})`:
+
+| preset | stress source |
+|---|---|
+| `nominal_patrol` | routine patrol, medium SNR, low UTM pressure |
+| `disaster_hotspot` | clustered critical tasks, high `epsilon_k`, tight deadlines |
+| `low_snr_blockage` | weak/blocked A2G link and low SINR |
+| `edge_overload` | high CPU/GPU queue load and model-cache pressure |
+| `utm_conflict` | overlapping 4D operational intent, DSS delay, and notification delay |
+
+The detailed protocol is in `docs/scenario_presets.md`. These presets are intended for benchmark and ablation reporting; service level 3 ROI/crop remains disabled until ROI semantic utility rows are available.

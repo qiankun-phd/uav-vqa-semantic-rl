@@ -214,7 +214,201 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "tau_scale": 1.25,
         },
     },
+    "nominal_patrol": {
+        "description": "Paper preset: routine multi-UAV patrol with medium SNR, low UTM pressure, and medium semantic QoS targets.",
+        "env": {
+            "num_uavs": 3,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 20,
+            "episode_steps": 12,
+            "area_spacing_m": 260.0,
+            "area_radius_m": 70.0,
+            "bandwidth_hz": 1_000_000.0,
+            "edge_load_range": [0.18, 0.36],
+            "gpu_load_range": [0.14, 0.30],
+            "semantic_threshold_by_risk": {"normal": 0.58, "critical": 0.76, "high": 0.76},
+            "a2g": {
+                "fading_mode": "slow_fading",
+                "slow_fading_std_db": 1.5,
+                "excess_loss_db": 4.0,
+                "los_excess_loss_db": 1.0,
+                "nlos_excess_loss_db": 10.0,
+                "interference_overlap_scale": 0.02,
+            },
+            "utm": {
+                "enabled": True,
+                "mode": "nominal_planning",
+                "dss_available": True,
+                "dss_delay_s": 0.04,
+                "subscription_notification_delay_s": 0.06,
+                "spatial_buffer_m": 15.0,
+                "altitude_buffer_m": 0.0,
+                "temporal_buffer_steps": 0,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "staggered",
+            "jitter_ratio": 0.14,
+            "risk_cycle": ["normal", "normal", "critical", "normal"],
+            "freshness_cycle": ["fresh", "stale", "fresh", "stale"],
+            "view_quality_cycle": ["medium", "good", "medium", "good"],
+            "tau_scale": 1.0,
+        },
+    },
+    "disaster_hotspot": {
+        "description": "Paper preset: clustered high-risk VQA burst with stricter epsilon_k and tighter deadlines.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 2,
+            "tasks_per_episode": 24,
+            "episode_steps": 10,
+            "area_spacing_m": 90.0,
+            "area_radius_m": 120.0,
+            "edge_load_range": [0.32, 0.56],
+            "gpu_load_range": [0.26, 0.50],
+            "semantic_threshold_by_risk": {"normal": 0.62, "critical": 0.84, "high": 0.84},
+            "reward_violation": 1.8,
+            "reward_conflict": 1.5,
+            "utm": {
+                "enabled": True,
+                "mode": "nominal_planning",
+                "dss_available": True,
+                "dss_delay_s": 0.08,
+                "subscription_notification_delay_s": 0.16,
+                "spatial_buffer_m": 30.0,
+                "temporal_buffer_steps": 1,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "burst",
+            "force_same_area": True,
+            "jitter_ratio": 0.04,
+            "risk_cycle": ["critical", "critical", "normal", "critical", "critical"],
+            "freshness_cycle": ["stale", "expired", "fresh", "stale"],
+            "view_quality_cycle": ["medium", "poor", "medium", "good"],
+            "tau_scale": 0.58,
+        },
+    },
+    "low_snr_blockage": {
+        "description": "Paper preset: weak A2G links and blockage stress where cache/tokens should be robust against image payload delay.",
+        "env": {
+            "num_uavs": 3,
+            "num_edges": 1,
+            "num_areas": 5,
+            "tasks_per_episode": 20,
+            "episode_steps": 12,
+            "area_spacing_m": 520.0,
+            "area_radius_m": 80.0,
+            "uav_altitude_m": 70.0,
+            "bandwidth_hz": 650_000.0,
+            "semantic_cache_capacity": 80,
+            "semantic_cache_radius_m": 240.0,
+            "semantic_cache_reuse_boost": 0.22,
+            "cache_hit_probability": {"fresh": 0.96, "stale": 0.72, "expired": 0.30},
+            "semantic_threshold_by_risk": {"normal": 0.56, "critical": 0.78, "high": 0.78},
+            "a2g": {
+                "path_loss_exponent": 2.9,
+                "excess_loss_db": 18.0,
+                "los_excess_loss_db": 5.0,
+                "nlos_excess_loss_db": 28.0,
+                "fading_mode": "slow_fading",
+                "slow_fading_std_db": 4.5,
+                "fading_correlation": 0.70,
+                "interference_overlap_scale": 0.06,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.16,
+            "risk_cycle": ["normal", "critical", "normal", "normal"],
+            "freshness_cycle": ["fresh", "stale", "expired", "fresh"],
+            "view_quality_cycle": ["medium", "poor", "medium", "good"],
+            "tau_scale": 1.1,
+        },
+        "semantic_cache_seed": {
+            "enabled": True,
+            "entries_per_area": 1,
+            "cache_age": 0,
+        },
+    },
+    "edge_overload": {
+        "description": "Paper preset: high edge CPU/GPU load and model-cache pressure for queue/resource-projection tests.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 24,
+            "episode_steps": 12,
+            "area_spacing_m": 240.0,
+            "area_radius_m": 75.0,
+            "edge_load_range": [0.76, 0.92],
+            "gpu_load_range": [0.72, 0.90],
+            "queue_delay_scale_s": 1.25,
+            "gpu_queue_delay_scale_s": 0.95,
+            "model_load_delay_s": 0.95,
+            "model_cache_hit_delay_s": 0.08,
+            "model_cache_capacity": 1,
+            "gpu_memory_capacity_mb": 4096.0,
+            "gpu_memory_load": 0.48,
+            "semantic_threshold_by_risk": {"normal": 0.60, "critical": 0.80, "high": 0.80},
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.12,
+            "risk_cycle": ["normal", "critical", "normal", "normal"],
+            "freshness_cycle": ["fresh", "stale", "expired", "stale"],
+            "view_quality_cycle": ["good", "medium", "medium", "poor"],
+            "tau_scale": 0.9,
+        },
+    },
+    "utm_conflict": {
+        "description": "Paper preset: UTM strategic conflict with DSS/subscription delay and observable intent states.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 1,
+            "tasks_per_episode": 20,
+            "episode_steps": 10,
+            "area_spacing_m": 75.0,
+            "area_radius_m": 145.0,
+            "area_altitude_min_m": 45.0,
+            "area_altitude_max_m": 115.0,
+            "reward_conflict": 2.4,
+            "semantic_threshold_by_risk": {"normal": 0.60, "critical": 0.82, "high": 0.82},
+            "utm": {
+                "enabled": True,
+                "mode": "flight_intent_validation",
+                "dss_available": True,
+                "dss_delay_s": 0.18,
+                "subscription_notification_delay_s": 0.80,
+                "spatial_buffer_m": 65.0,
+                "altitude_buffer_m": 12.0,
+                "temporal_buffer_steps": 2,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "burst",
+            "force_same_area": True,
+            "jitter_ratio": 0.02,
+            "risk_cycle": ["critical", "normal", "critical", "normal"],
+            "freshness_cycle": ["stale", "fresh", "expired", "stale"],
+            "view_quality_cycle": ["medium", "good", "medium", "poor"],
+            "operational_state_cycle": ["accepted", "activated", "nonconforming", "contingent"],
+            "tau_scale": 0.85,
+        },
+    },
 }
+
+
+SEMANTIC_SCENARIO_PRESET_NAMES = (
+    "nominal_patrol",
+    "disaster_hotspot",
+    "low_snr_blockage",
+    "edge_overload",
+    "utm_conflict",
+)
 
 
 SEMANTIC_NETWORK_LAYERS: dict[str, list[str]] = {
@@ -312,6 +506,12 @@ FORMAL_SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "risk_cycle": ["normal", "critical", "normal", "critical"],
             "freshness_cycle": ["fresh", "stale", "expired", "fresh"],
         },
+    },
+    "test_utm_conflict": {
+        "split": "test",
+        "base_scenario": "utm_conflict",
+        "utm_realistic": True,
+        "description": "Paper preset: UTM strategic conflict with DSS and notification delay.",
     },
     "test_utm_nominal_planning": {
         "split": "test",
@@ -447,6 +647,10 @@ SCALABILITY_PRESETS: dict[str, dict[str, dict[str, Any]]] = {
 
 def available_scenarios() -> list[str]:
     return sorted(SCENARIO_PRESETS)
+
+
+def semantic_scenario_preset_names() -> list[str]:
+    return list(SEMANTIC_SCENARIO_PRESET_NAMES)
 
 
 def available_formal_scenarios(include_utm: bool = False) -> list[str]:
@@ -846,7 +1050,7 @@ class MultiUAVVQAEnv:
         delay["utm_notification_delay_s"] = float(utm["subscription_notification_delay_s"])
         delay["total_delay_s"] += delay["utm_dss_delay_s"] + delay["utm_notification_delay_s"]
         energy = self._energy_parts(delay, parsed)
-        semantic_quality_gap = task.epsilon_k - semantic_lcb
+        semantic_quality_gap = max(0.0, task.epsilon_k - semantic_lcb)
         semantic_success = semantic_lcb >= task.epsilon_k
         quality_violation = not semantic_success
         deadline_violation = delay["total_delay_s"] > task.tau_k

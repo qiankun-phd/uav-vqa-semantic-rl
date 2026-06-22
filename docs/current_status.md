@@ -444,6 +444,40 @@ Latest fixed-scenario environment smokes:
 
 ## Current Blockers / Watch Items
 
+- Environment paper scenario preset library completed 2026-06-22 Asia/Shanghai:
+  - Added five canonical `scenario` presets in `src/vqa_semcom/sim/multi_uav_env.py`: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
+  - Presets are available via `env.reset(options={"scenario": "<name>"})`; the existing formal train/test split remains unchanged.
+  - Added `docs/scenario_presets.md` and updated `docs/semantic_network_architecture.md`.
+  - Standardized `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` in environment `info`.
+  - Kept V1.9 enabled service levels at `[0, 1, 2]`; service level 3 ROI/crop remains disabled.
+  - Generated small environment-owned smoke artifacts:
+
+```text
+outputs/env/semantic_scenario_presets/scenario_preset_summary.csv
+outputs/env/semantic_scenario_presets/summary.md
+```
+
+  - Smoke headline:
+
+| scenario | mean LCB | mean gap | delay s | energy J | SINR dB | UTM conflict |
+|---|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.665 | 0.114 | 13.845 | 1968.702 | 30.289 | 0.000 |
+| disaster_hotspot | 0.510 | 0.330 | 8.809 | 1069.477 | 41.055 | 0.000 |
+| low_snr_blockage | 0.338 | 0.480 | 518.896 | 4496.708 | -34.574 | 0.000 |
+| edge_overload | 0.296 | 0.520 | 17.532 | 2247.970 | 28.681 | 0.000 |
+| utm_conflict | 0.213 | 0.607 | 7.298 | 750.770 | 15.994 | 1.000 |
+
+  - Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_multi_uav_env.py'
+# Ran 17 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_interuss_realistic_env.py'
+# Ran 8 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 74 tests OK
+```
+
 - UTM/InterUSS-style realistic flight mapping is being added to `sim.multi_uav_env` as an environment-thread feature; it does not introduce an InterUSS runtime dependency and keeps service level 3 ROI disabled.
 - V1.9 full-SNR prediction/LUT/report/resource simulation refresh is complete as of 2026-06-18 23:34 Asia/Macau.
 - The final report includes all configured SNR bins: -5dB, 0dB, 5dB, 10dB, 15dB, 20dB.
