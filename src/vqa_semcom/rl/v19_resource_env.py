@@ -36,6 +36,7 @@ class V19StepRecord:
     semantic_sample_count: int
     semantic_payload_kb: float
     semantic_quality_gap: float
+    semantic_success: bool
     q_quality: float
     q_deadline: float
     q_energy: float
@@ -53,6 +54,7 @@ class V19StepRecord:
     gpu_memory_ok: bool
     battery_remaining_j: float
     utm_constraint_violation: bool
+    utm_conflict_violation: bool
     dss_available: bool
     dss_delay_s: float
     subscription_notification_delay_s: float
@@ -160,6 +162,7 @@ class V19LUTResourceEnv:
                 "semantic_sample_count": record.semantic_sample_count,
                 "semantic_payload_kb": record.semantic_payload_kb,
                 "semantic_quality_gap": record.semantic_quality_gap,
+                "semantic_success": record.semantic_success,
                 "q_quality": record.q_quality,
                 "q_deadline": record.q_deadline,
                 "q_energy": record.q_energy,
@@ -177,6 +180,7 @@ class V19LUTResourceEnv:
                 "gpu_memory_ok": record.gpu_memory_ok,
                 "battery_remaining_j": record.battery_remaining_j,
                 "utm_constraint_violation": record.utm_constraint_violation,
+                "utm_conflict_violation": record.utm_conflict_violation,
                 "dss_available": record.dss_available,
                 "dss_delay_s": record.dss_delay_s,
                 "subscription_notification_delay_s": record.subscription_notification_delay_s,
@@ -259,6 +263,7 @@ class V19LUTResourceEnv:
             semantic_sample_count=int(info.get("semantic_sample_count", 0)),
             semantic_payload_kb=float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))),
             semantic_quality_gap=float(info.get("semantic_quality_gap", 0.0)),
+            semantic_success=bool(info.get("semantic_success", False)),
             q_quality=float(info.get("q_quality", 0.0)),
             q_deadline=float(info.get("q_deadline", 0.0)),
             q_energy=float(info.get("q_energy", 0.0)),
@@ -276,6 +281,7 @@ class V19LUTResourceEnv:
             gpu_memory_ok=bool(info.get("gpu_memory_ok", True)),
             battery_remaining_j=float(info.get("battery_remaining_j", 0.0)),
             utm_constraint_violation=bool(info.get("utm_constraint_violation", False)),
+            utm_conflict_violation=bool(info.get("utm_conflict_violation", info.get("utm_constraint_violation", False))),
             dss_available=bool(info.get("dss_available", True)),
             dss_delay_s=float(info.get("dss_delay_s", 0.0)),
             subscription_notification_delay_s=float(info.get("subscription_notification_delay_s", 0.0)),
@@ -328,7 +334,8 @@ class V19LUTResourceEnv:
         energy_j = float(info.get("energy_j", info.get("total_energy_j", 0.0)))
         energy_budget_j = self._energy_budget_from_obs_or_info(info, obs)
         info.setdefault("semantic_payload_kb", float(info.get("payload_kb", 0.0)))
-        info["semantic_quality_gap"] = float(accuracy_lcb - epsilon)
+        info["semantic_quality_gap"] = max(0.0, epsilon - accuracy_lcb)
+        info["semantic_success"] = bool(accuracy_lcb >= epsilon)
         info["deadline_s"] = float(deadline_s)
         info["energy_budget_j"] = float(energy_budget_j)
         info["q_quality_increment"] = max(0.0, epsilon - accuracy_lcb)
@@ -336,6 +343,7 @@ class V19LUTResourceEnv:
         info["q_energy_increment"] = max(0.0, energy_j - energy_budget_j)
         info["quality_violation"] = bool(float(info.get("answer_accuracy_est", 0.0)) < epsilon)
         info.setdefault("utm_constraint_violation", False)
+        info.setdefault("utm_conflict_violation", bool(info.get("airspace_conflict", False) or info.get("utm_constraint_violation", False)))
         info.setdefault("dss_available", True)
         info.setdefault("dss_delay_s", 0.0)
         info.setdefault("subscription_notification_delay_s", 0.0)

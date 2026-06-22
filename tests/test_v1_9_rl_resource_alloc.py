@@ -8,11 +8,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from vqa_semcom.config import load_config, resolve_path
 from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, train_ppo
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
+from run_v1_9_resource_alloc import SCENARIO_BENCHMARK_POLICIES, SCENARIO_BENCHMARK_SCENARIOS, choose_baseline_action
 
 
 class V19RLResourceAllocTest(unittest.TestCase):
@@ -50,6 +52,8 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("semantic_sample_count", info)
         self.assertIn("semantic_payload_kb", info)
         self.assertIn("semantic_quality_gap", info)
+        self.assertIn("semantic_success", info)
+        self.assertGreaterEqual(float(info["semantic_quality_gap"]), 0.0)
         self.assertIn("q_quality", info)
         self.assertIn("q_deadline", info)
         self.assertIn("q_energy", info)
@@ -64,6 +68,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("resource_violation", info)
         self.assertIn("airspace_conflict", info)
         self.assertIn("utm_constraint_violation", info)
+        self.assertIn("utm_conflict_violation", info)
         self.assertIn("dss_delay_s", info)
         self.assertIn("subscription_notification_delay_s", info)
         self.assertIn("gpu_memory_ok", info)
@@ -105,6 +110,30 @@ class V19RLResourceAllocTest(unittest.TestCase):
         _obs, _reward, _done, info = env.step(env.candidate_action(1, obs))
         self.assertEqual(info["formal_scenario"], "test_utm_dss_outage")
         self.assertIn("utm_constraint_violation", info)
+
+    def test_paper_scenarios_reset_through_rl_wrapper(self) -> None:
+        for scenario in SCENARIO_BENCHMARK_SCENARIOS:
+            cfg = dict(self.cfg)
+            env_cfg = dict(cfg.get("multi_uav_env", {}))
+            env_cfg["scenario"] = scenario
+            cfg["multi_uav_env"] = env_cfg
+            env = V19LUTResourceEnv(self.tasks, self.lut, cfg, seed=5, tasks_per_episode=1)
+            obs = env.reset(seed=5)
+            self.assertEqual(obs["scenario"], scenario)
+            _obs, _reward, _done, info = env.step(env.candidate_action(1, obs))
+            self.assertEqual(info["scenario"], scenario)
+            self.assertIn("semantic_success", info)
+            self.assertIn("utm_conflict_violation", info)
+
+    def test_scenario_benchmark_baseline_aliases_emit_actions(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=6, tasks_per_episode=1)
+        obs = env.reset(seed=6)
+        for policy in SCENARIO_BENCHMARK_POLICIES:
+            if policy == "ppo":
+                continue
+            action = choose_baseline_action(policy, env, obs)
+            for key in ["service_level", "bandwidth", "power", "cpu_share", "gpu_share", "uav_assignment"]:
+                self.assertIn(key, action)
 
     def test_tiny_ppo_training_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=2, tasks_per_episode=4)

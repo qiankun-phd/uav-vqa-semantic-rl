@@ -92,9 +92,9 @@ outputs/lut/v1_9_semantic_utility_with_ci.csv
 src/vqa_semcom/semantic/utility.py
 ```
 
-5. Pending: Update the canonical environment and algorithm wrapper to consume `U_sem(...).accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count` instead of only raw `expected_accuracy`.
-6. Pending: Add `semantic_accuracy_mean`, `semantic_accuracy_lcb`, `semantic_uncertainty`, and `semantic_sample_count` to rollout `info` and CSV outputs.
-7. Pending: Expose `semantic_payload_kb` and `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` for Semantic-Lyapunov queue updates.
+5. Done: Algorithm wrapper consumes `U_sem(...).accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count` when the calibrated semantic utility CSV is available.
+6. Done: Added `semantic_accuracy_mean`, `semantic_accuracy_lcb`, `semantic_uncertainty`, and `semantic_sample_count` to rollout `info` and CSV outputs.
+7. Done: Exposed `semantic_payload_kb` and standardized `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` for Semantic-Lyapunov queue updates.
 8. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
 
 ## TWC Mainline TODO
@@ -422,6 +422,42 @@ Next algorithm steps:
 2. Use the formal runner to compare heuristic, semantic LCB greedy, Lyapunov greedy, service-only PPO, hybrid PPO, Lagrangian PPO, and Sem-Lyapunov hybrid control.
 3. Include ablation tables for no-LCB, no-queue, and no-projection variants.
 4. Keep `.pt`, large rollout CSV, and `run.log` out of commits; retain only summary/report/trace CSV artifacts.
+
+## Scenario-Aware Semantic Benchmark Follow-Up
+
+Completed 2026-06-22 Asia/Shanghai:
+
+1. Added paper scenario support to `scripts/run_v1_9_resource_alloc.py` through `--scenario`.
+2. Added `--scenario-benchmark` smoke mode for:
+   `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
+3. Added benchmark policies:
+   `always_cache`, `always_semantic_token`, `always_image`, `semantic_greedy`, `lyapunov_greedy`, and Semantic-LCB Lyapunov PPO.
+4. Added ablation switches/aliases:
+   `--no-lcb`, `--no-lyapunov-queues`, `--no-projection`, and `--disable-semantic-token`.
+5. Generated:
+
+```text
+outputs/rl/semantic_scenario_benchmark/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark/<scenario>/v1_9_resource_alloc_summary.md
+```
+
+6. Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 12 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark --smoke --episodes 1 --train-episodes 2 --tasks-per-episode 4 \
+  --output-dir outputs/rl/semantic_scenario_benchmark
+```
+
+Next algorithm steps:
+
+1. Promote the scenario benchmark from smoke to multi-seed formal runs after checking queue/deadline scaling.
+2. Add the no-LCB/no-queue/no-projection/no-semantic-token ablations to the scenario table.
+3. Use the scenario benchmark report as the paper-facing stress-test table template.
 
 ## Output Naming Convention
 

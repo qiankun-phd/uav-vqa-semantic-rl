@@ -611,3 +611,43 @@ Smoke artifact check:
 - `v1_9_resource_alloc_rollout.csv` contains semantic mean/LCB/uncertainty/sample count/payload/gap and queue fields.
 - `ppo_training_trace.csv` contains mean/max `q_quality`, `q_deadline`, `q_energy`, `q_risk`, and `q_utm`.
 - The smoke still uses a tiny 2-episode training budget and is only an interface/algorithm-path validation, not a paper result.
+
+## Scenario-Aware Semantic Benchmark 2026-06-22 Asia/Shanghai
+
+Algorithm thread upgraded the resource-allocation runner into a scenario-aware semantic communication benchmark:
+
+- `scripts/run_v1_9_resource_alloc.py` now accepts the paper scenario presets through `--scenario`:
+  `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
+- Added `--scenario-benchmark` smoke mode that runs each scenario under:
+  `always_cache`, `always_semantic_token`, `always_image`, `semantic_greedy`, `lyapunov_greedy`, and Semantic-LCB Lyapunov PPO.
+- Added ablation aliases: `--no-lcb`, `--no-lyapunov-queues`, `--no-projection`, and `--disable-semantic-token`.
+- Standardized `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` in the RL wrapper record/summary path.
+- Scenario summaries now report semantic success, accuracy LCB/mean, uncertainty, semantic quality gap, Lyapunov queues, delay, energy, payload, deadline violation, UTM conflict violation, and cache/token/image service mix.
+
+Smoke command:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --smoke \
+  --episodes 1 \
+  --train-episodes 2 \
+  --tasks-per-episode 4 \
+  --output-dir outputs/rl/semantic_scenario_benchmark
+```
+
+Scenario benchmark artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark/<scenario>/v1_9_resource_alloc_summary.md
+```
+
+Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 12 tests OK
+```

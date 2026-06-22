@@ -30,6 +30,7 @@ DEFAULT_FORMAL_SCENARIOS = (
 )
 
 METRICS = (
+    "semantic_success_rate",
     "task_success_rate",
     "average_accuracy",
     "average_accuracy_mean",
@@ -50,6 +51,7 @@ METRICS = (
     "resource_violation_rate",
     "airspace_conflict_rate",
     "utm_constraint_violation_rate",
+    "utm_conflict_violation_rate",
     "service_level_0_ratio",
     "service_level_1_ratio",
     "service_level_2_ratio",
@@ -59,8 +61,10 @@ METRICS = (
 BASELINE_POLICIES = (
     "always_cache",
     "always_light",
+    "always_semantic_token",
     "always_image",
     "greedy_min_sufficient_evidence",
+    "semantic_greedy",
     "semantic_lcb_greedy",
     "lyapunov_greedy",
     "oracle_best_feasible_evidence",

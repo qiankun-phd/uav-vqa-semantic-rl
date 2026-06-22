@@ -18,11 +18,30 @@ from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut,
 from vqa_semcom.snr import parse_snr_bins
 
 
+SCENARIO_BENCHMARK_SCENARIOS = (
+    "nominal_patrol",
+    "disaster_hotspot",
+    "low_snr_blockage",
+    "edge_overload",
+    "utm_conflict",
+)
+
+SCENARIO_BENCHMARK_POLICIES = (
+    "always_cache",
+    "always_semantic_token",
+    "always_image",
+    "semantic_greedy",
+    "lyapunov_greedy",
+    "ppo",
+)
+
 BASELINE_POLICIES = (
     "always_cache",
     "always_light",
+    "always_semantic_token",
     "always_image",
     "greedy_min_sufficient_evidence",
+    "semantic_greedy",
     "no_cache_greedy",
     "no_semantic_tokens_greedy",
     "semantic_lcb_greedy",
@@ -34,8 +53,10 @@ BASELINE_POLICIES = (
 @dataclass(frozen=True)
 class EvalSummary:
     policy: str
+    scenario: str
     episodes: int
     tasks: int
+    semantic_success_rate: float
     task_success_rate: float
     average_accuracy: float
     average_accuracy_mean: float
@@ -57,6 +78,7 @@ class EvalSummary:
     resource_violation_rate: float
     airspace_conflict_rate: float
     utm_constraint_violation_rate: float
+    utm_conflict_violation_rate: float
     service_level_0_ratio: float
     service_level_1_ratio: float
     service_level_2_ratio: float
@@ -80,6 +102,7 @@ def make_env(
         seed=args.seed,
         snr_bins_db=snr_bins,
         tasks_per_episode=args.tasks_per_episode,
+        service_levels=_service_levels_for_args(args, cfg),
         formal_scenario=args.formal_scenario,
         policy_name=policy_name,
     )
@@ -87,23 +110,23 @@ def make_env(
 
 def choose_baseline_action(policy: str, env: V19LUTResourceEnv, obs: dict[str, Any]) -> dict[str, Any]:
     if policy == "always_cache":
-        return env.candidate_action(0, obs)
-    if policy == "always_light":
-        return env.candidate_action(1, obs)
+        return _with_action_defaults(env, env.candidate_action(0, obs))
+    if policy in {"always_light", "always_semantic_token"}:
+        return _with_action_defaults(env, _candidate_for_level(env, 1, obs))
     if policy == "always_image":
-        return env.candidate_action(2, obs)
-    if policy == "greedy_min_sufficient_evidence":
-        return env.candidate_action(_first_quality_level(env, obs, env.service_levels), obs)
+        return _with_action_defaults(env, _candidate_for_level(env, 2, obs))
+    if policy in {"greedy_min_sufficient_evidence", "semantic_greedy"}:
+        return _with_action_defaults(env, env.candidate_action(_first_quality_level(env, obs, env.service_levels), obs))
     if policy == "no_cache_greedy":
         candidates = [level for level in env.service_levels if level != 0]
-        return env.candidate_action(_first_quality_level(env, obs, candidates or env.service_levels), obs)
+        return _with_action_defaults(env, env.candidate_action(_first_quality_level(env, obs, candidates or env.service_levels), obs))
     if policy == "no_semantic_tokens_greedy":
         candidates = [level for level in env.service_levels if level != 1]
-        return env.candidate_action(_first_quality_level(env, obs, candidates or env.service_levels), obs)
+        return _with_action_defaults(env, env.candidate_action(_first_quality_level(env, obs, candidates or env.service_levels), obs))
     if policy == "semantic_lcb_greedy":
-        return env.candidate_action(_semantic_lcb_greedy_level(env, obs), obs)
+        return _with_action_defaults(env, env.candidate_action(_semantic_lcb_greedy_level(env, obs), obs))
     if policy == "lyapunov_greedy":
-        return _lyapunov_greedy_action(env, obs)
+        return _with_action_defaults(env, _lyapunov_greedy_action(env, obs))
     if policy == "oracle_best_feasible_evidence":
         candidates = []
         for level in env.service_levels:
@@ -111,9 +134,9 @@ def choose_baseline_action(policy: str, env: V19LUTResourceEnv, obs: dict[str, A
             if metrics["success"] > 0.0:
                 candidates.append((metrics["payload_kb"], level))
         if candidates:
-            return env.candidate_action(min(candidates)[1], obs)
+            return _with_action_defaults(env, env.candidate_action(min(candidates)[1], obs))
         best_level = max(env.service_levels, key=lambda level: env.candidate_metrics(level, obs)["accuracy"])
-        return env.candidate_action(best_level, obs)
+        return _with_action_defaults(env, env.candidate_action(best_level, obs))
     raise ValueError(f"unknown policy: {policy}")
 
 
@@ -134,7 +157,7 @@ def evaluate_policy(
     return records
 
 
-def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int) -> list[EvalSummary]:
+def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, scenario: str = "") -> list[EvalSummary]:
     baseline_payload = _mean(records_by_policy.get("always_image", []), "payload_kb")
     out: list[EvalSummary] = []
     for policy, records in records_by_policy.items():
@@ -144,8 +167,10 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int) 
         out.append(
             EvalSummary(
                 policy=policy,
+                scenario=scenario,
                 episodes=episodes,
                 tasks=tasks,
+                semantic_success_rate=round(_rate(records, "semantic_success"), 6),
                 task_success_rate=round(_rate(records, "success"), 6),
                 average_accuracy=round(_mean(records, "answer_accuracy_est"), 6),
                 average_accuracy_mean=round(_mean(records, "semantic_accuracy_mean"), 6),
@@ -167,6 +192,7 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int) 
                 resource_violation_rate=round(_rate(records, "resource_violation"), 6),
                 airspace_conflict_rate=round(_rate(records, "airspace_conflict"), 6),
                 utm_constraint_violation_rate=round(_rate(records, "utm_constraint_violation"), 6),
+                utm_conflict_violation_rate=round(_rate(records, "utm_conflict_violation"), 6),
                 service_level_0_ratio=round(_service_ratio(records, 0), 6),
                 service_level_1_ratio=round(_service_ratio(records, 1), 6),
                 service_level_2_ratio=round(_service_ratio(records, 2), 6),
@@ -221,6 +247,8 @@ def main() -> int:
     parser.add_argument("--snr-bins", default=None, help="Optional comma-separated sensed SNR bins; defaults to measured LUT bins.")
     parser.add_argument("--scenario", default=None, help="Optional canonical multi-UAV scenario, e.g. conflict-heavy/interference-heavy/mobility-stress.")
     parser.add_argument("--formal-scenario", default=None, help="Optional formal semantic-network scenario, e.g. train_mixed_random/test_utm_dss_outage.")
+    parser.add_argument("--scenario-benchmark", action="store_true", help="Run the five scenario-aware semantic communication benchmark smokes.")
+    parser.add_argument("--benchmark-scenarios", default=",".join(SCENARIO_BENCHMARK_SCENARIOS), help="Comma-separated scenario benchmark list.")
     parser.add_argument("--policy", default="all", choices=["all", "ppo", *BASELINE_POLICIES])
     parser.add_argument("--train-ppo", action="store_true", help="Train and evaluate centralized hybrid PPO.")
     parser.add_argument("--load-ppo-model", default=None, help="Load a trained PPO checkpoint and evaluate policy=ppo without training.")
@@ -243,9 +271,10 @@ def main() -> int:
     parser.add_argument("--service-prior-decay-episodes", type=int, default=200)
     parser.add_argument("--no-semantic-projection", action="store_true", help="Disable LCB/deadline semantic projection inside the safety layer.")
     parser.add_argument("--semantic-lyapunov-control", action="store_true", help="Enable semantic LCB drift-plus-penalty reward with virtual Lyapunov queues.")
-    parser.add_argument("--no-semantic-lcb", action="store_true", help="Use raw/mean accuracy instead of conservative semantic accuracy LCB.")
+    parser.add_argument("--no-semantic-lcb", "--no-lcb", dest="no_semantic_lcb", action="store_true", help="Use raw/mean accuracy instead of conservative semantic accuracy LCB.")
     parser.add_argument("--no-lyapunov-queues", action="store_true", help="Disable virtual queue penalties while keeping other semantic PPO settings.")
-    parser.add_argument("--no-resource-projection", action="store_true", help="Disable service-dependent resource floors/projection.")
+    parser.add_argument("--no-resource-projection", "--no-projection", dest="no_resource_projection", action="store_true", help="Disable service-dependent resource floors/projection.")
+    parser.add_argument("--disable-semantic-token", action="store_true", help="Disable service level 1 semantic-token evidence for ablations.")
     parser.add_argument("--queue-quality-weight", type=float, default=1.5)
     parser.add_argument("--queue-deadline-weight", type=float, default=0.8)
     parser.add_argument("--queue-energy-weight", type=float, default=0.25)
@@ -267,6 +296,8 @@ def main() -> int:
     parser.add_argument("--output-dir", default=str(ROOT / "outputs" / "rl" / "v1_9_resource_alloc"))
     args = parser.parse_args()
     default_output_dir = str(ROOT / "outputs" / "rl" / "v1_9_resource_alloc")
+    if args.scenario_benchmark and args.output_dir == default_output_dir:
+        args.output_dir = str(ROOT / "outputs" / "rl" / "semantic_scenario_benchmark")
     if args.smoke:
         args.episodes = min(args.episodes, 2)
         args.train_episodes = min(args.train_episodes, 8)
@@ -297,6 +328,22 @@ def main() -> int:
     if not tasks:
         raise RuntimeError("No tasks are supported by the V1.9 LUT.")
 
+    if args.scenario_benchmark:
+        _run_scenario_benchmark(args, cfg, tasks, lut)
+        return 0
+
+    summaries = run_experiment(args, cfg, tasks, lut)
+    for row in summaries:
+        _print_summary_row(row)
+    return 0
+
+
+def run_experiment(
+    args: argparse.Namespace,
+    cfg: dict[str, Any],
+    tasks: list[dict[str, str]],
+    lut: dict[tuple[str, int, str, str, str, str], Any],
+) -> list[EvalSummary]:
     selected = list(BASELINE_POLICIES) if args.policy == "all" else [args.policy]
     if args.train_ppo and "ppo" not in selected:
         selected.append("ppo")
@@ -370,19 +417,62 @@ def main() -> int:
             action_fn = lambda obs, name=policy, env=eval_env: choose_baseline_action(name, env, obs)
         records_by_policy[policy] = evaluate_policy(eval_env, policy, args.episodes, args.seed, action_fn)
 
-    summaries = summarize(records_by_policy, args.episodes)
+    summaries = summarize(records_by_policy, args.episodes, scenario=str(args.scenario or args.formal_scenario or ""))
     write_outputs(Path(args.output_dir), summaries, records_by_policy, train_trace)
-    for row in summaries:
-        print(
-            f"{row.policy}: success={row.task_success_rate:.3f} acc={row.average_accuracy:.3f} "
-            f"acc_mean={row.average_accuracy_mean:.3f} uncertainty={row.average_uncertainty:.3f} "
-            f"delay={row.average_delay:.3f} energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} "
-            f"gap={row.average_semantic_quality_gap:.3f} q_quality={row.average_q_quality:.3f} q_deadline={row.average_q_deadline:.3f} "
-            f"quality_vio={row.quality_violation_rate:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
-            f"battery_vio={row.battery_violation_rate:.3f} resource_vio={row.resource_violation_rate:.3f} "
-            f"conflict={row.airspace_conflict_rate:.3f} utm_vio={row.utm_constraint_violation_rate:.3f}"
-        )
-    return 0
+    return summaries
+
+
+def _run_scenario_benchmark(
+    args: argparse.Namespace,
+    cfg: dict[str, Any],
+    tasks: list[dict[str, str]],
+    lut: dict[tuple[str, int, str, str, str, str], Any],
+) -> None:
+    root = Path(args.output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    all_rows: list[dict[str, Any]] = []
+    scenarios = [item.strip() for item in str(args.benchmark_scenarios).split(",") if item.strip()]
+    for scenario in scenarios:
+        scenario_args = argparse.Namespace(**vars(args))
+        scenario_args.scenario_benchmark = False
+        scenario_args.scenario = scenario
+        scenario_args.formal_scenario = None
+        scenario_args.output_dir = str(root / scenario)
+        scenario_args.policy = "all"
+        scenario_args.train_ppo = True
+        scenario_args.semantic_lyapunov_control = True
+        scenario_args.risk_aware_constraints = True
+        if scenario_args.semantic_reward_mode == "env":
+            scenario_args.semantic_reward_mode = "semantic_utility"
+        summaries = run_experiment(scenario_args, cfg, tasks, lut)
+        by_policy = {row.policy: row for row in summaries}
+        for policy in SCENARIO_BENCHMARK_POLICIES:
+            if policy in by_policy:
+                row = by_policy[policy]
+            elif policy == "semantic_greedy" and "greedy_min_sufficient_evidence" in by_policy:
+                row = by_policy["greedy_min_sufficient_evidence"]
+            elif policy == "always_semantic_token" and "always_light" in by_policy:
+                row = by_policy["always_light"]
+            else:
+                continue
+            all_rows.append(asdict(row) | {"scenario": scenario, "benchmark_policy": policy})
+        for row in summaries:
+            _print_summary_row(row)
+    _write_dict_csv(root / "scenario_comparison_summary.csv", all_rows)
+    _write_scenario_benchmark_report(root / "scenario_comparison_report.md", all_rows, args)
+    print(f"wrote {root / 'scenario_comparison_summary.csv'}")
+    print(f"wrote {root / 'scenario_comparison_report.md'}")
+
+
+def _print_summary_row(row: EvalSummary) -> None:
+    print(
+        f"{row.policy}: semantic_success={row.semantic_success_rate:.3f} success={row.task_success_rate:.3f} "
+        f"acc_lcb={row.average_accuracy:.3f} acc_mean={row.average_accuracy_mean:.3f} uncertainty={row.average_uncertainty:.3f} "
+        f"gap={row.average_semantic_quality_gap:.3f} q_quality={row.average_q_quality:.3f} q_deadline={row.average_q_deadline:.3f} "
+        f"q_energy={row.average_q_energy:.3f} q_utm={row.average_q_utm:.3f} delay={row.average_delay:.3f} "
+        f"energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
+        f"utm_conflict={row.utm_conflict_violation_rate:.3f}"
+    )
 
 
 def _cfg_with_scenario(cfg: dict[str, Any], scenario: str | None) -> dict[str, Any]:
@@ -393,6 +483,26 @@ def _cfg_with_scenario(cfg: dict[str, Any], scenario: str | None) -> dict[str, A
     env_cfg["scenario"] = scenario
     out["multi_uav_env"] = env_cfg
     return out
+
+
+def _service_levels_for_args(args: argparse.Namespace, cfg: dict[str, Any]) -> list[int] | None:
+    if not bool(getattr(args, "disable_semantic_token", False)):
+        return None
+    bins = cfg.get("bins", {}) if isinstance(cfg, dict) else {}
+    raw_levels = bins.get("service_levels", [0, 1, 2])
+    levels = [int(level) for level in raw_levels if int(level) != 1]
+    return levels or [0, 2]
+
+
+def _candidate_for_level(env: V19LUTResourceEnv, level: int, obs: dict[str, Any]) -> dict[str, Any]:
+    if int(level) in env.service_levels:
+        return env.candidate_action(int(level), obs)
+    fallback = min(env.service_levels, key=lambda item: abs(int(item) - int(level)))
+    return env.candidate_action(fallback, obs)
+
+
+def _with_action_defaults(env: V19LUTResourceEnv, action: dict[str, Any]) -> dict[str, Any]:
+    return env.parse_action(action)
 
 
 def _first_quality_level(env: V19LUTResourceEnv, obs: dict[str, Any], levels: list[int]) -> int:
@@ -439,7 +549,7 @@ def _lyapunov_greedy_action(env: V19LUTResourceEnv, obs: dict[str, Any]) -> dict
 
 def _lyapunov_candidate_score(info: dict[str, Any], queues: dict[str, Any]) -> float:
     accuracy = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
-    quality_gap = max(0.0, -float(info.get("semantic_quality_gap", 0.0)))
+    quality_gap = max(0.0, float(info.get("semantic_quality_gap", 0.0)))
     deadline_over = float(info.get("q_deadline_increment", 0.0))
     energy_over = float(info.get("q_energy_increment", 0.0))
     risk_over = float(info.get("q_risk_increment", 0.0))
@@ -511,17 +621,17 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
         f"- trained PPO: {trained_ppo}",
         "- LUT oracle: outputs/lut/v1_9_snr_semantic_quality_lut.csv",
         "",
-        "| policy | success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM violation | reward |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| policy | semantic success | success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM conflict | reward |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         lines.append(
-            f"| {row.policy} | {row.task_success_rate:.3f} | {row.average_accuracy:.3f} | {row.average_accuracy_mean:.3f} | "
+            f"| {row.policy} | {row.semantic_success_rate:.3f} | {row.task_success_rate:.3f} | {row.average_accuracy:.3f} | {row.average_accuracy_mean:.3f} | "
             f"{row.average_uncertainty:.3f} | {row.average_semantic_quality_gap:.3f} | {row.average_q_quality:.3f} | "
-            f"{row.average_q_deadline:.3f} | {row.average_delay:.3f} | {row.average_energy:.3f} | "
+            f"{row.average_q_deadline:.3f} | {row.average_q_energy:.3f} | {row.average_q_utm:.3f} | {row.average_delay:.3f} | {row.average_energy:.3f} | "
             f"{row.average_payload_kb:.3f} | {row.payload_reduction_vs_always_image:.3f} | "
             f"{row.quality_violation_rate:.3f} | {row.deadline_violation_rate:.3f} | {row.battery_violation_rate:.3f} | "
-            f"{row.resource_violation_rate:.3f} | {row.airspace_conflict_rate:.3f} | {row.utm_constraint_violation_rate:.3f} | "
+            f"{row.resource_violation_rate:.3f} | {row.airspace_conflict_rate:.3f} | {row.utm_conflict_violation_rate:.3f} | "
             f"{row.average_reward:.3f} |"
         )
     lines.extend(
@@ -538,6 +648,45 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
             f"| {row.policy} | {row.service_level_0_ratio:.3f} | {row.service_level_1_ratio:.3f} | "
             f"{row.service_level_2_ratio:.3f} | {row.service_level_3_ratio:.3f} |"
         )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], args: argparse.Namespace) -> None:
+    lines = [
+        "# Scenario-Aware Semantic Control Benchmark",
+        "",
+        f"- scenarios: `{args.benchmark_scenarios}`",
+        f"- smoke: `{bool(args.smoke)}`",
+        f"- episodes per scenario/policy: `{args.episodes}`",
+        f"- train episodes per PPO smoke: `{args.train_episodes}`",
+        f"- tasks per episode: `{args.tasks_per_episode}`",
+        "",
+        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
+            f"{float(row.get('semantic_success_rate', 0.0)):.3f} | {float(row.get('average_accuracy', 0.0)):.3f} | "
+            f"{float(row.get('average_accuracy_mean', 0.0)):.3f} | {float(row.get('average_uncertainty', 0.0)):.3f} | "
+            f"{float(row.get('average_semantic_quality_gap', 0.0)):.3f} | {float(row.get('average_q_quality', 0.0)):.3f} | "
+            f"{float(row.get('average_q_deadline', 0.0)):.3f} | {float(row.get('average_q_energy', 0.0)):.3f} | "
+            f"{float(row.get('average_q_utm', 0.0)):.3f} | {float(row.get('average_delay', 0.0)):.3f} | "
+            f"{float(row.get('average_energy', 0.0)):.3f} | {float(row.get('average_payload_kb', 0.0)):.3f} | "
+            f"{float(row.get('deadline_violation_rate', 0.0)):.3f} | {float(row.get('utm_conflict_violation_rate', 0.0)):.3f} | "
+            f"{float(row.get('service_level_0_ratio', 0.0)):.3f} | {float(row.get('service_level_1_ratio', 0.0)):.3f} | "
+            f"{float(row.get('service_level_2_ratio', 0.0)):.3f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Notes",
+            "",
+            "- `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)`.",
+            "- PPO rows use Semantic-LCB Lyapunov reward/projection in smoke mode.",
+            "- Scenario subdirectories contain per-scenario summaries and traces; large rollout/model artifacts remain ignored.",
+        ]
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
