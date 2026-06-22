@@ -161,6 +161,28 @@ tests/test_semantic_utility.py
 # Ran 67 tests OK
 ```
 
+Documentation/API hardening completed 2026-06-22 Asia/Macau:
+
+- Added a paper-facing semantic utility model note:
+
+```text
+docs/semantic_utility_model.md
+```
+
+- Added a runnable API demo:
+
+```text
+scripts/demo_semantic_utility_query.py
+```
+
+- Demo output artifact:
+
+```text
+outputs/reports/semantic_utility_api_examples.md
+```
+
+- The demo queries representative cache, semantic-token, and image-evidence cells and reports `accuracy_mean`, `accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count`.
+
 Resource simulation headline:
 
 | policy | success | accuracy | delay | energy | payload KB | payload reduction |
@@ -456,31 +478,6 @@ Validation:
   --output-dir outputs/env \
   --formal-scenarios test_utm_nominal_planning,test_utm_off_nominal_planning,test_utm_intent_conflict,test_utm_dss_outage,test_utm_notification_delay
 # wrote outputs/env/utm_realistic_scenario_smoke.csv with 25 rows
-```
-
-## Benchmark Protocol 2026-06-22 Asia/Shanghai
-
-Environment benchmark protocol has been formalized for paper-facing experiments:
-
-- New document: `docs/benchmark_protocol.md`.
-- Protocol covers train/test scenario split, UTM realistic flight scenarios, scalability dimensions, metrics, benchmark artifacts, and files that should not be committed.
-- `outputs/env/formal_scenario_specs.md` is retained as the generated scenario/spec artifact because it now includes the UTM realistic test scenarios.
-- Timestamped `outputs/env/scenario_smoke_*.csv` files are temporary run products; the fixed protocol artifact is `outputs/env/benchmark_protocol_smoke.csv`.
-- Environment protocol smoke should use seed 42 and the scenario set listed in `docs/benchmark_protocol.md`.
-
-Validation:
-
-```bash
-/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_semantic_network_benchmark.py \
-  --config configs/v1_9_snr_lut.yaml \
-  --steps 5 \
-  --seed 42 \
-  --output-dir outputs/env \
-  --formal-scenarios train_nominal,test_conflict_heavy,test_interference_heavy,test_cache_heavy,test_mobility_stress,test_utm_intent_conflict,test_utm_dss_outage,test_utm_notification_delay
-# wrote outputs/env/benchmark_protocol_smoke.csv with 40 rows
-
-/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
-# Ran 67 tests OK
 ```
 
 ## RL Cache-Collapse Fix 2026-06-22 Asia/Shanghai

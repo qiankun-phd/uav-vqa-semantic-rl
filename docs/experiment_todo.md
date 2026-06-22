@@ -57,6 +57,23 @@ Revalidated 2026-06-22 Asia/Macau:
 
 - Ready to commit and push the semantic utility interface and generated calibration artifacts.
 
+Documented 2026-06-22 Asia/Macau:
+
+- Added the paper-facing utility model description:
+
+```text
+docs/semantic_utility_model.md
+```
+
+- Added the query demo script and generated API examples:
+
+```text
+scripts/demo_semantic_utility_query.py
+outputs/reports/semantic_utility_api_examples.md
+```
+
+- The documentation now explains `U_sem`, Wilson CI, SNR monotonic sanity checking, cache SNR-invariant behavior, sparse-cell handling, and why RL should use `accuracy_lcb`.
+
 ## Immediate Integration Tasks
 
 1. Done: Reran canonical environment smoke against the refreshed full-bin V1.9 LUT.
@@ -208,15 +225,6 @@ Algorithm outputs must stay under one of:
 Do not overwrite V1.9 VLM/LUT/report files.
 
 ## Environment Thread TODO
-
-Completed 2026-06-22 Asia/Shanghai:
-
-1. Added `docs/benchmark_protocol.md` as the paper-facing semantic network benchmark protocol.
-2. Defined the train/test split, UTM realistic flight scenarios, scalability dimensions, metrics, benchmark artifact list, and non-committed transient output policy.
-3. Classified `outputs/env/formal_scenario_specs.md` as a retained generated scenario/spec artifact because it includes UTM scenarios.
-4. Classified timestamped `outputs/env/scenario_smoke_*.csv` files as transient products; fixed-name smoke output is `outputs/env/benchmark_protocol_smoke.csv`.
-5. Ran protocol smoke with seed 42 and eight formal scenarios, producing 40 rows in `outputs/env/benchmark_protocol_smoke.csv`.
-6. Passed `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests` with 67 tests OK.
 
 Completed 2026-06-19 Asia/Shanghai:
 
