@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from numbers import Integral
+from pathlib import Path
 from typing import Any
 
+from vqa_semcom.config import resolve_path
+from vqa_semcom.semantic.utility import SemanticUtilityModel
 from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv
 from vqa_semcom.sim.resource_env import LUTEntry
 
@@ -27,6 +30,10 @@ class V19StepRecord:
     gpu_share: float
     uav_assignment: int
     answer_accuracy_est: float
+    semantic_accuracy_mean: float
+    semantic_accuracy_lcb: float
+    semantic_uncertainty: float
+    semantic_sample_count: int
     success: bool
     delay_s: float
     energy_j: float
@@ -38,6 +45,14 @@ class V19StepRecord:
     airspace_conflict: bool
     gpu_memory_ok: bool
     battery_remaining_j: float
+    utm_constraint_violation: bool
+    dss_available: bool
+    dss_delay_s: float
+    subscription_notification_delay_s: float
+    utm_dss_delay_s: float
+    utm_notification_delay_s: float
+    operational_intent_state: str
+    off_nominal_planning_penalty: float
     reward: float
 
     def to_row(self) -> dict[str, Any]:
@@ -87,6 +102,7 @@ class V19LUTResourceEnv:
         self.current_context: dict[str, Any] | None = None
         self._last_obs: dict[str, Any] | None = None
         self._last_record: V19StepRecord | None = None
+        self._semantic_utility = self._load_semantic_utility_model(cfg)
 
     @property
     def obs_dim(self) -> int:
@@ -113,13 +129,18 @@ class V19LUTResourceEnv:
 
     def step(self, action: dict[str, Any] | int | Integral) -> tuple[dict[str, Any], float, bool, dict[str, Any]]:
         parsed = self.parse_action(action)
+        prev_obs = self._last_obs
         obs, reward, done, info = self._env.step(parsed)
+        info = self._enrich_semantic_info(dict(info), prev_obs)
         record = self._record_from_info(info, float(reward))
         self._last_record = record
-        info = dict(info)
         info.update(
             {
                 "answer_accuracy_est": record.answer_accuracy_est,
+                "semantic_accuracy_mean": record.semantic_accuracy_mean,
+                "semantic_accuracy_lcb": record.semantic_accuracy_lcb,
+                "semantic_uncertainty": record.semantic_uncertainty,
+                "semantic_sample_count": record.semantic_sample_count,
                 "success": record.success,
                 "delay_s": record.delay_s,
                 "energy_j": record.energy_j,
@@ -131,6 +152,14 @@ class V19LUTResourceEnv:
                 "airspace_conflict": record.airspace_conflict,
                 "gpu_memory_ok": record.gpu_memory_ok,
                 "battery_remaining_j": record.battery_remaining_j,
+                "utm_constraint_violation": record.utm_constraint_violation,
+                "dss_available": record.dss_available,
+                "dss_delay_s": record.dss_delay_s,
+                "subscription_notification_delay_s": record.subscription_notification_delay_s,
+                "utm_dss_delay_s": record.utm_dss_delay_s,
+                "utm_notification_delay_s": record.utm_notification_delay_s,
+                "operational_intent_state": record.operational_intent_state,
+                "off_nominal_planning_penalty": record.off_nominal_planning_penalty,
                 "snr_bin": record.snr_bin,
                 "service_level": record.service_level,
                 "bandwidth_unit": "Hz",
@@ -158,7 +187,16 @@ class V19LUTResourceEnv:
         return self._env.candidate_action(self._nearest_service_level(service_level), obs)
 
     def candidate_metrics(self, service_level: int, obs: dict[str, Any] | None = None) -> dict[str, float]:
-        return self._env.candidate_metrics(self._nearest_service_level(service_level), obs)
+        info = self.evaluate_action(self.candidate_action(service_level, obs), obs)
+        return {
+            "accuracy": float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))),
+            "accuracy_mean": float(info.get("semantic_accuracy_mean", info.get("answer_accuracy_est", 0.0))),
+            "uncertainty": float(info.get("semantic_uncertainty", 0.0)),
+            "delay_s": float(info.get("delay_s", info.get("total_delay_s", 0.0))),
+            "energy_j": float(info.get("energy_j", info.get("total_energy_j", 0.0))),
+            "payload_kb": float(info.get("payload_kb", 0.0)),
+            "success": float(bool(info.get("success", False))),
+        }
 
     def action_spec(self) -> dict[str, Any]:
         return self._env.action_spec()
@@ -169,7 +207,8 @@ class V19LUTResourceEnv:
     def evaluate_action(self, action: dict[str, Any], obs: dict[str, Any] | None = None) -> dict[str, Any]:
         parsed = self.parse_action(action)
         task_id = str(obs.get("task_id")) if obs and obs.get("task_id") else None
-        return self._env.evaluate_action(parsed, task_id=task_id, obs=obs, mutate=False)
+        info = self._env.evaluate_action(parsed, task_id=task_id, obs=obs, mutate=False)
+        return self._enrich_semantic_info(dict(info), obs)
 
     def _record_from_info(self, info: dict[str, Any], reward: float) -> V19StepRecord:
         return V19StepRecord(
@@ -190,6 +229,10 @@ class V19LUTResourceEnv:
             gpu_share=float(info.get("gpu_share", 0.0)),
             uav_assignment=int(info.get("uav_assignment", 0)),
             answer_accuracy_est=float(info.get("answer_accuracy_est", 0.0)),
+            semantic_accuracy_mean=float(info.get("semantic_accuracy_mean", info.get("answer_accuracy_est", 0.0))),
+            semantic_accuracy_lcb=float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))),
+            semantic_uncertainty=float(info.get("semantic_uncertainty", 0.0)),
+            semantic_sample_count=int(info.get("semantic_sample_count", 0)),
             success=bool(info.get("success", False)),
             delay_s=float(info.get("delay_s", info.get("total_delay_s", 0.0))),
             energy_j=float(info.get("energy_j", info.get("total_energy_j", 0.0))),
@@ -201,8 +244,105 @@ class V19LUTResourceEnv:
             airspace_conflict=bool(info.get("airspace_conflict", False)),
             gpu_memory_ok=bool(info.get("gpu_memory_ok", True)),
             battery_remaining_j=float(info.get("battery_remaining_j", 0.0)),
+            utm_constraint_violation=bool(info.get("utm_constraint_violation", False)),
+            dss_available=bool(info.get("dss_available", True)),
+            dss_delay_s=float(info.get("dss_delay_s", 0.0)),
+            subscription_notification_delay_s=float(info.get("subscription_notification_delay_s", 0.0)),
+            utm_dss_delay_s=float(info.get("utm_dss_delay_s", info.get("dss_delay_s", 0.0))),
+            utm_notification_delay_s=float(
+                info.get("utm_notification_delay_s", info.get("subscription_notification_delay_s", 0.0))
+            ),
+            operational_intent_state=str(info.get("operational_intent_state", "accepted")),
+            off_nominal_planning_penalty=float(info.get("off_nominal_planning_penalty", 0.0)),
             reward=float(info.get("reward", reward)),
         )
+
+    def _enrich_semantic_info(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:
+        """Expose the calibrated semantic-utility API to controllers and CSVs.
+
+        The simulator still produces the raw LUT accuracy estimate.  RL control
+        uses the conservative LCB so sparse VQA cells do not look artificially
+        attractive during exploration.
+        """
+
+        raw_accuracy = float(info.get("answer_accuracy_est", 0.0))
+        info.setdefault("semantic_accuracy_mean", raw_accuracy)
+        info.setdefault("semantic_accuracy_lcb", raw_accuracy)
+        info.setdefault("semantic_uncertainty", 0.0)
+        info.setdefault("semantic_sample_count", 0)
+        model = self._semantic_utility
+        if model is not None:
+            query = self._semantic_query(info, obs)
+            estimate = model.U_sem(
+                query["question_type"],
+                int(query["service_level"]),
+                query["snr_bin"],
+                query["view_quality_bin"],
+                query["freshness_bin"],
+                query["risk_level"],
+            )
+            info["semantic_accuracy_mean"] = float(estimate.accuracy_mean)
+            info["semantic_accuracy_lcb"] = float(estimate.accuracy_lcb)
+            info["semantic_uncertainty"] = float(estimate.uncertainty)
+            info["semantic_sample_count"] = int(estimate.sample_count)
+            info["answer_accuracy_raw"] = raw_accuracy
+            info["answer_accuracy_est"] = float(estimate.accuracy_lcb)
+            info["payload_kb"] = float(estimate.payload_kb)
+
+        epsilon = self._epsilon_from_obs_or_info(info, obs)
+        info["quality_violation"] = bool(float(info.get("answer_accuracy_est", 0.0)) < epsilon)
+        info.setdefault("utm_constraint_violation", False)
+        info.setdefault("dss_available", True)
+        info.setdefault("dss_delay_s", 0.0)
+        info.setdefault("subscription_notification_delay_s", 0.0)
+        info.setdefault("utm_dss_delay_s", info.get("dss_delay_s", 0.0))
+        info.setdefault("utm_notification_delay_s", info.get("subscription_notification_delay_s", 0.0))
+        state = str(info.get("operational_intent_state", "accepted"))
+        info["operational_intent_state"] = state
+        info["off_nominal_planning_penalty"] = 1.0 if state in {"nonconforming", "contingent"} else 0.0
+        info["success"] = not (
+            bool(info.get("quality_violation", False))
+            or bool(info.get("deadline_violation", False))
+            or bool(info.get("battery_violation", False))
+            or bool(info.get("resource_violation", False))
+            or bool(info.get("airspace_conflict", False))
+            or bool(info.get("utm_constraint_violation", False))
+        )
+        return info
+
+    def _semantic_query(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:
+        obs = obs or self._last_obs or self.current_context or {}
+        return {
+            "question_type": str(info.get("question_type", obs.get("question_type", obs.get("task_type", "")))),
+            "service_level": int(info.get("service_level", self.service_levels[0])),
+            "snr_bin": str(info.get("snr_bin", obs.get("snr_bin", ""))),
+            "view_quality_bin": str(info.get("view_quality_bin", obs.get("view_quality_bin", "medium"))),
+            "freshness_bin": str(info.get("freshness_bin", obs.get("freshness_bin", "fresh"))),
+            "risk_level": str(info.get("risk_level", obs.get("risk_level", "normal"))),
+        }
+
+    @staticmethod
+    def _epsilon_from_obs_or_info(info: dict[str, Any], obs: dict[str, Any] | None) -> float:
+        if "epsilon_k" in info:
+            return float(info["epsilon_k"])
+        if obs and "epsilon_k" in obs:
+            return float(obs["epsilon_k"])
+        return 0.0
+
+    @staticmethod
+    def _load_semantic_utility_model(cfg: dict[str, Any]) -> SemanticUtilityModel | None:
+        paths = cfg.get("paths", {}) if isinstance(cfg, dict) else {}
+        candidates = [
+            paths.get("semantic_utility_csv"),
+            Path("outputs") / "lut" / "v1_9_semantic_utility_with_ci.csv",
+        ]
+        for candidate in candidates:
+            if not candidate:
+                continue
+            path = resolve_path(candidate)
+            if path.exists():
+                return SemanticUtilityModel.from_csv(path)
+        return None
 
     def _nearest_service_level(self, level: int) -> int:
         if int(level) in self.service_levels:

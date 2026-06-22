@@ -36,6 +36,8 @@ class EvalSummary:
     tasks: int
     task_success_rate: float
     average_accuracy: float
+    average_accuracy_mean: float
+    average_uncertainty: float
     average_delay: float
     average_energy: float
     average_payload_kb: float
@@ -45,6 +47,7 @@ class EvalSummary:
     battery_violation_rate: float
     resource_violation_rate: float
     airspace_conflict_rate: float
+    utm_constraint_violation_rate: float
     service_level_0_ratio: float
     service_level_1_ratio: float
     service_level_2_ratio: float
@@ -131,6 +134,8 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int) 
                 tasks=tasks,
                 task_success_rate=round(_rate(records, "success"), 6),
                 average_accuracy=round(_mean(records, "answer_accuracy_est"), 6),
+                average_accuracy_mean=round(_mean(records, "semantic_accuracy_mean"), 6),
+                average_uncertainty=round(_mean(records, "semantic_uncertainty"), 6),
                 average_delay=round(_mean(records, "delay_s"), 6),
                 average_energy=round(_mean(records, "energy_j"), 6),
                 average_payload_kb=round(payload, 6),
@@ -140,6 +145,7 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int) 
                 battery_violation_rate=round(_rate(records, "battery_violation"), 6),
                 resource_violation_rate=round(_rate(records, "resource_violation"), 6),
                 airspace_conflict_rate=round(_rate(records, "airspace_conflict"), 6),
+                utm_constraint_violation_rate=round(_rate(records, "utm_constraint_violation"), 6),
                 service_level_0_ratio=round(_service_ratio(records, 0), 6),
                 service_level_1_ratio=round(_service_ratio(records, 1), 6),
                 service_level_2_ratio=round(_service_ratio(records, 2), 6),
@@ -208,6 +214,15 @@ def main() -> int:
     parser.add_argument("--demo-episodes", type=int, default=40)
     parser.add_argument("--bc-epochs", type=int, default=8)
     parser.add_argument("--bc-aux-weight", type=float, default=0.05)
+    parser.add_argument("--entropy-start", type=float, default=0.05)
+    parser.add_argument("--entropy-end", type=float, default=0.005)
+    parser.add_argument("--entropy-decay-episodes", type=int, default=120)
+    parser.add_argument("--service-prior-weight", type=float, default=0.25)
+    parser.add_argument("--service-prior-decay-episodes", type=int, default=200)
+    parser.add_argument("--no-semantic-projection", action="store_true", help="Disable LCB/deadline semantic projection inside the safety layer.")
+    parser.add_argument("--utm-conflict-cost-weight", type=float, default=1.5)
+    parser.add_argument("--dss-delay-cost-weight", type=float, default=0.25)
+    parser.add_argument("--off-nominal-cost-weight", type=float, default=1.0)
     parser.add_argument("--no-safety-layer", action="store_true", help="Disable the service/GPU/battery/conflict safety projection layer.")
     parser.add_argument("--lambda-lr", type=float, default=0.05)
     parser.add_argument("--lambda-max", type=float, default=20.0)
@@ -232,6 +247,10 @@ def main() -> int:
         args.risk_aware_constraints = True
         args.semantic_reward_mode = "semantic_utility"
         args.imitation_warm_start = True
+        args.entropy_start = max(float(args.entropy_start), 0.06)
+        args.service_prior_weight = max(float(args.service_prior_weight), 0.30)
+        args.bc_aux_weight = max(float(args.bc_aux_weight), 0.10)
+        args.demo_episodes = max(int(args.demo_episodes), min(20, int(args.train_episodes)))
 
     cfg = load_config(args.config)
     tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
@@ -259,6 +278,15 @@ def main() -> int:
             risk_aware_constraints=args.risk_aware_constraints,
             safety_layer=not args.no_safety_layer,
             semantic_reward_mode=args.semantic_reward_mode,
+            entropy_weight_start=args.entropy_start,
+            entropy_weight_end=args.entropy_end,
+            entropy_decay_episodes=args.entropy_decay_episodes,
+            service_prior_weight=args.service_prior_weight,
+            service_prior_decay_episodes=args.service_prior_decay_episodes,
+            semantic_projection=not args.no_semantic_projection,
+            utm_conflict_cost_weight=args.utm_conflict_cost_weight,
+            dss_delay_cost_weight=args.dss_delay_cost_weight,
+            off_nominal_cost_weight=args.off_nominal_cost_weight,
             lambda_lr=args.lambda_lr,
             lambda_max=args.lambda_max,
             quality_cost_limit=args.quality_cost_limit,
@@ -298,10 +326,11 @@ def main() -> int:
     for row in summaries:
         print(
             f"{row.policy}: success={row.task_success_rate:.3f} acc={row.average_accuracy:.3f} "
+            f"acc_mean={row.average_accuracy_mean:.3f} uncertainty={row.average_uncertainty:.3f} "
             f"delay={row.average_delay:.3f} energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} "
             f"quality_vio={row.quality_violation_rate:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
             f"battery_vio={row.battery_violation_rate:.3f} resource_vio={row.resource_violation_rate:.3f} "
-            f"conflict={row.airspace_conflict_rate:.3f}"
+            f"conflict={row.airspace_conflict_rate:.3f} utm_vio={row.utm_constraint_violation_rate:.3f}"
         )
     return 0
 
@@ -366,15 +395,17 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
         f"- trained PPO: {trained_ppo}",
         "- LUT oracle: outputs/lut/v1_9_snr_semantic_quality_lut.csv",
         "",
-        "| policy | success | accuracy | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | reward |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| policy | success | accuracy LCB | accuracy mean | uncertainty | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM violation | reward |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         lines.append(
-            f"| {row.policy} | {row.task_success_rate:.3f} | {row.average_accuracy:.3f} | {row.average_delay:.3f} | "
-            f"{row.average_energy:.3f} | {row.average_payload_kb:.3f} | {row.payload_reduction_vs_always_image:.3f} | "
+            f"| {row.policy} | {row.task_success_rate:.3f} | {row.average_accuracy:.3f} | {row.average_accuracy_mean:.3f} | "
+            f"{row.average_uncertainty:.3f} | {row.average_delay:.3f} | {row.average_energy:.3f} | "
+            f"{row.average_payload_kb:.3f} | {row.payload_reduction_vs_always_image:.3f} | "
             f"{row.quality_violation_rate:.3f} | {row.deadline_violation_rate:.3f} | {row.battery_violation_rate:.3f} | "
-            f"{row.resource_violation_rate:.3f} | {row.airspace_conflict_rate:.3f} | {row.average_reward:.3f} |"
+            f"{row.resource_violation_rate:.3f} | {row.airspace_conflict_rate:.3f} | {row.utm_constraint_violation_rate:.3f} | "
+            f"{row.average_reward:.3f} |"
         )
     lines.extend(
         [

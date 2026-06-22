@@ -401,7 +401,7 @@ Latest fixed-scenario environment smokes:
 - The final report includes all configured SNR bins: -5dB, 0dB, 5dB, 10dB, 15dB, 20dB.
 - Algorithm hybrid TCH-PPO smoke has been rerun against the refreshed full-bin LUT under `outputs/rl/v1_9_hybrid_tch_ppo_smoke`.
 - Formal multi-seed resource-allocation comparison has been run under `outputs/rl/v1_9_formal_hybrid_tch_ppo_20260618`.
-- Current PPO variants collapse to cache in the calibrated canonical environment; next algorithm work should tune reward shaping, lambda targets, entropy/exploration, and possibly constrained action projection.
+- PPO/TCH-PPO cache collapse was reproduced in the formal multi-seed run and is now mitigated in the small-scale `outputs/rl/v1_9_rl_fix_cache_collapse/` validation; formal multi-seed rerun is still required before claiming final performance.
 - The primary VQA/SNR-LUT directory is not currently a Git worktree. Coordination must rely on docs and path discipline unless a repository is initialized later.
 - Algorithm and environment threads must not change the LUT schema without updating docs/interfaces.md.
 - `sim.multi_uav_env` is now the single source of truth for resource-allocation environment dynamics; keep `rl.v19_resource_env` as an algorithm-facing wrapper.
@@ -457,3 +457,41 @@ Validation:
   --formal-scenarios test_utm_nominal_planning,test_utm_off_nominal_planning,test_utm_intent_conflict,test_utm_dss_outage,test_utm_notification_delay
 # wrote outputs/env/utm_realistic_scenario_smoke.csv with 25 rows
 ```
+
+## RL Cache-Collapse Fix 2026-06-22 Asia/Shanghai
+
+Algorithm thread upgraded the semantic-utility-guided cognitive controller:
+
+- `src/vqa_semcom/rl/v19_resource_env.py` now consumes `SemanticUtilityModel.U_sem(...)` when `outputs/lut/v1_9_semantic_utility_with_ci.csv` is available.
+- The algorithm-facing accuracy is the conservative `accuracy_lcb`; rollout records also expose `semantic_accuracy_mean`, `semantic_accuracy_lcb`, `semantic_uncertainty`, and `semantic_sample_count`.
+- `src/vqa_semcom/rl/v19_ppo.py` now includes entropy scheduling, decaying service-level imitation prior, service-dependent resource floors, semantic feasibility projection, and UTM/DSS/off-nominal cost hooks.
+- UTM constraint violations are routed through the conflict-cost channel; DSS delay, subscription notification delay, and off-nominal planning penalty are explicit reward costs.
+- `scripts/run_v1_9_resource_alloc.py` exposes the new tuning flags and writes `ppo_training_trace.csv` fields for entropy, prior weight, semantic LCB, uncertainty, and non-cache ratio.
+
+Validation:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 67 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --policy all \
+  --proposed-semantic-rl \
+  --episodes 6 \
+  --tasks-per-episode 8 \
+  --train-episodes 30 \
+  --demo-episodes 8 \
+  --bc-epochs 3 \
+  --seed 0 \
+  --output-dir outputs/rl/v1_9_rl_fix_cache_collapse
+```
+
+Small-scale result in `outputs/rl/v1_9_rl_fix_cache_collapse/`:
+
+- `ppo` success: 0.188, matching `greedy_min_sufficient_evidence` at 0.188.
+- `ppo` delay/energy/payload: 3.735 s / 493.786 J / 19.118 KB versus greedy 7.032 s / 879.639 J / 74.465 KB.
+- `ppo` deadline violation: 0.500 versus greedy 0.812.
+- `ppo` service mix: cache 0.417, semantic tokens 0.479, image 0.104; the policy no longer collapses to all cache in this validation.
+
+Next required algorithm step: rerun formal multi-seed comparison with the fixed controller and include unseen conflict/interference/mobility scenarios.

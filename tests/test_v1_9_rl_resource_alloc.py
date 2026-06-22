@@ -42,6 +42,10 @@ class V19RLResourceAllocTest(unittest.TestCase):
         action = env.candidate_action(1, obs)
         next_obs, reward, done, info = env.step(action)
         self.assertIn("answer_accuracy_est", info)
+        self.assertIn("semantic_accuracy_mean", info)
+        self.assertIn("semantic_accuracy_lcb", info)
+        self.assertIn("semantic_uncertainty", info)
+        self.assertIn("semantic_sample_count", info)
         self.assertIn("delay_s", info)
         self.assertIn("energy_j", info)
         self.assertIn("payload_kb", info)
@@ -50,6 +54,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("battery_violation", info)
         self.assertIn("resource_violation", info)
         self.assertIn("airspace_conflict", info)
+        self.assertIn("utm_constraint_violation", info)
+        self.assertIn("dss_delay_s", info)
+        self.assertIn("subscription_notification_delay_s", info)
         self.assertIn("gpu_memory_ok", info)
         self.assertIn("service_level", info)
         self.assertEqual(info["bandwidth_unit"], "Hz")
@@ -129,6 +136,10 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("lambda_conflict", trace[0])
         self.assertIn("lambda_battery", trace[0])
         self.assertIn("lambda_gpu", trace[0])
+        self.assertIn("entropy_weight", trace[0])
+        self.assertIn("service_prior_weight", trace[0])
+        self.assertIn("non_cache_ratio", trace[0])
+        self.assertIn("mean_semantic_accuracy_lcb", trace[0])
 
 
 if __name__ == "__main__":

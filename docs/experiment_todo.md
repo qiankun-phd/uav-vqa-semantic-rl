@@ -285,9 +285,28 @@ Next environment steps:
 5. Done: Reran canonical environment smoke for all fixed scenarios under `outputs/env/env_smoke_*_20260618_234452`.
 6. Done: Reran formal multi-seed algorithm comparison under `outputs/rl/v1_9_formal_hybrid_tch_ppo_20260618`.
 7. Done: VQA thread added the calibrated semantic utility model with CI, uncertainty, and SNR monotonic sanity checks.
-8. Pending: Environment thread should query the semantic utility interface and expose conservative utility fields in `info`.
-9. Pending: Improve PPO/TCH-PPO so it does not collapse to service level 0/cache in the calibrated canonical environment.
+8. Done: Algorithm-facing environment wrapper queries the semantic utility interface when `outputs/lut/v1_9_semantic_utility_with_ci.csv` is available and exposes conservative `accuracy_lcb`, uncertainty, and sample count in `info`/CSV records.
+9. Done: Added the first cache-collapse fix for PPO/TCH-PPO: reward scaling through semantic LCB, entropy schedule, decaying service-level imitation prior, oracle warm-start, service-dependent resource floors, semantic feasibility projection, and UTM/DSS/off-nominal cost hooks.
 10. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
+
+## RL Cache-Collapse Follow-Up
+
+Completed 2026-06-22 Asia/Shanghai:
+
+1. Updated `src/vqa_semcom/rl/v19_resource_env.py` to consume `SemanticUtilityModel.U_sem(...)` without changing the LUT schema.
+2. Updated `src/vqa_semcom/rl/v19_ppo.py` with conservative semantic utility reward, risk-aware constrained costs, entropy/prior schedules, oracle imitation warm-start support, service-dependent resource floors, and semantic safety projection.
+3. Preserved realistic UTM extension points for operational intent conflict, DSS/notification delay, and off-nominal planning penalty.
+4. Updated `scripts/run_v1_9_resource_alloc.py` with tuning flags and summary columns for accuracy LCB/mean, uncertainty, and UTM violation rate.
+5. Added regression checks in `tests/test_v1_9_rl_resource_alloc.py`.
+6. Passed `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests` with 67 tests OK.
+7. Ran small validation under `outputs/rl/v1_9_rl_fix_cache_collapse/`; PPO no longer collapses to all cache and achieved success 0.188 with lower delay/energy/payload than `greedy_min_sufficient_evidence` in the pilot.
+
+Next algorithm steps:
+
+1. Rerun formal multi-seed comparison after reviewing the pilot traces: service-only PPO, hybrid PPO no Lagrangian, hybrid TCH/Lagrangian PPO, and proposed semantic cognitive RL.
+2. Include fixed unseen scenarios: `conflict-heavy`, `interference-heavy`, `cache-heavy`, and `mobility-stress`.
+3. Report `ppo_training_trace.csv` non-cache ratio, entropy schedule, service prior, semantic LCB, uncertainty, and lambda trace alongside success/accuracy/delay/energy/payload.
+4. Tune deadline feasibility separately if formal runs still show high deadline violation for evidence-rich actions.
 
 ## Output Naming Convention
 
