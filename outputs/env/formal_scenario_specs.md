@@ -28,6 +28,11 @@ This file is generated from `src/vqa_semcom/sim/multi_uav_env.py` and is owned b
 | `test_cache_heavy` | test | cache-heavy | Held-out semantic cache reuse/freshness stress test. |
 | `test_mobility_stress` | test | mobility-stress | Held-out long-range mobility and battery stress test. |
 | `test_unseen_mixed` | test | conflict-heavy+interference-heavy+cache-heavy+mobility-stress | Unseen mixture with larger network size and heavier arrivals than training. |
+| `test_utm_nominal_planning` | test | nominal | UTM-style nominal planning with accepted/activated operational intents and available DSS. |
+| `test_utm_off_nominal_planning` | test | mobility-stress | UTM-style off-nominal planning with low battery/mobility pressure producing nonconforming intents. |
+| `test_utm_intent_conflict` | test | conflict-heavy | UTM-style strategic conflict detection with spatial/temporal buffers around overlapping intents. |
+| `test_utm_dss_outage` | test | nominal | UTM-style DSS outage abstraction: operational intents enter contingent state and incur DSS delay. |
+| `test_utm_notification_delay` | test | conflict-heavy | UTM-style subscription notification delay for delayed strategic conflict updates. |
 
 ## Scalability Presets
 
