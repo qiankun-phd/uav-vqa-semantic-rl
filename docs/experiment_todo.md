@@ -648,6 +648,58 @@ Next algorithm steps:
 3. Add paper plots for semantic success/resource tradeoff and epsilon-conditioned failure analysis.
 4. Keep `.pt`, rollout CSV, and run logs out of commits; retain only summary/report/small CSV artifacts.
 
+## Scenario Benchmark v4 Environment-Calibrated Rerun
+
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Synced environment commit `8f903c2 fix(env): calibrate scenario feasibility for semantic benchmark`.
+2. Reran the same v3 policy set without changing the LUT or making major algorithm changes.
+3. Generated:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v4/v3_vs_v4_delta.md
+```
+
+Command:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v4
+```
+
+Key observation:
+
+- `edge_overload` now has a clear feasible token-routing region. Proposed PPO semantic success improves from 0.010 in v3 to 0.607 in v4, task success improves to 0.385, and deadline violation falls from 0.902 to 0.381.
+- `utm_conflict` is calibrated into a moderate-conflict regime: proposed UTM conflict falls from 0.913 to 0.151. Semantic success remains 0.000, so the next algorithm work should focus on conflict-aware evidence routing and deadline-aware UTM queue control.
+- `low_snr_blockage` remains stable at 0.786 proposed semantic success versus 0.950 for semantic greedy.
+- Cache collapse does not reappear: proposed cache ratios stay low in edge/UTM and remain a minority fallback in low-SNR.
+
+Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 78 tests OK
+```
+
+Next algorithm steps:
+
+1. For `utm_conflict`, add conflict-aware UAV/waypoint evidence routing and tune UTM queue penalties; cache-penalty tuning is no longer the main bottleneck.
+2. Run a longer paper-scale v4/v5 benchmark with seeds 0-4, 200+ eval episodes, and 500-1000+ train episodes once UTM routing is updated.
+3. Convert `v3_vs_v4_delta.md` into a paper-facing environment-calibration sanity table.
+4. Keep `.pt`, rollout CSV, and per-scenario training traces uncommitted unless explicitly needed for reproducibility.
+
 ## Output Naming Convention
 
 Use explicit run names:

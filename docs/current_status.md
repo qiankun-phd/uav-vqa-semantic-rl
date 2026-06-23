@@ -835,3 +835,58 @@ Validation:
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
 # Ran 78 tests OK
 ```
+
+## Scenario-Aware Semantic Benchmark v4 2026-06-23 Asia/Shanghai
+
+Algorithm thread reran the semantic scenario benchmark after environment commit `8f903c2 fix(env): calibrate scenario feasibility for semantic benchmark`.
+
+No LUT or major algorithm changes were made for v4. The goal was to verify whether the calibrated `edge_overload` and `utm_conflict` presets expose usable feasible regions to the existing Semantic-LCB Lyapunov PPO controller.
+
+Command:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v4
+```
+
+Artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v4/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v4/v3_vs_v4_delta.md
+```
+
+Headline v4 proposed PPO results:
+
+| scenario | semantic success | task success | accuracy LCB | quality gap | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.283 | 0.098 | 0.617 | 0.182 | 4.346 | 552.698 | 18.384 | 0.450 | 0.000 | 0.094 | 0.793 | 0.113 |
+| disaster_hotspot | 0.228 | 0.130 | 0.577 | 0.274 | 1.560 | 157.644 | 1.064 | 0.291 | 0.000 | 0.089 | 0.911 | 0.000 |
+| low_snr_blockage | 0.786 | 0.087 | 0.756 | 0.099 | 11.017 | 1428.400 | 1.748 | 0.729 | 0.000 | 0.247 | 0.727 | 0.027 |
+| edge_overload | 0.607 | 0.385 | 0.645 | 0.066 | 4.877 | 793.040 | 0.840 | 0.381 | 0.000 | 0.041 | 0.959 | 0.000 |
+| utm_conflict | 0.000 | 0.000 | 0.627 | 0.193 | 6.169 | 844.409 | 1.069 | 0.843 | 0.151 | 0.100 | 0.900 | 0.000 |
+
+v3 -> v4 conclusions:
+
+- `edge_overload` is fixed as a feasible stress case: proposed semantic success improves from 0.010 to 0.607, task success from 0.000 to 0.385, and deadline violation drops from 0.902 to 0.381. The controller uses token routing instead of cache fallback.
+- `utm_conflict` is no longer saturated: proposed UTM conflict drops from 0.913 to 0.151. Semantic success remains 0.000 because conservative LCB stays below epsilon and deadline pressure rises; this needs conflict-aware evidence routing and UTM queue tuning rather than more cache penalties.
+- `low_snr_blockage` remains stable: proposed semantic success is 0.786 versus semantic greedy 0.950, with much lower image usage.
+- Cache collapse does not reappear: proposed cache ratios are 0.041 in `edge_overload`, 0.100 in `utm_conflict`, and 0.247 in `low_snr_blockage`.
+
+Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 78 tests OK
+```
