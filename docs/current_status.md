@@ -1004,3 +1004,90 @@ Interpretation:
 - `edge_overload` benefits most from the token-first projection and mobility-aware controller, reaching 0.683 semantic success with low deadline violation in this smoke setting.
 - `low_snr_blockage` and `nominal_patrol` still show high deadline pressure under short training, so the next formal run should tune arrival-delay/flight-energy/resource floors and use longer training before paper claims.
 - `utm_conflict` has non-zero semantic success and zero measured conflict in this smoke run, but deadline pressure remains the binding constraint.
+
+## Two-timescale Mobility Formal 300-Episode Benchmark 2026-06-23 Asia/Shanghai
+
+Initial launch snapshot at 19:48 Asia/Shanghai.
+
+Active tmux sessions:
+
+```text
+hppo_tt_proposed_300
+hppo_tt_monolithic_300
+hppo_tt_no_mobility_300
+hppo_tt_no_queue_300
+hppo_tt_no_projection_300
+```
+
+Output directories:
+
+```text
+outputs/rl/two_timescale_mobility_formal_20260623_proposed_k3_300
+outputs/rl/two_timescale_mobility_formal_20260623_monolithic_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_mobility_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_queue_300_retry1
+outputs/rl/two_timescale_mobility_formal_20260623_no_projection_300_retry1
+```
+
+Notes:
+
+- `proposed_two_timescale_ppo`, `monolithic_ppo`, and `no_mobility_actor` launched with the requested names and are actively running.
+- The requested `no_lyapunov_queues` and `no_projection` labels were not valid runner variants. The legal runner names are `ppo_without_queues` and `ppo_without_projection`, so those two sessions were restarted into `_retry1` output directories without overwriting the failed partial directories.
+- At the initial check, valid-run logs had not yet emitted scenario rows, but the five Python processes were active and consuming CPU.
+- No CUDA OOM, NaN, or traceback was observed in the corrected sessions at launch time.
+- `scenario_comparison_summary.csv` had not yet been generated for the active runs.
+
+Final completion snapshot:
+
+- All five tmux sessions completed and the tmux server exited.
+- Corrected output directories generated both `scenario_comparison_summary.csv` and `scenario_comparison_report.md`.
+- The originally requested labels `no_lyapunov_queues` and `no_projection` were not valid runner variant names. They were relaunched as `ppo_without_queues` and `ppo_without_projection` into `_retry1` directories to avoid overwriting the partial failed outputs.
+- The only tracebacks are in the two initial failed logs from invalid variant labels. Corrected runs completed without observed NaN or CUDA OOM.
+
+Formal output directories:
+
+```text
+outputs/rl/two_timescale_mobility_formal_20260623_proposed_k3_300
+outputs/rl/two_timescale_mobility_formal_20260623_monolithic_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_mobility_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_queue_300_retry1
+outputs/rl/two_timescale_mobility_formal_20260623_no_projection_300_retry1
+```
+
+Merged report:
+
+```text
+outputs/rl/two_timescale_mobility_formal_20260623_summary.md
+```
+
+Proposed two-timescale PPO headline results:
+
+| scenario | semantic success | task success | acc LCB | quality gap | delay | energy | mobility energy | arrival delay | coverage | deadline vio | UTM conflict | cache | token | image |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.386 | 0.157 | 0.617 | 0.185 | 1.802 | 192.303 | 78.000 | 0.000 | 0.000 | 0.229 | 0.000 | 0.093 | 0.547 | 0.359 |
+| disaster_hotspot | 0.317 | 0.064 | 0.659 | 0.194 | 4.252 | 569.053 | 538.538 | 3.562 | 0.561 | 0.733 | 0.000 | 0.162 | 0.838 | 0.000 |
+| low_snr_blockage | 0.955 | 0.053 | 0.912 | 0.004 | 509.965 | 779.164 | 78.000 | 0.000 | 0.000 | 0.939 | 0.000 | 0.053 | 0.030 | 0.917 |
+| edge_overload | 0.697 | 0.681 | 0.674 | 0.050 | 1.742 | 231.837 | 166.961 | 0.476 | 0.010 | 0.046 | 0.000 | 0.058 | 0.942 | 0.000 |
+| utm_conflict | 0.007 | 0.000 | 0.482 | 0.338 | 1.145 | 138.846 | 99.749 | 0.272 | -0.005 | 0.030 | 0.094 | 0.099 | 0.872 | 0.029 |
+
+Main interpretation:
+
+- The proposed two-timescale controller improves semantic success over monolithic PPO in `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, and `edge_overload`, with especially strong edge-overload task success and deadline control.
+- `edge_overload` is the cleanest positive result: proposed reaches 0.697 semantic success and 0.681 task success with 0.046 deadline violation, substantially better than monolithic PPO and fixed token/image baselines.
+- `low_snr_blockage` reaches high semantic LCB success but has very high delay and deadline violation because the learned resource/mobility behavior overuses slow high-quality evidence. This is a tuning blocker for paper-ready claims.
+- `utm_conflict` is stable and low-delay under proposed, but semantic success remains near zero. The next algorithm step should add stronger UTM-aware semantic evidence routing instead of simply increasing evidence quality.
+
+## Mobility Formal Diagnostics 2026-06-23 Asia/Shanghai
+
+Completed environment-side diagnosis after the 300-episode two-timescale mobility formal benchmark finished.
+
+Artifact:
+
+
+
+Main conclusions:
+
+-  proposed-policy deadline pressure is not mobility-driven: arrival delay is 0.000s and mobility energy is the 78 J hover baseline.
+-  deadline failures are primarily low-SNR transmission/payload failures, not UAV flight-speed or flight-energy failures; image evidence satisfies conservative semantic QoS but becomes infeasible under the weak link.
+-  proposed-policy deadline behavior is healthy and aggregate UTM conflict is reduced versus serve-task baselines; the remaining semantic failure is mainly the strict epsilon=0.82 conservative-QoS threshold.
+- Do not globally tune  or  based on this run. Consider only scenario-local /presentation tuning for  if it should be partially image-feasible.

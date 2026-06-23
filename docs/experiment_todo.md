@@ -798,3 +798,54 @@ Next algorithm steps:
 3. Compare `proposed_two_timescale_ppo` against `monolithic_ppo`, `no_mobility_actor`, `no_lyapunov_queues`, `no_projection`, `semantic_greedy`, and fixed-service baselines.
 4. Tune resource floors for low-SNR and nominal patrol, where smoke still shows high deadline violation.
 5. Keep `.pt`, rollout CSV, and run logs uncommitted; commit only code, tests, docs, and small root summary/report CSV/MD files.
+
+## Two-timescale Mobility Formal 300-Episode Benchmark
+
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Ran five parallel tmux jobs with seeds `0,1,2`, `50` evaluation episodes per seed, `300` train episodes per PPO variant/scenario, and `12` tasks per episode.
+2. Completed output directories:
+
+```text
+outputs/rl/two_timescale_mobility_formal_20260623_proposed_k3_300
+outputs/rl/two_timescale_mobility_formal_20260623_monolithic_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_mobility_300
+outputs/rl/two_timescale_mobility_formal_20260623_no_queue_300_retry1
+outputs/rl/two_timescale_mobility_formal_20260623_no_projection_300_retry1
+```
+
+3. Generated merged summary:
+
+```text
+outputs/rl/two_timescale_mobility_formal_20260623_summary.md
+```
+
+4. Variant-name note:
+
+```text
+requested no_lyapunov_queues -> runner ppo_without_queues
+requested no_projection -> runner ppo_without_projection
+```
+
+The corrected runs use `_retry1` directories because the first launch wrote partial baseline outputs before failing on invalid variant names.
+
+Key follow-up items:
+
+1. Fix `low_snr_blockage`: proposed achieves high semantic success but has extreme delay/deadline violation, suggesting resource projection and evidence routing need stronger delay-aware control.
+2. Improve `utm_conflict`: proposed reduces delay and UTM conflict relative to monolithic PPO, but semantic success remains near zero; add UTM-aware semantic evidence routing and risk-queue tuning.
+3. Preserve `edge_overload` behavior as a positive case: proposed has strong task success and low deadline violation.
+4. Before paper tables, rerun a final benchmark after low-SNR and UTM fixes, preferably with seeds `0-4` and at least `200` evaluation episodes.
+5. Keep model checkpoints, rollout CSVs, logs, and training traces out of commits unless explicitly requested.
+
+## Mobility Formal Diagnostics Follow-up
+
+Completed 2026-06-23 Asia/Shanghai:
+
+
+
+Environment-side interpretation for the formal 300-episode mobility benchmark:
+
+1. Do not change global UAV speed or flight-energy constants only to address the current formal results.
+2. Treat  as a semantic-QoS/payload stress scenario unless a future paper table requires partial image feasibility; then tune only scenario-local .
+3. For , use aggregate conflict reduction as the supported claim. A paired counterfactual rollout is needed before claiming that  alone always lowers conflict risk.
+4. Keep large formal rollout directories and  files uncommitted; commit only small summaries/reports.
