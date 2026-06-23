@@ -225,6 +225,30 @@ docs/twc_algorithm_plan.md
 - The benchmark protocol defines five paper-ready scenarios: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
 - This was a documentation-only pass; no core RL algorithm or environment dynamics were changed.
 
+Semantic scenario utility diagnostics completed 2026-06-23 Asia/Shanghai:
+
+- Generated scenario-level diagnostics for the Algorithm v2 benchmark without rerunning Qwen/VLM and without changing RL code.
+- Inputs were the calibrated semantic utility table and existing rollout traces under:
+
+```text
+outputs/lut/v1_9_semantic_utility_with_ci.csv
+outputs/rl/semantic_scenario_benchmark_v2/
+```
+
+- New artifacts:
+
+```text
+outputs/reports/semantic_scenario_utility_diagnostics.md
+outputs/reports/semantic_scenario_utility_diagnostics.csv
+```
+
+- Main diagnosis:
+  - `edge_overload` has average proposed LCB near 0.691, but semantic success is 0 because the benchmark is almost entirely critical tasks and the effective epsilon is about 0.80-0.82; the average semantic quality gap remains about 0.121.
+  - `utm_conflict` has average proposed LCB near 0.581 and semantic success 0 because it is below both the normal floor and the critical floor; the 0.420 cache ratio contributes to the quality gap.
+  - `disaster_hotspot` uses a strict critical epsilon floor; the recommendation is layered epsilon by task type/risk rather than globally lowering critical requirements.
+  - `low_snr_blockage` shows `semantic_greedy` is stronger than proposed PPO, so the algorithm thread should improve semantic-token exploration/prior or distill greedy/oracle routing.
+  - Cache remains attractive because it is payload-free and low-delay, but its global LCB is low; cache penalties should be risk-aware.
+
 Resource simulation headline:
 
 | policy | success | accuracy | delay | energy | payload KB | payload reduction |

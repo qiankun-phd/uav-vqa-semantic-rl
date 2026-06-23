@@ -559,6 +559,33 @@ Next algorithm steps:
 3. Turn `scenario_comparison_summary.csv` into paper tables and plot semantic success/resource tradeoff curves.
 4. Investigate `edge_overload` and `utm_conflict` feasibility: success is near zero for almost all methods, so these may need to be framed as LCB/gap robustness rather than success-rate wins.
 
+## Semantic Scenario Utility Diagnostics
+
+Completed 2026-06-23 Asia/Shanghai:
+
+- Diagnosed the five Algorithm v2 scenario benchmark outputs against the calibrated semantic utility model.
+- Did not rerun Qwen/VLM and did not change RL/environment code.
+- Generated:
+
+```text
+outputs/reports/semantic_scenario_utility_diagnostics.md
+outputs/reports/semantic_scenario_utility_diagnostics.csv
+```
+
+Key findings:
+
+1. `edge_overload` has average proposed LCB around 0.691 but semantic success remains 0 because the rollout is almost entirely critical tasks and the effective epsilon is around 0.80-0.82; average quality gap remains about 0.121.
+2. `utm_conflict` has average proposed LCB around 0.581 and semantic success 0 because the controller keeps a high cache ratio while the scenario requires mostly critical-level semantic reliability.
+3. `disaster_hotspot` should not simply lower all critical epsilon values; use layered epsilon by task type and risk, especially separating presence from critical counting.
+4. `low_snr_blockage` shows `semantic_greedy` outperforming proposed PPO, so the algorithm thread should improve token/image routing via semantic-token exploration prior or greedy/oracle distillation.
+5. Cache needs stronger risk-aware shortfall penalties because zero payload and low delay can still attract the policy despite low conservative LCB.
+
+Next coordination items:
+
+1. Environment thread: persist `epsilon_k` directly in rollout records so future diagnostics do not need to reconstruct failed-row epsilon from `accuracy_lcb + semantic_quality_gap`.
+2. Algorithm thread: add risk-aware cache penalties and token exploration/distillation for low-SNR and edge-overload cases.
+3. Total-control thread: use the diagnostics report to decide whether `edge_overload` and `utm_conflict` should be framed as robustness/gap-reduction scenarios or tuned into feasible success-rate scenarios.
+
 ## Output Naming Convention
 
 Use explicit run names:
