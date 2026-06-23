@@ -2,5 +2,5 @@ scenario,steps,mean_semantic_accuracy_lcb,mean_semantic_quality_gap,mean_epsilon
 nominal_patrol,5,0.664909,0.11423,0.772,4.6,13.844571,1968.701813,41.828966,30.289368,0.024,0.0,1.0,0.6,0.4,1;0;2;1;0,activated;activated;activated;activated;accepted
 disaster_hotspot,5,0.5101,0.3299,0.84,1.74,8.80942,1069.476582,97.598975,41.05467,0.08,0.0,1.0,1.0,1.0,2;1;2;1;2,activated;activated;activated;activated;activated
 low_snr_blockage,5,0.337678,0.479922,0.812,3.74,518.896025,4496.708314,7.885026,-34.574146,0.03,0.0,0.8,0.6,0.8,0;1;1;2;0,accepted;activated;activated;activated;activated
-edge_overload,5,0.366187,0.273813,0.64,4.62,16.585824,2173.613579,65.451562,29.719969,0.05,0.0,1.0,1.0,1.0,1;2;1;2;1,activated;activated;activated;activated;activated
-utm_conflict,5,0.213135,0.606865,0.82,2.55,7.297644,750.770339,47.996109,15.993958,0.98,1.0,1.0,1.0,1.0,1;2;1;2;1,nonconforming;nonconforming;nonconforming;nonconforming;nonconforming
+edge_overload,5,0.366187,0.273813,0.64,6.51,9.776692,1564.750744,65.451562,35.068392,0.05,0.0,1.0,0.8,1.0,1;2;1;2;1,activated;activated;activated;activated;activated
+utm_conflict,5,0.213135,0.606865,0.82,2.55,20.346711,2819.211381,55.535186,15.693084,0.34,0.4,1.0,1.0,1.0,1;2;1;2;1,activated;nonconforming;nonconforming;activated;activated

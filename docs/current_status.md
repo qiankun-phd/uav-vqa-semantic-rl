@@ -488,12 +488,13 @@ Latest fixed-scenario environment smokes:
   - Root cause for `utm_conflict` mismatch: environment smoke used explicit `concurrent_actions`, while algorithm benchmark v2 uses algorithm-style single-task actions, so no second operational intent was available for strategic conflict detection.
   - Fix: `utm_conflict` now enables background operational-intent detection. Observe/revisit/image/token actions conflict with other active overlapping intents; cache-only reuse still creates no airspace/UTM conflict.
   - Edge calibration: `edge_overload` now uses high but less extreme CPU/GPU load and queue constants, cleaner view/freshness mix, and a scenario-specific semantic threshold cap. This keeps the stress source on edge queue/resource pressure instead of making semantic QoS uniformly infeasible.
-  - Lightweight V1.9 probe after calibration:
+  - v3 feasibility calibration: `edge_overload` now uses moderate task spacing, queue delay, edge load, and model-load delay so token-style evidence has a partial feasible deadline region. `utm_conflict` now uses multiple operational areas, tighter buffers, and moderate background intent density so UTM pressure is visible but not saturated.
+  - Lightweight V1.9 probe after the final calibration:
 
-| scenario | semantic-token feasible | image feasible | deadline violations | UTM conflicts |
-|---|---:|---:|---:|---:|
-| edge_overload | 9/12 | 4/12 | 12/12 | 0/12 |
-| utm_conflict | 2/12 | 2/12 | 12/12 | 12/12 |
+| scenario | tasks | token/proposed-style deadline violation | semantic success | UTM conflicts | avg delay s |
+|---|---:|---:|---:|---:|---:|
+| edge_overload | 12 | 0.583 | 0.750 | 0.000 | 9.740 |
+| utm_conflict | 12 | 1.000 | 0.167 | 0.500 | 15.790 |
 
   - Updated small env artifacts:
 
@@ -522,8 +523,8 @@ outputs/env/semantic_scenario_presets/summary.md
 | nominal_patrol | 0.665 | 0.114 | 13.845 | 1968.702 | 30.289 | 0.000 |
 | disaster_hotspot | 0.510 | 0.330 | 8.809 | 1069.477 | 41.055 | 0.000 |
 | low_snr_blockage | 0.338 | 0.480 | 518.896 | 4496.708 | -34.574 | 0.000 |
-| edge_overload | 0.296 | 0.520 | 17.532 | 2247.970 | 28.681 | 0.000 |
-| utm_conflict | 0.213 | 0.607 | 7.298 | 750.770 | 15.994 | 1.000 |
+| edge_overload | 0.366 | 0.274 | 9.777 | 1564.751 | 35.068 | 0.000 |
+| utm_conflict | 0.213 | 0.607 | 20.347 | 2819.211 | 15.693 | 0.400 |
 
   - Validation:
 
@@ -818,6 +819,12 @@ Interpretation:
 - `low_snr_blockage` remains stable around 0.786 semantic success, close to v2 and below semantic greedy 0.950, with low payload.
 - `utm_conflict` now correctly exposes background operational-intent conflicts; proposed improves LCB/gap over cache but pays UTM conflict/risk cost.
 - `edge_overload` is token-only under proposed PPO; success remains limited by deadline/edge pressure rather than cache collapse.
+
+Environment calibration after reviewing v3:
+
+- `edge_overload` was too narrow for token-style evidence: proposed/token deadline violation was 0.902. The preset now keeps edge CPU/GPU/model-cache pressure but relaxes queue/load/deadline geometry enough that a token-style route has deadline violation about 0.58 in a lightweight V1.9 probe.
+- `utm_conflict` was too saturated: proposed UTM conflict was 0.913. The preset now mixes overlapping and separable 4D areas and uses moderate background intent density, reducing token-style UTM conflict to about 0.50 while preserving cache-only no-conflict behavior.
+- The existing v3 algorithm report remains a pre-calibration benchmark artifact under `outputs/rl/semantic_scenario_benchmark_v3`; rerun the algorithm benchmark before using post-calibration scenario metrics in paper tables.
 
 Validation:
 

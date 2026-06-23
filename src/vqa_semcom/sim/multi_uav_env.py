@@ -341,13 +341,14 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "num_areas": 4,
             "tasks_per_episode": 24,
             "episode_steps": 12,
-            "area_spacing_m": 240.0,
+            "area_spacing_m": 170.0,
             "area_radius_m": 75.0,
-            "edge_load_range": [0.66, 0.84],
-            "gpu_load_range": [0.62, 0.82],
-            "queue_delay_scale_s": 0.95,
-            "gpu_queue_delay_scale_s": 0.72,
-            "model_load_delay_s": 0.78,
+            "uav_speed_mps": 24.0,
+            "edge_load_range": [0.56, 0.76],
+            "gpu_load_range": [0.52, 0.72],
+            "queue_delay_scale_s": 0.62,
+            "gpu_queue_delay_scale_s": 0.48,
+            "model_load_delay_s": 0.55,
             "model_cache_hit_delay_s": 0.08,
             "model_cache_capacity": 1,
             "gpu_memory_capacity_mb": 4096.0,
@@ -361,7 +362,7 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "risk_cycle": ["normal", "normal", "normal", "critical", "normal", "normal"],
             "freshness_cycle": ["fresh", "fresh", "fresh", "stale"],
             "view_quality_cycle": ["good", "good", "medium", "good"],
-            "tau_scale": 1.1,
+            "tau_scale": 1.55,
         },
     },
     "utm_conflict": {
@@ -369,11 +370,11 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
         "env": {
             "num_uavs": 4,
             "num_edges": 1,
-            "num_areas": 1,
+            "num_areas": 3,
             "tasks_per_episode": 20,
             "episode_steps": 10,
-            "area_spacing_m": 75.0,
-            "area_radius_m": 145.0,
+            "area_spacing_m": 260.0,
+            "area_radius_m": 90.0,
             "area_altitude_min_m": 45.0,
             "area_altitude_max_m": 115.0,
             "reward_conflict": 2.4,
@@ -382,18 +383,19 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
                 "enabled": True,
                 "mode": "flight_intent_validation",
                 "background_operational_intents": True,
+                "background_operational_intent_density": 0.30,
                 "dss_available": True,
-                "dss_delay_s": 0.18,
-                "subscription_notification_delay_s": 0.80,
-                "spatial_buffer_m": 65.0,
-                "altitude_buffer_m": 12.0,
-                "temporal_buffer_steps": 2,
+                "dss_delay_s": 0.12,
+                "subscription_notification_delay_s": 0.55,
+                "spatial_buffer_m": 28.0,
+                "altitude_buffer_m": 8.0,
+                "temporal_buffer_steps": 1,
             },
         },
         "task_layout": {
             "generation_mode": "burst",
-            "force_same_area": True,
-            "jitter_ratio": 0.02,
+            "force_same_area": False,
+            "jitter_ratio": 0.04,
             "risk_cycle": ["critical", "normal", "critical", "normal"],
             "freshness_cycle": ["stale", "fresh", "expired", "stale"],
             "view_quality_cycle": ["medium", "good", "medium", "poor"],
@@ -1771,9 +1773,18 @@ class MultiUAVVQAEnv:
             for other_task in self._active_tasks():
                 if other_task.task_id == task.task_id or other_task.completed or other_task.task_id in conflict_ids:
                     continue
-                if self._area4d_overlaps_with_buffer(task.area4d, other_task.area4d):
+                if self._background_intent_is_active(other_task) and self._area4d_overlaps_with_buffer(task.area4d, other_task.area4d):
                     conflict_ids.append(other_task.task_id)
         return conflict_ids
+
+    def _background_intent_is_active(self, task: EnvTask) -> bool:
+        utm = self.env_cfg.get("utm", {})
+        density = max(0.0, min(1.0, float(utm.get("background_operational_intent_density", 1.0))))
+        if density >= 1.0:
+            return True
+        key = f"{self.episode}:{self.step_count}:{task.operational_intent_id}:{task.task_id}:background_intent"
+        score = 0.5 + 0.5 * self._deterministic_normal(key) / 4.0
+        return max(0.0, min(1.0, score)) < density
 
     def _area4d_overlaps_with_buffer(self, first: Area4D, second: Area4D) -> bool:
         utm = self.env_cfg.get("utm", {})

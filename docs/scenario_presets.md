@@ -1,6 +1,6 @@
 # UAV Semantic Scenario Presets
 
-Last updated: 2026-06-22 Asia/Shanghai
+Last updated: 2026-06-23 Asia/Shanghai
 
 This document defines the paper-facing scenario presets for the canonical UAV-driven semantic VQA network simulator:
 
@@ -62,13 +62,13 @@ Use this preset to validate the claim that task-oriented semantic evidence can r
 
 High edge CPU/GPU load, larger queue delay constants, single model-cache slot, and reduced GPU memory capacity. The channel is not the primary stressor.
 
-The preset caps semantic thresholds more gently than `disaster_hotspot` so that the benchmark measures edge queue/resource pressure rather than making all semantic QoS infeasible. In lightweight V1.9 probes, semantic-token evidence remains feasible for a subset of tasks while deadline violations are driven by queue and model-cache delay.
+The preset caps semantic thresholds more gently than `disaster_hotspot` and uses moderate task spacing, high-but-not-saturated edge load, and calibrated queue/model-load delay constants. This keeps the benchmark focused on edge queue/resource pressure instead of turning every semantic-token route into a deadline failure. In the latest lightweight V1.9 probe, the token route keeps deadline violation near 0.58 and semantic success near 0.75, so the scenario remains stressful while retaining a meaningful feasible region.
 
 Use this preset to test MEC-aware semantic routing and Lyapunov/resource-projection behavior.
 
 ### `utm_conflict`
 
-Burst tasks share an overlapping operational area. The preset enables UTM-style flight-intent validation with DSS delay, subscription notification delay, spatial/altitude/temporal buffers, and observable intent states:
+Burst tasks include a mix of overlapping and separable operational areas. The preset enables UTM-style flight-intent validation with DSS delay, subscription notification delay, spatial/altitude/temporal buffers, and observable intent states:
 
 ```text
 accepted / activated / nonconforming / contingent
@@ -76,7 +76,7 @@ accepted / activated / nonconforming / contingent
 
 Use this preset to test UTM/risk costs and conflict-aware task/UAV matching. Cache-only service does not create an operational intent and should not trigger an airspace conflict by itself.
 
-The preset enables background operational-intent conflict detection. This makes algorithm-style single-task actions observe the same UTM pressure that environment smoke tests observe with explicit `concurrent_actions`, while preserving cache-only no-conflict behavior.
+The preset enables background operational-intent conflict detection. Background intent density and 4D buffers are calibrated to produce moderate conflict pressure rather than all-conflict behavior. In the latest lightweight V1.9 probe, token-style actions produce UTM conflict near 0.50. Cache-only service still creates no operational intent and remains conflict-free.
 
 ## Required Info Fields
 

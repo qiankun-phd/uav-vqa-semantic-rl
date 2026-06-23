@@ -267,7 +267,10 @@ Completed 2026-06-23 Asia/Shanghai:
 4. Added background operational-intent conflict detection for the `utm_conflict` preset only; cache-only service remains conflict-free.
 5. Recalibrated `edge_overload` so semantic evidence can be feasible for a subset of tasks while edge queue/deadline pressure remains high.
 6. Regenerated environment-owned small summaries under `outputs/env/semantic_scenario_presets/`.
-7. Verified lightweight V1.9 probes: `utm_conflict` token/image actions now produce UTM conflict 12/12; `edge_overload` token/image semantic feasibility is 9/12 and 4/12 while deadline pressure remains 12/12.
+7. Reviewed the v3 benchmark results after cache-collapse mitigation: `edge_overload` was token-only but had deadline violation 0.902, and `utm_conflict` exposed UTM pressure but was near all-conflict with rate 0.913.
+8. Lightly recalibrated `edge_overload` while keeping edge CPU/GPU/model-cache pressure: token/proposed-style deadline violation is now about 0.58 in the lightweight V1.9 probe, with semantic success about 0.75.
+9. Lightly recalibrated `utm_conflict` while keeping UTM pressure: background intent density and 4D buffers now give token-style UTM conflict about 0.50, while cache-only service remains conflict-free.
+10. Regenerated environment-owned small summaries under `outputs/env/semantic_scenario_presets/`; rerun the full algorithm scenario benchmark before using post-calibration metrics in paper tables.
 
 Completed 2026-06-22 Asia/Shanghai:
 
