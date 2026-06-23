@@ -843,6 +843,42 @@ Validation:
 # Ran 78 tests OK
 ```
 
+## Semantic Service-Candidate Utility Interface 2026-06-23 Asia/Shanghai
+
+Added a mobility-aware RL/env helper on top of the stable semantic utility LUT key:
+
+```python
+SemanticUtilityModel.get_service_candidates(obs)
+```
+
+The helper keeps the existing key unchanged:
+
+```text
+question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level
+```
+
+For each candidate service level it returns:
+
+```text
+accuracy_mean, accuracy_lcb, uncertainty, payload_kb, sample_count,
+semantic_quality_gap, semantic_efficiency, is_snr_sensitive,
+recommended_for_low_snr, recommended_for_critical
+```
+
+New/updated files:
+
+```text
+src/vqa_semcom/semantic/utility.py
+tests/test_semantic_utility.py
+outputs/reports/semantic_service_candidate_interface.md
+```
+
+The report confirms that the current LUT still supports the paper explanation:
+
+- `s=0` cache answer is payload-free and SNR-invariant, but must be freshness/risk gated.
+- `s=1` semantic token is the lightweight semantic communication service and explains low-SNR/edge-overload payload advantages.
+- `s=2` image evidence carries more visual evidence but has much larger payload and higher link/queue sensitivity.
+
 ## Scenario-Aware Semantic Benchmark v4 2026-06-23 Asia/Shanghai
 
 Algorithm thread reran the semantic scenario benchmark after environment commit `8f903c2 fix(env): calibrate scenario feasibility for semantic benchmark`.

@@ -167,6 +167,29 @@ payload_kb = u.payload_kb
 semantic_uncertainty = u.uncertainty
 ```
 
+Candidate-service usage for mobility-aware RL/env:
+
+```python
+candidates = utility.get_service_candidates(obs)
+```
+
+Each candidate keeps the same semantic utility LUT key and returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+
+The helper does not add a LUT dimension. It evaluates the same task condition across service levels and computes:
+
+```text
+semantic_quality_gap = max(0, epsilon_k - accuracy_lcb)
+semantic_efficiency = quality-adjusted conservative utility per payload unit
+```
+
+Paper-facing service semantics:
+
+| service | semantic name | communication meaning | expected operating point |
+|---:|---|---|---|
+| 0 | cache answer | Reuse cached answer or cached semantic result. Payload is near zero, but quality depends on freshness/cache hit and is not SNR-sensitive. | Low-risk, fresh-cache tasks; avoid for stale critical tasks unless LCB clears epsilon. |
+| 1 | semantic token / compact evidence | Transmit detector tags, boxes, counts, and compact evidence. This is the main lightweight semantic communication mode. | Low-SNR, edge-overload, and payload-sensitive settings where token LCB satisfies semantic QoS. |
+| 2 | image evidence | Transmit raw/full visual evidence for VQA/VLM reasoning. Payload and edge workload are high, and delay is more sensitive to poor links. | Use when compact evidence is insufficient and the task can tolerate higher delay/energy. |
+
 For paper writing, describe this as a task-conditioned semantic utility model calibrated from measured VQA correctness under sensed SNR, view quality, freshness, and service-level evidence. Do not describe it as an image-quality score.
 
 ## Reward Contract

@@ -710,6 +710,25 @@ Next algorithm steps:
 3. Convert `v3_vs_v4_delta.md` into a paper-facing environment-calibration sanity table.
 4. Keep `.pt`, rollout CSV, and per-scenario training traces uncommitted unless explicitly needed for reproducibility.
 
+## Semantic Service-Candidate Utility Interface
+
+Completed 2026-06-23 Asia/Shanghai:
+
+- Added `SemanticUtilityModel.get_service_candidates(obs)` for RL/env code that needs all service-level utilities before choosing mobility/resource actions.
+- Kept the semantic LUT key unchanged: `question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level`.
+- Added derived fields for control and paper analysis: `semantic_quality_gap`, `semantic_efficiency`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+- Generated:
+
+```text
+outputs/reports/semantic_service_candidate_interface.md
+```
+
+Next coordination items:
+
+1. Environment thread: expose candidate utilities in `info` or a side-channel helper before mobility-aware action projection.
+2. Algorithm thread: use `semantic_efficiency` and low-SNR/critical flags as priors, not as hard rules.
+3. Paper/results thread: cite the report when explaining why token service is a lightweight semantic-communication baseline under low SNR and edge overload.
+
 ## Output Naming Convention
 
 Use explicit run names:

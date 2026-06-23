@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from vqa_semcom.semantic.utility import (  # noqa: E402
     SemanticUtilityModel,
     build_semantic_utility_from_predictions,
+    service_level_name,
     write_semantic_utility_csv,
 )
 
@@ -100,7 +101,56 @@ class SemanticUtilityTest(unittest.TestCase):
         self.assertIn("sparse_cell", sparse.calibration_note)
         self.assertGreater(sparse.uncertainty, dense.uncertainty)
 
+    def test_service_candidate_interface_keeps_lut_key_stable(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="0dB", correct=True, payload_bytes=0) for _ in range(8)])
+        rows.extend([_row(service_level=1, snr_bin="0dB", correct=True, payload_bytes=1024) for _ in range(8)])
+        rows.extend([_row(service_level=2, snr_bin="0dB", correct=True, payload_bytes=102400) for _ in range(8)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        candidates = model.get_service_candidates(
+            {
+                "question_type": "presence",
+                "snr_bin": "0dB",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+                "risk_level": "normal",
+                "epsilon_k": 0.60,
+            },
+            service_levels=[0, 1, 2],
+        )
+        self.assertEqual([item.service_level for item in candidates], [0, 1, 2])
+        self.assertEqual(candidates[0].service_name, "cache_answer")
+        self.assertFalse(candidates[0].is_snr_sensitive)
+        self.assertTrue(candidates[1].is_snr_sensitive)
+        self.assertGreaterEqual(candidates[1].semantic_efficiency, candidates[2].semantic_efficiency)
+
+    def test_service_candidate_recommendation_flags_are_quality_aware(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="-5dB", correct=True, payload_bytes=0, risk="critical") for _ in range(30)])
+        rows.extend([_row(service_level=1, snr_bin="-5dB", correct=True, payload_bytes=1024, risk="critical") for _ in range(30)])
+        rows.extend([_row(service_level=2, snr_bin="-5dB", correct=True, payload_bytes=102400, risk="critical") for _ in range(30)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        candidates = model.get_service_candidates(
+            {
+                "question_type": "presence",
+                "snr_bin": "-5dB",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+                "risk_level": "critical",
+                "epsilon_k": 0.70,
+            },
+            service_levels=[0, 1, 2],
+        )
+        by_level = {item.service_level: item for item in candidates}
+        self.assertTrue(by_level[1].recommended_for_low_snr)
+        self.assertTrue(by_level[1].recommended_for_critical)
+        self.assertFalse(by_level[2].recommended_for_low_snr)
+
+    def test_service_level_names_are_paper_facing(self) -> None:
+        self.assertEqual(service_level_name(0), "cache_answer")
+        self.assertEqual(service_level_name(1), "semantic_token")
+        self.assertEqual(service_level_name(2), "image_evidence")
+
 
 if __name__ == "__main__":
     unittest.main()
-

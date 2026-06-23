@@ -47,6 +47,22 @@ class SemanticUtilityEstimate:
 
 
 @dataclass(frozen=True)
+class ServiceCandidateUtility:
+    service_level: int
+    service_name: str
+    accuracy_mean: float
+    accuracy_lcb: float
+    uncertainty: float
+    payload_kb: float
+    sample_count: int
+    semantic_quality_gap: float
+    semantic_efficiency: float
+    is_snr_sensitive: bool
+    recommended_for_low_snr: bool
+    recommended_for_critical: bool
+
+
+@dataclass(frozen=True)
 class SemanticUtilityCell:
     question_type: str
     service_level: int
@@ -359,6 +375,58 @@ class SemanticUtilityModel:
             sample_count=0,
         )
 
+    def get_service_candidates(
+        self,
+        obs: dict[str, Any],
+        service_levels: Iterable[int] | None = None,
+    ) -> list[ServiceCandidateUtility]:
+        """Return control-facing utility for each candidate evidence service.
+
+        This is a thin RL/env-facing layer on top of the stable LUT key:
+
+        ``question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level``.
+
+        The method does not add a new LUT dimension.  It only evaluates the
+        same task condition across candidate service levels and derives routing
+        hints that are convenient for mobility-aware controllers.
+        """
+
+        task_type = str(obs.get("question_type", obs.get("task_type", "")))
+        if not task_type:
+            raise ValueError("obs must contain question_type or task_type")
+        snr_value = obs.get("snr_bin", obs.get("sensed_snr_db", ""))
+        if snr_value == "":
+            raise ValueError("obs must contain snr_bin or sensed_snr_db")
+        view_quality = str(obs.get("view_quality_bin", "medium"))
+        freshness = str(obs.get("freshness_bin", "fresh"))
+        risk = str(obs.get("risk_level", "normal"))
+        epsilon = _float_value(obs.get("epsilon_k", obs.get("epsilon", 0.0)), 0.0)
+        levels = list(service_levels) if service_levels is not None else sorted({cell.service_level for cell in self.cells})
+
+        candidates: list[ServiceCandidateUtility] = []
+        for level in levels:
+            estimate = self.U_sem(task_type, int(level), snr_value, view_quality, freshness, risk)
+            gap = max(0.0, epsilon - estimate.accuracy_lcb)
+            semantic_efficiency = self._semantic_efficiency(estimate, gap)
+            snr_sensitive = int(level) != 0
+            candidates.append(
+                ServiceCandidateUtility(
+                    service_level=int(level),
+                    service_name=service_level_name(int(level)),
+                    accuracy_mean=estimate.accuracy_mean,
+                    accuracy_lcb=estimate.accuracy_lcb,
+                    uncertainty=estimate.uncertainty,
+                    payload_kb=estimate.payload_kb,
+                    sample_count=estimate.sample_count,
+                    semantic_quality_gap=round(gap, 6),
+                    semantic_efficiency=semantic_efficiency,
+                    is_snr_sensitive=snr_sensitive,
+                    recommended_for_low_snr=self._recommended_for_low_snr(int(level), estimate, gap, freshness),
+                    recommended_for_critical=self._recommended_for_critical(int(level), estimate, gap, risk, freshness),
+                )
+            )
+        return candidates
+
     def _nearest_snr_cell(
         self,
         task_type: str,
@@ -384,6 +452,53 @@ class SemanticUtilityModel:
         if not candidates:
             return None
         return min(candidates, key=lambda cell: abs(snr_db_from_label(cell.snr_bin) - target_snr))
+
+    @staticmethod
+    def _semantic_efficiency(estimate: SemanticUtilityEstimate, semantic_quality_gap: float) -> float:
+        usable_lcb = max(0.0, estimate.accuracy_lcb - semantic_quality_gap)
+        confidence_discount = max(0.0, 1.0 - min(1.0, estimate.uncertainty))
+        return round((usable_lcb * confidence_discount) / (1.0 + max(0.0, estimate.payload_kb)), 6)
+
+    @staticmethod
+    def _recommended_for_low_snr(
+        service_level: int,
+        estimate: SemanticUtilityEstimate,
+        semantic_quality_gap: float,
+        freshness_bin: str,
+    ) -> bool:
+        if semantic_quality_gap > 0.0:
+            return False
+        if service_level == 1:
+            return True
+        if service_level == 0:
+            return freshness_bin != "expired"
+        return False
+
+    @staticmethod
+    def _recommended_for_critical(
+        service_level: int,
+        estimate: SemanticUtilityEstimate,
+        semantic_quality_gap: float,
+        risk_level: str,
+        freshness_bin: str,
+    ) -> bool:
+        if risk_level != "critical" or semantic_quality_gap > 0.0:
+            return False
+        if estimate.sample_count <= 0 or estimate.uncertainty > 0.40:
+            return False
+        if service_level == 0 and freshness_bin != "fresh":
+            return False
+        return True
+
+
+def service_level_name(service_level: int) -> str:
+    names = {
+        0: "cache_answer",
+        1: "semantic_token",
+        2: "image_evidence",
+        3: "roi_crop_image",
+    }
+    return names.get(int(service_level), f"service_{int(service_level)}")
 
 
 def read_semantic_utility_csv(path: Path) -> list[SemanticUtilityCell]:
@@ -554,4 +669,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
