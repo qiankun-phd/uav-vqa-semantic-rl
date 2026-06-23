@@ -183,7 +183,7 @@ outputs/reports/semantic_utility_api_examples.md
 
 - The demo queries representative cache, semantic-token, and image-evidence cells and reports `accuracy_mean`, `accuracy_lcb`, `payload_kb`, `uncertainty`, and `sample_count`.
 
-TWC mainline documentation completed 2026-06-22 Asia/Macau:
+Paper-ready semantic communication mainline documentation completed 2026-06-22 Asia/Macau:
 
 - Defined the paper-level mainline as:
 
@@ -208,6 +208,22 @@ accuracy_lcb,k >= epsilon_k
 
 - The interface now requires `semantic_payload_kb` and `semantic_quality_gap` in addition to semantic accuracy/uncertainty/sample-count fields.
 - This was a documentation/interface-planning step only; no RL core algorithm or environment dynamics were changed.
+
+Benchmark narrative documentation completed 2026-06-22 Asia/Macau:
+
+- Added/updated:
+
+```text
+docs/paper_algorithm_outline.md
+docs/benchmark_protocol.md
+docs/interfaces.md
+docs/formal_problem_definition.md
+docs/twc_algorithm_plan.md
+```
+
+- The unified paper narrative is now UAV-assisted semantic VQA emergency networking with conservative semantic utility, evidence routing, Semantic-LCB Lyapunov hybrid control, and scenario-aware evaluation.
+- The benchmark protocol defines five paper-ready scenarios: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
+- This was a documentation-only pass; no core RL algorithm or environment dynamics were changed.
 
 Resource simulation headline:
 
@@ -578,7 +594,7 @@ Small-scale result in `outputs/rl/v1_9_rl_fix_cache_collapse/`:
 
 Next required algorithm step: rerun formal multi-seed comparison with the fixed controller and include unseen conflict/interference/mobility scenarios.
 
-## TWC Semantic-Lyapunov Hybrid Control 2026-06-22 Asia/Shanghai
+## Semantic-Lyapunov Hybrid Control 2026-06-22 Asia/Shanghai
 
 Algorithm thread implemented the first Sem-Lyapunov Hybrid Control v1 skeleton for the paper main method:
 

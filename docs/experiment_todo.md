@@ -97,7 +97,7 @@ src/vqa_semcom/semantic/utility.py
 7. Done: Exposed `semantic_payload_kb` and standardized `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` for Semantic-Lyapunov queue updates.
 8. Do not overwrite VQA/SNR-LUT artifacts or algorithm outputs owned by another thread.
 
-## TWC Mainline TODO
+## Paper-ready Mainline TODO
 
 Target paper mainline:
 
@@ -117,7 +117,7 @@ Environment thread responsibilities:
 
 1. Consume the semantic utility interface and expose semantic QoS fields in `info`.
 2. Add queue-ready metrics: `semantic_quality_gap`, deadline gap, energy pressure, and UTM/risk pressure.
-3. Preserve environment dynamics compatibility; do not change UAV mobility/channel dynamics for this documentation-only TWC planning step.
+3. Preserve environment dynamics compatibility; do not change UAV mobility/channel dynamics for this documentation-only planning step.
 4. Keep environment outputs under `outputs/env`.
 
 Final ablations required for the paper:
@@ -362,10 +362,41 @@ Next environment steps:
 7. Done: VQA thread added the calibrated semantic utility model with CI, uncertainty, and SNR monotonic sanity checks.
 8. Done: Algorithm-facing environment wrapper queries the semantic utility interface when `outputs/lut/v1_9_semantic_utility_with_ci.csv` is available and exposes conservative `accuracy_lcb`, uncertainty, and sample count in `info`/CSV records.
 9. Done: Added the first cache-collapse fix for PPO/TCH-PPO: reward scaling through semantic LCB, entropy schedule, decaying service-level imitation prior, oracle warm-start, service-dependent resource floors, semantic feasibility projection, and UTM/DSS/off-nominal cost hooks.
-10. Done: TWC mainline documentation defines Conservative VQA-grounded Semantic-Lyapunov Hybrid Control as the paper-level problem/algorithm direction.
-11. Done: Algorithm-facing environment wrapper exposes the TWC semantic info fields, including `semantic_payload_kb`, `semantic_quality_gap`, and Lyapunov queue state fields.
+10. Done: Paper-ready mainline documentation defines Conservative VQA-grounded Semantic-Lyapunov Hybrid Control as the paper-level problem/algorithm direction.
+11. Done: Algorithm-facing environment wrapper exposes the paper-ready semantic info fields, including `semantic_payload_kb`, `semantic_quality_gap`, and Lyapunov queue state fields.
 12. Done: Algorithm thread implemented explicit Semantic-Lyapunov queue states and added without-LCB/without-queue/without-projection ablation switches.
 13. Ongoing: All threads update docs/current_status.md and docs/experiment_todo.md before ending work.
+
+## Paper Benchmark Protocol TODO
+
+Completed 2026-06-22 Asia/Macau:
+
+- Added `docs/paper_algorithm_outline.md`.
+- Updated `docs/benchmark_protocol.md` around five benchmark scenarios:
+  - `nominal_patrol`
+  - `disaster_hotspot`
+  - `low_snr_blockage`
+  - `edge_overload`
+  - `utm_conflict`
+- Checked consistency across `docs/interfaces.md`, `docs/formal_problem_definition.md`, and `docs/twc_algorithm_plan.md`:
+  - semantic QoS: `accuracy_lcb >= epsilon_k`
+  - quality gap: `semantic_quality_gap = max(0, epsilon_k - accuracy_lcb)`
+  - service levels: `s=0` cache answer, `s=1` semantic token / compact evidence, `s=2` image evidence.
+
+Thread responsibilities:
+
+1. Environment thread owns scenario presets and environment-only smoke artifacts for the five benchmark scenarios.
+2. Algorithm thread owns scenario benchmark runs, ablations, and policy summaries under `outputs/rl`, `outputs/hppo`, or `runs`.
+3. VQA/semantic utility controller thread owns utility calibration, summary tables, and paper narrative synthesis.
+
+Benchmark ablations to prepare:
+
+- without LCB,
+- without Semantic-Lyapunov queue,
+- without resource/action projection,
+- without semantic tokens,
+- greedy and oracle semantic-utility baselines,
+- fixed-service baselines.
 
 ## RL Cache-Collapse Follow-Up
 
@@ -386,7 +417,7 @@ Next algorithm steps:
 3. Report `ppo_training_trace.csv` non-cache ratio, entropy schedule, service prior, semantic LCB, uncertainty, and lambda trace alongside success/accuracy/delay/energy/payload.
 4. Tune deadline feasibility separately if formal runs still show high deadline violation for evidence-rich actions.
 
-## TWC Semantic-Lyapunov Control Follow-Up
+## Semantic-Lyapunov Control Follow-Up
 
 Completed 2026-06-22 Asia/Shanghai:
 

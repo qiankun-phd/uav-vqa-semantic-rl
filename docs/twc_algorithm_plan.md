@@ -1,4 +1,4 @@
-# TWC Algorithm Plan
+# Paper-ready Semantic-Lyapunov Algorithm Plan
 
 Last updated: 2026-06-22 Asia/Macau
 
@@ -8,7 +8,7 @@ Working title:
 Conservative VQA-grounded Semantic-Lyapunov Hybrid Control for UAV Semantic Communications
 ```
 
-This document fixes the paper-facing algorithmic mainline. The contribution should not be framed as generic PPO resource allocation. The core is a conservative semantic control architecture that uses measured VQA utility, virtual queues, and hybrid action projection to manage UAV semantic communication services.
+This document fixes the paper-facing algorithmic mainline for a journal-level wireless and edge intelligence study. The contribution should not be framed as generic PPO resource allocation. The core is a conservative semantic control architecture that uses measured VQA utility, virtual queues, and hybrid action projection to manage UAV semantic communication services.
 
 ## Main Idea
 
@@ -145,4 +145,3 @@ VQA/semantic utility thread:
 - maintain `U_sem` artifacts,
 - update calibration reports,
 - avoid overwriting algorithm/environment outputs.
-

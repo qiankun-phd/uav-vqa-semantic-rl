@@ -1,161 +1,312 @@
-# Semantic Network Benchmark Protocol
+# UAV Semantic Communication Benchmark Protocol
 
 Last updated: 2026-06-22 Asia/Shanghai
 
-This protocol defines the paper-facing benchmark for the UAV-driven VQA semantic communication network simulator. The canonical simulator is `src/vqa_semcom/sim/multi_uav_env.py`; algorithm code should consume this environment rather than duplicate its dynamics.
+This protocol defines the paper-ready benchmark for the UAV-assisted semantic VQA emergency network. The goal is to evaluate semantic communication control under sensing, communication, edge-computing, cache, mobility, and UTM/risk pressure.
 
-## Scope
+The benchmark should support a journal-level wireless and edge intelligence study. It should not be framed as a generic PPO benchmark or as a target for one specific venue.
 
-The benchmark evaluates a controller that jointly selects semantic service routing, UAV assignment, communication resources, edge resources, semantic cache usage, and UTM-style operational-intent behavior.
+## System Under Test
 
-V1.9 service levels are:
+The network consists of:
 
-| service level | name | evidence | status |
-|---:|---|---|---|
-| 0 | `cache_answer` | cached semantic answer | enabled |
-| 1 | `semantic_tokens` | detector tags/boxes/tokens | enabled |
-| 2 | `raw_image_evidence` | full image evidence for VLM/VQA inference | enabled |
-| 3 | `roi_crop_image` | ROI/crop evidence | disabled until ROI/crop LUT exists |
+- multiple UAVs that collect or reuse visual semantic evidence,
+- emergency VQA tasks generated over disaster/inspection regions,
+- wireless UAV-edge links with sensed SNR and payload-dependent delay,
+- edge inference and queueing resources,
+- semantic cache state and freshness,
+- UTM/airspace constraints for realistic UAV operations.
 
-VQA answer accuracy and payload are provided by the V1.9 LUT:
+The service levels are:
+
+| service level | semantic name | transmitted/reused evidence |
+|---:|---|---|
+| 0 | cache answer | cached answer or cached semantic result |
+| 1 | semantic token / compact evidence | detector tags, boxes, counts, and compact evidence |
+| 2 | image evidence | raw/full visual evidence for VQA inference |
+
+Service level 3, ROI/crop evidence, is reserved until calibrated semantic utility rows exist for that service.
+
+## Semantic Utility Contract
+
+Task quality is defined by VQA-grounded semantic reliability:
 
 ```text
-A_k = LUT[question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level]
-D_k = LUT_payload[question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level]
+U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level)
+  -> accuracy_mean, accuracy_lcb, payload_kb, uncertainty, sample_count
 ```
 
-No online VLM/Qwen inference is run inside benchmark episodes.
+The semantic QoS condition is:
+
+```text
+accuracy_lcb >= epsilon_k
+```
+
+The benchmark should report both expected accuracy and conservative LCB accuracy, but online conservative control should use `accuracy_lcb`.
+
+The semantic quality gap is:
+
+```text
+semantic_quality_gap = max(0, epsilon_k - accuracy_lcb)
+```
 
 ## Train/Test Scenario Split
 
-Training scenarios:
+Training should use easier or mixed versions of the scenario family:
 
-| scenario | purpose |
-|---|---|
-| `train_nominal` | calibrated nominal task arrivals and resource states |
-| `train_mixed_random` | samples known stressors from nominal/cache/interference/mobility settings |
+| split | scenario preset | role |
+|---|---|---|
+| train | `nominal_patrol` | stable baseline policy learning |
+| train | mixed sampled stressors | randomized mild SNR/cache/edge/mobility pressure |
 
-Held-out semantic-network test scenarios:
+Evaluation should use fixed, named stress scenarios:
 
-| scenario | stressor |
-|---|---|
-| `test_conflict_heavy` | overlapping Area4D operational volumes and airspace conflict penalties |
-| `test_interference_heavy` | concurrent same-band multi-UAV uploads and SINR degradation |
-| `test_cache_heavy` | repeated areas, semantic cache reuse, and freshness effects |
-| `test_mobility_stress` | sparse disaster areas, longer flight legs, tighter battery reserve |
-| `test_unseen_mixed` | larger unseen mixture of conflict, interference, cache, and mobility stressors |
+```text
+nominal_patrol
+disaster_hotspot
+low_snr_blockage
+edge_overload
+utm_conflict
+```
 
-UTM realistic flight-test scenarios:
+All paper tables should report at least these five scenarios. Additional scalability sweeps can be layered on top.
 
-| scenario | InterUSS/UTM concept |
-|---|---|
-| `test_utm_nominal_planning` | accepted-to-activated operational intent flow with available DSS |
-| `test_utm_off_nominal_planning` | nonconforming operations under mobility/battery pressure |
-| `test_utm_intent_conflict` | buffered strategic conflict detection over 4D operational intents |
-| `test_utm_dss_outage` | contingent operation when DSS coordination is unavailable |
-| `test_utm_notification_delay` | subscription/notification delay for conflict updates |
+## Scenario Matrix
 
-The UTM scenarios are benchmark/test scenarios, not default PPO training scenarios, unless a specific experiment intentionally trains on UTM stressors.
+### 1. `nominal_patrol`
+
+Network pressure source:
+
+- moderate task arrivals,
+- mostly feasible UAV mobility,
+- medium/good SNR,
+- balanced edge load,
+- normal cache freshness.
+
+Why this is UAV semantic communication:
+
+- UAVs still decide whether to reuse cache, send compact semantic evidence, or send image evidence.
+- The objective is answer correctness under payload, delay, and energy limits rather than raw throughput.
+
+Algorithm capability to verify:
+
+- stable service-level routing,
+- reasonable payload reduction compared with always-image,
+- no unnecessary UTM or energy violations.
+
+Main metrics:
+
+- conservative VQA success rate,
+- `semantic_accuracy_lcb`,
+- average payload KB,
+- delay and energy,
+- service-level selection ratio.
+
+Expected phenomenon:
+
+- semantic tokens and cache should be selected often,
+- greedy/oracle-style policies should reduce payload while keeping high success,
+- learned controllers should not collapse to cache-only behavior.
+
+### 2. `disaster_hotspot`
+
+Network pressure source:
+
+- bursty task arrivals around damaged/blocked regions,
+- higher task priority and more critical tasks,
+- higher UAV sensing demand,
+- more repeated/nearby questions that can benefit from cache.
+
+Why this is UAV semantic communication:
+
+- many questions do not need full images if compact evidence is sufficient,
+- emergency tasks require task-aware semantic evidence routing under deadlines.
+
+Algorithm capability to verify:
+
+- prioritization of critical VQA tasks,
+- semantic cache exploitation without stale-answer overuse,
+- service escalation from cache/tokens to image evidence when LCB is insufficient.
+
+Main metrics:
+
+- critical-task success rate,
+- quality violation rate,
+- cache hit/service ratio,
+- semantic uncertainty,
+- deadline violation rate.
+
+Expected phenomenon:
+
+- conservative policies should select more image evidence for critical low-confidence cells,
+- semantic tokens should still reduce payload for presence/counting tasks,
+- without LCB should overestimate risky or sparse cells.
+
+### 3. `low_snr_blockage`
+
+Network pressure source:
+
+- poor sensed SNR caused by blockage, distance, or unfavorable geometry,
+- lower transmission rate and stronger evidence degradation,
+- larger payload penalty for image evidence.
+
+Why this is UAV semantic communication:
+
+- channel quality affects answer reliability through semantic utility, not only bit rate.
+- the controller must decide whether semantic tokens, cache, or image evidence are worth transmitting at low SNR.
+
+Algorithm capability to verify:
+
+- SNR-aware semantic evidence routing,
+- payload-delay tradeoff under poor links,
+- robust conservative QoS using `accuracy_lcb`.
+
+Main metrics:
+
+- success vs SNR bin,
+- payload reduction vs always-image,
+- transmission delay,
+- `semantic_quality_gap`,
+- uncertainty-weighted failures.
+
+Expected phenomenon:
+
+- always-image becomes expensive and delay-heavy,
+- semantic tokens may dominate when compact evidence is reliable,
+- conservative LCB avoids over-selecting sparse high-mean cells.
+
+### 4. `edge_overload`
+
+Network pressure source:
+
+- high edge CPU/GPU queue load,
+- model/cache load pressure,
+- inference delay increase,
+- limited compute share for VQA processing.
+
+Why this is UAV semantic communication:
+
+- semantic evidence level changes edge workload: cache is cheap, tokens are moderate, images are heavy.
+- resource allocation must jointly account for communication payload and edge inference cost.
+
+Algorithm capability to verify:
+
+- compute-aware semantic routing,
+- CPU/GPU resource projection,
+- deadline-aware degradation under edge congestion.
+
+Main metrics:
+
+- queue/inference delay,
+- deadline violation rate,
+- service-level ratio,
+- energy and payload,
+- conservative success under heavy edge load.
+
+Expected phenomenon:
+
+- image evidence should be used selectively,
+- cache/tokens should reduce edge pressure,
+- without projection should suffer resource violations or unstable delays.
+
+### 5. `utm_conflict`
+
+Network pressure source:
+
+- overlapping UAV operational intents,
+- conflict-heavy Area4D routing,
+- DSS/notification delay or airspace coordination pressure,
+- off-nominal mobility/risk states.
+
+Why this is UAV semantic communication:
+
+- UAVs must provide semantic VQA service while respecting airspace constraints.
+- the semantic objective is coupled with mobility and operational intent risk.
+
+Algorithm capability to verify:
+
+- UTM/risk-aware task assignment and waypoint choices,
+- safe service routing under airspace conflicts,
+- Semantic-Lyapunov queue response to risk pressure.
+
+Main metrics:
+
+- UTM/risk violation rate,
+- airspace conflict count,
+- conservative VQA success,
+- delay/energy under detours,
+- task completion under conflict pressure.
+
+Expected phenomenon:
+
+- naive always-image or conflict-unaware policies incur higher delay/UTM risk,
+- queue-aware hybrid control should trade some payload/route cost for lower risk,
+- oracle/greedy baselines establish feasibility bounds.
 
 ## Scalability Dimensions
 
-Scalability is evaluated by varying three independent dimensions.
+Scalability experiments should vary:
 
-UAV count:
-
-| profile | value |
-|---|---:|
-| `M2` | 2 UAVs |
-| `M4` | 4 UAVs |
-| `M6` | 6 UAVs |
-| `M8` | 8 UAVs |
-
-Task arrival:
-
-| profile | setting |
+| dimension | values |
 |---|---|
-| `low` | 12 tasks, 12 slots |
-| `medium` | 24 tasks, 12 slots |
-| `high` | 40 tasks, 16 slots |
+| UAV count | 2, 4, 6, 8 |
+| task arrival | low, medium, high, bursty |
+| edge load | light, medium, heavy |
+| sensed SNR mix | good-dominant, balanced, blockage-heavy |
+| critical-task ratio | low, medium, high |
 
-Edge load:
+At minimum, report UAV count, task arrival, and edge load sweeps for `nominal_patrol` and one stress scenario.
 
-| profile | CPU/GPU load range |
-|---|---|
-| `light` | low CPU/GPU background load |
-| `medium` | moderate CPU/GPU background load |
-| `heavy` | high CPU/GPU background load |
+## Metrics Definition
 
-Paper experiments should report the default configuration plus either the compact scalability set or the full Cartesian sweep, depending on compute budget.
+Primary semantic metrics:
 
-## Metrics
+- `conservative_success_rate`: fraction of tasks with `accuracy_lcb >= epsilon_k`, deadline satisfied, and no hard UTM/resource violation.
+- `semantic_accuracy_mean`: expected answer correctness from `U_sem`.
+- `semantic_accuracy_lcb`: conservative correctness used for QoS.
+- `semantic_quality_gap`: `max(0, epsilon_k - accuracy_lcb)`.
+- `semantic_uncertainty`: CI/sparse-cell uncertainty.
+- `semantic_sample_count`: measured samples behind each utility cell.
 
-Primary task metrics:
+Communication/resource metrics:
 
-- `success_rate`: mean of `info["success"]`.
-- `answer_accuracy_est`: LUT-estimated VQA correctness.
-- `quality_satisfaction`: `1 - mean(quality_violation)`.
-- `deadline_satisfaction`: `1 - mean(deadline_violation)`.
-- `completion_rate`: fraction of completed tasks in multi-slot rollouts when task-level accounting is used.
-
-Resource and cost metrics:
-
-- `delay_s`: total task delay including fly, sense, tx, queue, infer, load, DSS, and notification components.
-- `energy_j`: total energy including flight, hover/sense, tx, and compute components.
-- `payload_kb`: semantic evidence payload from the LUT.
-- `semantic_utility`: task-oriented utility exposed by the simulator.
-- `semantic_efficiency`: semantic gain per payload unit.
-
-Violation metrics:
-
-- `quality_violation`
-- `deadline_violation`
-- `resource_violation`
-- `battery_violation`
-- `airspace_conflict`
-- `utm_constraint_violation`
-
-Communication metrics:
-
-- `sensed_snr_db`, `sinr_db`, `snr_bin`
-- `rate_mbps`
-- `distance_3d_m`, `elevation_deg`
-- `los_probability`, `path_loss_db`, `interference_dbm`
-
-MEC/cache metrics:
-
-- `queue_delay_s`, `infer_delay_s`, `load_delay_s`
-- `gpu_memory_ok`, `gpu_memory_used_mb`, `gpu_memory_capacity_mb`
-- `cache_hit_probability`, `semantic_cache_hit`
+- `semantic_payload_kb` / `payload_kb`,
+- average delay and deadline violation,
+- average energy,
+- edge queue/inference/model-load delay,
+- CPU/GPU share usage,
+- service-level selection ratio.
 
 UAV/UTM metrics:
 
-- `fly_delay_s`, `fly_energy_j`, `battery_remaining_j`
-- `operational_intent_state`
-- `strategic_conflict_count`
-- `dss_available`, `dss_delay_s`
-- `subscription_notification_delay_s`, `conflict_notification_pending`
+- flight delay and propulsion energy,
+- battery pressure,
+- operational intent conflict count,
+- UTM/risk violation rate,
+- DSS/notification delay when enabled.
 
-Service-level distribution should be reported from `service_level` counts, especially to show cache/tokens/image usage and to confirm `s=3` is absent unless ROI LUT support is explicitly enabled.
+Baseline comparison metrics:
+
+- payload reduction vs always-image,
+- success gain vs always-cache and always-token,
+- gap to oracle best feasible evidence,
+- ablation drop for without LCB, without queue, without projection, without semantic tokens.
 
 ## Benchmark Artifacts
 
-Commit these environment-owned benchmark artifacts when they are intentionally refreshed:
+Commit when intentionally refreshed:
 
 ```text
 docs/benchmark_protocol.md
-docs/semantic_network_architecture.md
+docs/paper_algorithm_outline.md
 docs/formal_problem_definition.md
-docs/interuss_realistic_flight_mapping.md
+docs/interfaces.md
+docs/twc_algorithm_plan.md
 outputs/env/formal_scenario_specs.md
 outputs/env/benchmark_protocol_smoke.csv
-outputs/env/utm_realistic_scenario_smoke.csv
-outputs/env/interuss_mapping_summary.md
 ```
 
-`outputs/env/formal_scenario_specs.md` is generated from `multi_uav_env.py` and should be committed when scenario definitions change. `outputs/env/benchmark_protocol_smoke.csv` is the fixed-name smoke artifact for this protocol.
-
-Do not commit transient run artifacts:
+Do not commit transient or heavy artifacts:
 
 ```text
 outputs/env/scenario_smoke_*.csv
@@ -163,45 +314,27 @@ outputs/env/env_smoke_*/
 outputs/rl/
 outputs/hppo/
 runs/
+*.pt
+*.pth
+run.log
 __pycache__/
-*.pyc
 ```
 
-Do not overwrite VQA LUT/report artifacts from environment benchmark runs:
+For algorithm experiments, commit only intentionally curated CSV/Markdown summaries, not model checkpoints, rollout dumps, or logs.
 
-```text
-outputs/lut/
-outputs/reports/
-outputs/sim/v1_9_*
-```
+## Smoke Command
 
-## Lightweight Protocol Smoke
-
-Use this smoke for protocol validation:
+Use a short smoke only to validate benchmark wiring:
 
 ```bash
-/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_semantic_network_benchmark.py \
-  --config configs/v1_9_snr_lut.yaml \
-  --steps 5 \
-  --seed 42 \
-  --output-dir outputs/env \
-  --formal-scenarios train_nominal,test_conflict_heavy,test_interference_heavy,test_cache_heavy,test_mobility_stress,test_utm_intent_conflict,test_utm_dss_outage,test_utm_notification_delay
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
 ```
 
-After the script writes a timestamped `outputs/env/scenario_smoke_*.csv`, copy that CSV to:
+If a benchmark runner is used, write a fixed summary CSV such as:
 
 ```text
 outputs/env/benchmark_protocol_smoke.csv
 ```
 
-The timestamped CSV is a temporary run product and should be removed before committing.
+and avoid committing timestamped temporary smoke outputs.
 
-## Reproducibility Checklist
-
-Before committing benchmark protocol changes:
-
-1. Regenerate `outputs/env/formal_scenario_specs.md`.
-2. Regenerate `outputs/env/benchmark_protocol_smoke.csv`.
-3. Remove timestamped `outputs/env/scenario_smoke_*.csv` files.
-4. Run `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests`.
-5. Confirm `git status --short` only includes intentional protocol/docs/artifact changes and unrelated thread outputs are left unstaged.

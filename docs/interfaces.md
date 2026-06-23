@@ -1,6 +1,6 @@
 # Interfaces
 
-Last updated: 2026-06-19 Asia/Macau
+Last updated: 2026-06-22 Asia/Macau
 Primary project root: /home/qiankun/phd_research/vqa_semcom
 
 ## Stable Environment API
@@ -50,7 +50,7 @@ Algorithm thread outputs an action with these fields:
 
 | field | type | notes |
 |---|---|---|
-| service_level | int | 0 cache answer, 1 detector semantic tokens, 2 raw image evidence. Service 3 ROI is reserved and currently not active in V1.9. |
+| service_level | int | 0 cache answer, 1 semantic token / compact evidence, 2 image evidence. Backward-compatible aliases: 1 detector semantic tokens, 2 raw image evidence. Service 3 ROI is reserved and currently not active in V1.9. |
 | bandwidth | float | Hz or normalized share; unit must be written in info. |
 | power | float | Watts or normalized share; unit must be written in info. |
 | cpu_share | float | 0..1 normalized edge/local CPU share. |
@@ -198,7 +198,7 @@ QoS semantics:
 - `semantic_success` is the semantic-only success flag before deadline/resource/UTM constraints.
 - `payload_kb` and `semantic_payload_kb` should match for the selected service; both are exposed for backward compatibility.
 
-UTM/risk cost semantics for TWC-style constrained control:
+UTM/risk cost semantics for journal-level constrained semantic control:
 
 - `utm_delay_s = utm_dss_delay_s + utm_notification_delay_s`.
 - `utm_conflict_violation` is true when strategic airspace conflict or UTM coordination violation is active.
