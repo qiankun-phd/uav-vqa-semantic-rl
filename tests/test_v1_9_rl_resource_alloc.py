@@ -17,6 +17,7 @@ from vqa_semcom.rl.v19_ppo import (
     TwoTimescalePPOPolicy,
     _project_mobility_action,
     _project_semantic_feasible_action,
+    normalize_hidden_layers,
     resolve_torch_device,
     train_ppo,
     train_two_timescale_ppo,
@@ -160,6 +161,32 @@ class V19RLResourceAllocTest(unittest.TestCase):
                 self.assertLessEqual(float(action["power"]), 1e-5)
                 self.assertLessEqual(float(action["cpu_share"]), 0.01)
                 self.assertLessEqual(float(action["gpu_share"]), 0.01)
+
+    def test_state_v2_extends_observation_vector(self) -> None:
+        env_v1 = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=8, tasks_per_episode=2, state_version="v1")
+        env_v2 = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=8, tasks_per_episode=2, state_version="v2")
+        obs_v1 = env_v1.reset(seed=8)
+        obs_v2 = env_v2.reset(seed=8)
+        self.assertEqual(obs_v1["state_version"], "v1")
+        self.assertEqual(obs_v2["state_version"], "v2")
+        self.assertGreater(len(obs_v2["vector"]), len(obs_v1["vector"]))
+
+    def test_hidden_layers_config_builds_custom_encoder(self) -> None:
+        layers = normalize_hidden_layers("256,256,128", hidden_size=32)
+        self.assertEqual(layers, (256, 256, 128))
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=9, tasks_per_episode=2)
+        try:
+            model, trace = train_ppo(
+                env,
+                PPOTrainConfig(train_episodes=1, update_epochs=1, hidden_size=32, hidden_layers=layers, device="cpu"),
+                seed=9,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 1)
+        self.assertEqual(tuple(model.hidden_layers), layers)
+        self.assertEqual(model.encoder[0].out_features, 256)
+        self.assertEqual(model.encoder[4].out_features, 128)
 
     def test_tiny_ppo_training_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=2, tasks_per_episode=4)

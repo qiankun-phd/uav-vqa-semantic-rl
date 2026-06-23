@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from vqa_semcom.rl.v19_ppo import (
     TwoTimescalePPOPolicy,
     load_ppo_policy,
     load_two_timescale_policy,
+    normalize_hidden_layers,
     save_ppo_model,
     save_two_timescale_model,
     train_ppo,
@@ -153,6 +155,7 @@ def make_env(
         service_levels=_service_levels_for_args(args, cfg),
         formal_scenario=args.formal_scenario,
         policy_name=policy_name,
+        state_version=args.state_version,
     )
 
 
@@ -293,6 +296,18 @@ def write_outputs(
         print(f"wrote {lambda_trace_csv}")
 
 
+def write_run_config(output_dir: Path, args: argparse.Namespace, ppo_cfg: PPOTrainConfig | None = None) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "argv": list(sys.argv),
+        "args": vars(args),
+        "ppo_config": asdict(ppo_cfg) if ppo_cfg is not None else None,
+    }
+    path = output_dir / "run_config.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {path}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=str(ROOT / "configs" / "v1_9_snr_lut.yaml"))
@@ -311,6 +326,8 @@ def main() -> int:
     parser.add_argument("--load-ppo-model", default=None, help="Load a trained PPO checkpoint and evaluate policy=ppo without training.")
     parser.add_argument("--train-episodes", type=int, default=120)
     parser.add_argument("--hidden-size", type=int, default=128)
+    parser.add_argument("--hidden-layers", default=None, help="Comma-separated PPO encoder widths. Defaults to --hidden-size,--hidden-size.")
+    parser.add_argument("--state-version", default="v1", choices=["v1", "v2"], help="Observation state vector version.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
@@ -410,12 +427,15 @@ def run_experiment(
     records_by_policy: dict[str, list[V19StepRecord]] = {}
     train_trace: list[dict[str, float]] = []
     ppo_policy: PPOServicePolicy | TwoTimescalePPOPolicy | None = None
+    ppo_cfg: PPOTrainConfig | None = None
 
     if args.train_ppo or (args.policy == "ppo" and not args.load_ppo_model):
         train_env = make_env(args, cfg, tasks, lut, "ppo_train")
+        hidden_layers = normalize_hidden_layers(args.hidden_layers, args.hidden_size)
         ppo_cfg = PPOTrainConfig(
             train_episodes=args.train_episodes,
             hidden_size=args.hidden_size,
+            hidden_layers=hidden_layers,
             device=args.device,
             hybrid_actions=not args.service_only_ppo,
             constrained=not args.no_constrained_ppo,
@@ -499,6 +519,7 @@ def run_experiment(
 
     summaries = summarize(records_by_policy, args.episodes, scenario=str(args.scenario or args.formal_scenario or ""))
     write_outputs(Path(args.output_dir), summaries, records_by_policy, train_trace)
+    write_run_config(Path(args.output_dir), args, ppo_cfg)
     return summaries
 
 

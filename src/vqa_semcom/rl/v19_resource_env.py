@@ -97,6 +97,7 @@ class V19LUTResourceEnv:
         service_levels: list[int] | None = None,
         formal_scenario: str | None = None,
         policy_name: str = "policy",
+        state_version: str | None = None,
     ) -> None:
         if not tasks:
             raise ValueError("V19LUTResourceEnv needs at least one task")
@@ -108,6 +109,10 @@ class V19LUTResourceEnv:
         self.seed_value = int(seed)
         self.policy_name = policy_name
         self.formal_scenario = str(formal_scenario or "")
+        rl_cfg = cfg.get("rl", {}) if isinstance(cfg, dict) else {}
+        self.state_version = str(state_version or rl_cfg.get("state_version", "v1")).lower()
+        if self.state_version not in {"v1", "v2"}:
+            raise ValueError(f"unknown state_version: {self.state_version}")
         sim_cfg = cfg.get("simulation", {})
         self.tasks_per_episode = int(tasks_per_episode or sim_cfg.get("tasks_per_episode", 40))
         self._env_cfg = self._cfg_with_overrides(cfg, snr_bins_db, service_levels)
@@ -124,7 +129,6 @@ class V19LUTResourceEnv:
         self._last_obs: dict[str, Any] | None = None
         self._last_record: V19StepRecord | None = None
         self._semantic_utility = self._load_semantic_utility_model(cfg)
-        rl_cfg = cfg.get("rl", {}) if isinstance(cfg, dict) else {}
         env_cfg = self._env_cfg.get("multi_uav_env", {}) if isinstance(self._env_cfg, dict) else {}
         self.energy_budget_j = float(rl_cfg.get("energy_budget_j", env_cfg.get("energy_budget_j", 500.0)))
         self._queue_state = self._empty_queue_state()
@@ -464,9 +468,99 @@ class V19LUTResourceEnv:
 
     def _normalize_obs(self, obs: dict[str, Any]) -> dict[str, Any]:
         out = dict(obs)
-        out["vector"] = [float(value) for value in out.get("vector", [])] + self._queue_vector()
+        vector = [float(value) for value in out.get("vector", [])] + self._queue_vector()
+        if self.state_version == "v2":
+            vector += self._state_v2_vector(out)
         out["lyapunov_queues"] = dict(self._queue_state)
+        out["state_version"] = self.state_version
+        out["vector"] = vector
         return out
+
+    def _state_v2_vector(self, obs: dict[str, Any]) -> list[float]:
+        features: list[float] = []
+        deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))
+        for level in self.service_levels:
+            action = self.candidate_action(level, obs)
+            info = self.evaluate_action(action, obs)
+            accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
+            uncertainty = float(info.get("semantic_uncertainty", 0.0))
+            gap = max(0.0, float(obs.get("epsilon_k", 0.0)) - accuracy_lcb)
+            estimated_delay = float(info.get("delay_s", info.get("total_delay_s", info.get("estimated_delay_s", 0.0))))
+            semantic_feasible = float(gap <= 1e-9)
+            deadline_feasible = float(estimated_delay <= deadline)
+            joint_feasible = float(bool(info.get("success", False)) or (semantic_feasible > 0.0 and deadline_feasible > 0.0))
+            slack_ratio = (deadline - estimated_delay) / deadline
+            features.extend(
+                [
+                    accuracy_lcb,
+                    uncertainty,
+                    gap,
+                    semantic_feasible,
+                    deadline_feasible,
+                    joint_feasible,
+                    max(-10.0, min(10.0, slack_ratio)),
+                ]
+            )
+        features += self._uav_mobility_feature_vector(obs)
+        features += self._mask_feature_vector(obs)
+        return features
+
+    def _uav_mobility_feature_vector(self, obs: dict[str, Any]) -> list[float]:
+        spec = self.action_spec()
+        max_uavs = int(spec.get("num_uavs", max(1, len(list(obs.get("uav_state", []) or [])))))
+        task_xy = self._front_task_xy(obs)
+        features: list[float] = []
+        for idx in range(max_uavs):
+            uav = self._uav_by_index_or_id(obs, idx)
+            if uav is None:
+                features.extend([0.0, 0.0, 0.0])
+                continue
+            predicted_delay = float(uav.get("predicted_fly_delay_s", uav.get("arrival_delay_s", 0.0)))
+            predicted_energy = float(uav.get("predicted_fly_energy_j", uav.get("mobility_energy_j", 0.0)))
+            if task_xy is not None and predicted_delay <= 0.0:
+                dx = float(uav.get("x_m", 0.0)) - task_xy[0]
+                dy = float(uav.get("y_m", 0.0)) - task_xy[1]
+                distance = (dx * dx + dy * dy) ** 0.5
+                speed = max(1.0, float(uav.get("speed_mps", uav.get("max_speed_mps", 15.0))))
+                predicted_delay = distance / speed
+                predicted_energy = predicted_energy if predicted_energy > 0.0 else distance * 0.5
+            features.extend([1.0, predicted_delay / 60.0, predicted_energy / max(1.0, float(self.energy_budget_j))])
+        return features
+
+    def _mask_feature_vector(self, obs: dict[str, Any]) -> list[float]:
+        mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
+        service_allowed = mask.get("service_level_allowed", {}) if isinstance(mask.get("service_level_allowed", {}), dict) else {}
+        service_values = [float(bool(service_allowed.get(level, service_allowed.get(str(level), True)))) for level in self.service_levels]
+        mode_allowed = mask.get("mobility_mode_allowed", {}) if isinstance(mask.get("mobility_mode_allowed", {}), dict) else {}
+        mobility_modes = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
+        mobility_values = [float(bool(mode_allowed.get(mode, True))) for mode in mobility_modes]
+        spec = self.action_spec()
+        max_uavs = int(spec.get("num_uavs", max(1, len(list(obs.get("uav_state", []) or [])))))
+        uav_ok = mask.get("uav_battery_ok", {}) if isinstance(mask.get("uav_battery_ok", {}), dict) else {}
+        uav_values = [float(bool(uav_ok.get(uid, uav_ok.get(str(uid), True)))) for uid in range(max_uavs)]
+        return service_values + mobility_values + uav_values
+
+    @staticmethod
+    def _front_task_xy(obs: dict[str, Any]) -> tuple[float, float] | None:
+        task_id = str(obs.get("task_id", ""))
+        queue = list(obs.get("task_queue", []) or [])
+        candidates = [item for item in queue if str(item.get("task_id", "")) == task_id] or queue[:1]
+        if not candidates:
+            return None
+        area = candidates[0].get("area4d", {})
+        if not isinstance(area, dict):
+            return None
+        return float(area.get("center_x_m", 0.0)), float(area.get("center_y_m", 0.0))
+
+    @staticmethod
+    def _uav_by_index_or_id(obs: dict[str, Any], uid: int) -> dict[str, Any] | None:
+        uavs = list(obs.get("uav_state", []) or [])
+        for idx, uav in enumerate(uavs):
+            if int(uav.get("uav_id", idx)) == int(uid):
+                return uav
+        if 0 <= int(uid) < len(uavs):
+            return uavs[int(uid)]
+        return None
 
     @staticmethod
     def _empty_queue_state() -> dict[str, float]:

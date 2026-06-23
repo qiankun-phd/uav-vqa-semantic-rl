@@ -66,6 +66,30 @@ def _model_device(model: Any) -> Any:
         return resolve_torch_device("auto")
 
 
+def normalize_hidden_layers(hidden_layers: Any = None, hidden_size: int = 128) -> tuple[int, ...]:
+    if hidden_layers is None or hidden_layers == "":
+        return (int(hidden_size), int(hidden_size))
+    if isinstance(hidden_layers, str):
+        layers = [int(item.strip()) for item in hidden_layers.split(",") if item.strip()]
+    else:
+        layers = [int(item) for item in hidden_layers]
+    if not layers:
+        layers = [int(hidden_size), int(hidden_size)]
+    if any(layer <= 0 for layer in layers):
+        raise ValueError(f"hidden layers must be positive: {layers}")
+    return tuple(layers)
+
+
+def _build_mlp(input_dim: int, hidden_layers: tuple[int, ...]) -> tuple[Any, int]:
+    layers: list[Any] = []
+    last_dim = int(input_dim)
+    for width in hidden_layers:
+        layers.append(nn.Linear(last_dim, int(width)))
+        layers.append(nn.ReLU())
+        last_dim = int(width)
+    return nn.Sequential(*layers), last_dim
+
+
 @dataclass(frozen=True)
 class PPOTrainConfig:
     train_episodes: int = 120
@@ -79,6 +103,7 @@ class PPOTrainConfig:
     entropy_decay_episodes: int = 120
     value_weight: float = 0.5
     hidden_size: int = 128
+    hidden_layers: tuple[int, ...] = (128, 128)
     device: str = "auto"
     hybrid_actions: bool = True
     constrained: bool = True
@@ -222,19 +247,21 @@ class HybridActorCritic(nn.Module if nn is not None else object):
     safety projection are handled by the cognitive safety layer.
     """
 
-    def __init__(self, obs_dim: int, num_service_actions: int, hidden_size: int = 128) -> None:
+    def __init__(
+        self,
+        obs_dim: int,
+        num_service_actions: int,
+        hidden_size: int = 128,
+        hidden_layers: tuple[int, ...] | list[int] | None = None,
+    ) -> None:
         require_torch()
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(obs_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-        )
-        self.service_actor = nn.Linear(hidden_size, num_service_actions)
-        self.resource_actor = nn.Linear(hidden_size, len(RESOURCE_KEYS))
+        self.hidden_layers = normalize_hidden_layers(hidden_layers, hidden_size)
+        self.encoder, encoder_dim = _build_mlp(obs_dim, self.hidden_layers)
+        self.service_actor = nn.Linear(encoder_dim, num_service_actions)
+        self.resource_actor = nn.Linear(encoder_dim, len(RESOURCE_KEYS))
         self.resource_log_std = nn.Parameter(torch.full((len(RESOURCE_KEYS),), -0.7))
-        self.critic = nn.Linear(hidden_size, 1)
+        self.critic = nn.Linear(encoder_dim, 1)
 
     def forward(self, obs: Any) -> tuple[Any, Any, Any, Any]:
         z = self.encoder(obs.float())
@@ -263,26 +290,23 @@ class TwoTimescaleMobilitySemanticActorCritic(nn.Module if nn is not None else o
         num_service_actions: int,
         num_uavs: int,
         hidden_size: int = 128,
+        hidden_layers: tuple[int, ...] | list[int] | None = None,
         mobility_modes: tuple[str, ...] = MOBILITY_MODES,
     ) -> None:
         require_torch()
         super().__init__()
         self.mobility_modes = tuple(mobility_modes)
         self.num_uavs = max(1, int(num_uavs))
-        self.encoder = nn.Sequential(
-            nn.Linear(obs_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-        )
-        self.mobility_uav_actor = nn.Linear(hidden_size, self.num_uavs)
-        self.mobility_mode_actor = nn.Linear(hidden_size, len(self.mobility_modes))
-        self.mobility_continuous_actor = nn.Linear(hidden_size, len(MOBILITY_CONTINUOUS_KEYS))
+        self.hidden_layers = normalize_hidden_layers(hidden_layers, hidden_size)
+        self.encoder, encoder_dim = _build_mlp(obs_dim, self.hidden_layers)
+        self.mobility_uav_actor = nn.Linear(encoder_dim, self.num_uavs)
+        self.mobility_mode_actor = nn.Linear(encoder_dim, len(self.mobility_modes))
+        self.mobility_continuous_actor = nn.Linear(encoder_dim, len(MOBILITY_CONTINUOUS_KEYS))
         self.mobility_log_std = nn.Parameter(torch.full((len(MOBILITY_CONTINUOUS_KEYS),), -0.8))
-        self.service_actor = nn.Linear(hidden_size, num_service_actions)
-        self.resource_actor = nn.Linear(hidden_size, len(RESOURCE_KEYS))
+        self.service_actor = nn.Linear(encoder_dim, num_service_actions)
+        self.resource_actor = nn.Linear(encoder_dim, len(RESOURCE_KEYS))
         self.resource_log_std = nn.Parameter(torch.full((len(RESOURCE_KEYS),), -0.7))
-        self.critic = nn.Linear(hidden_size, 1)
+        self.critic = nn.Linear(encoder_dim, 1)
 
     def forward(self, obs: Any) -> tuple[Any, Any, Any, Any, Any, Any, Any]:
         z = self.encoder(obs.float())
@@ -406,7 +430,9 @@ def train_ppo(
     print(f"PPO training device: {torch_device_label(device)}; torch cuda available: {torch.cuda.is_available()}")
     obs = env.reset(seed=seed, options={"policy_name": "ppo_train_probe"})
     obs_dim = int(len(obs["vector"]))
-    model = HybridActorCritic(obs_dim, len(env.service_levels), cfg.hidden_size).to(device)
+    hidden_layers = normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size)
+    cfg = PPOTrainConfig(**{**asdict(cfg), "hidden_layers": hidden_layers})
+    model = HybridActorCritic(obs_dim, len(env.service_levels), cfg.hidden_size, cfg.hidden_layers).to(device)
     try:
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     except ImportError:
@@ -488,8 +514,9 @@ def train_two_timescale_ppo(
     obs = env.reset(seed=seed, options={"policy_name": "two_timescale_ppo_train_probe"})
     obs_dim = int(len(obs["vector"]))
     num_uavs = int(env.action_spec().get("num_uavs", max(1, len(obs.get("uav_state", []) or []))))
-    cfg = PPOTrainConfig(**{**asdict(cfg), "two_timescale": True})
-    model = TwoTimescaleMobilitySemanticActorCritic(obs_dim, len(env.service_levels), num_uavs, cfg.hidden_size).to(device)
+    hidden_layers = normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size)
+    cfg = PPOTrainConfig(**{**asdict(cfg), "two_timescale": True, "hidden_layers": hidden_layers})
+    model = TwoTimescaleMobilitySemanticActorCritic(obs_dim, len(env.service_levels), num_uavs, cfg.hidden_size, cfg.hidden_layers).to(device)
     try:
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     except ImportError:
@@ -535,6 +562,7 @@ def save_ppo_model(path: Path, model: HybridActorCritic, env: V19LUTResourceEnv,
         "service_levels": env.service_levels,
         "model_type": "semantic_hybrid_actor_critic",
         "resource_keys": RESOURCE_KEYS,
+        "hidden_layers": list(getattr(model, "hidden_layers", normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size))),
         "config": asdict(cfg),
     }
     torch.save(payload, path)
@@ -545,6 +573,7 @@ def save_ppo_model(path: Path, model: HybridActorCritic, env: V19LUTResourceEnv,
                 "service_levels": env.service_levels,
                 "model_type": payload["model_type"],
                 "resource_keys": list(RESOURCE_KEYS),
+                "hidden_layers": payload["hidden_layers"],
                 "config": asdict(cfg),
             },
             indent=2,
@@ -573,6 +602,7 @@ def save_two_timescale_model(
         "resource_keys": RESOURCE_KEYS,
         "mobility_modes": list(model.mobility_modes),
         "mobility_continuous_keys": list(MOBILITY_CONTINUOUS_KEYS),
+        "hidden_layers": list(getattr(model, "hidden_layers", normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size))),
         "config": asdict(cfg),
     }
     torch.save(payload, path)
@@ -585,6 +615,7 @@ def save_two_timescale_model(
                 "model_type": payload["model_type"],
                 "resource_keys": list(RESOURCE_KEYS),
                 "mobility_modes": list(model.mobility_modes),
+                "hidden_layers": payload["hidden_layers"],
                 "mobility_update_interval": int(cfg.mobility_update_interval),
                 "config": asdict(cfg),
             },
@@ -606,12 +637,17 @@ def load_two_timescale_policy(
     payload = torch.load(path, map_location=target_device)
     cfg_payload = payload.get("config") or {}
     cfg = PPOTrainConfig(**{key: value for key, value in cfg_payload.items() if key in PPOTrainConfig.__dataclass_fields__})
-    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device)})
+    hidden_layers = normalize_hidden_layers(
+        payload.get("hidden_layers", cfg_payload.get("hidden_layers")),
+        int(cfg_payload.get("hidden_size", hidden_size)),
+    )
+    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device), "hidden_layers": hidden_layers})
     model = TwoTimescaleMobilitySemanticActorCritic(
         int(payload["obs_dim"]),
         int(payload["num_actions"]),
         int(payload.get("num_uavs", env.action_spec().get("num_uavs", 1))),
         int(cfg_payload.get("hidden_size", hidden_size)),
+        hidden_layers,
     ).to(target_device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
@@ -629,11 +665,16 @@ def load_ppo_policy(
     payload = torch.load(path, map_location=target_device)
     cfg_payload = payload.get("config") or {}
     cfg = PPOTrainConfig(**{key: value for key, value in cfg_payload.items() if key in PPOTrainConfig.__dataclass_fields__})
-    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device)})
+    hidden_layers = normalize_hidden_layers(
+        payload.get("hidden_layers", cfg_payload.get("hidden_layers")),
+        int(cfg_payload.get("hidden_size", hidden_size)),
+    )
+    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device), "hidden_layers": hidden_layers})
     model = HybridActorCritic(
         int(payload["obs_dim"]),
         int(payload["num_actions"]),
         int(cfg_payload.get("hidden_size", hidden_size)),
+        hidden_layers,
     ).to(target_device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
