@@ -1148,3 +1148,86 @@ Interpretation:
 
 - v2 is worth continuing because it fixes low-SNR image overuse and keeps edge-overload performance.
 - It is not yet ready as the final formal result because low-SNR task success remains low; another delay-aware resource/projection tuning pass is needed before a 300-episode v2 formal run.
+
+## PPO CUDA Device Support 2026-06-23 Asia/Shanghai
+
+Implemented CUDA device support for V1.9 PPO and two-timescale mobility-aware PPO.
+
+Code changes:
+
+- `scripts/run_v1_9_resource_alloc.py` now accepts `--device {auto,cpu,cuda,cuda:0}` and passes the selected device into `PPOTrainConfig`.
+- `src/vqa_semcom/rl/v19_ppo.py` now resolves `auto` to CUDA when available, moves PPO/two-timescale models to the selected device, and places rollout/update/BC tensors on the same device.
+- PPO checkpoint loading now uses `map_location=device`; evaluation policies infer the model device for inference tensors.
+- Training logs print the selected device, CUDA availability, and GPU name, for example:
+
+```text
+PPO training device: cuda:0 (NVIDIA GeForce RTX 4060); torch cuda available: True
+```
+
+Validation:
+
+```text
+source /home/qiankun/miniconda3/etc/profile.d/conda.sh
+conda activate RA_DI
+python -m unittest discover -s tests
+```
+
+Result:
+
+```text
+Ran 93 tests in 2.047s
+OK
+```
+
+RA_DI CUDA environment:
+
+```text
+torch 2.10.0+cu128
+cuda_available True
+cuda_version 12.8
+device_count 1
+device0 NVIDIA GeForce RTX 4060
+```
+
+GPU smoke:
+
+```text
+outputs/rl/gpu_smoke_v2_deadline_guard_20260623
+```
+
+The smoke run completed with `--device cuda` and wrote:
+
+```text
+outputs/rl/gpu_smoke_v2_deadline_guard_20260623/scenario_comparison_summary.csv
+outputs/rl/gpu_smoke_v2_deadline_guard_20260623/scenario_comparison_report.md
+```
+
+GPU mid-scale validation:
+
+```text
+outputs/rl/two_timescale_mobility_v2_guard_mid_gpu_20260623
+```
+
+Artifacts:
+
+```text
+outputs/rl/two_timescale_mobility_v2_guard_mid_gpu_20260623/scenario_comparison_summary.csv
+outputs/rl/two_timescale_mobility_v2_guard_mid_gpu_20260623/scenario_comparison_report.md
+outputs/rl/two_timescale_mobility_v2_guard_mid_gpu_20260623/guard_mid_gpu_summary.md
+```
+
+GPU usage was confirmed by `nvidia-smi` during training:
+
+```text
+python PID 1338071 used about 144 MiB GPU memory on NVIDIA GeForce RTX 4060
+```
+
+Headline GPU mid-scale results:
+
+- `low_snr_blockage`: `proposed_v2_deadline_guard` keeps image ratio at 0.000, with semantic success 0.933 and task success 0.058. Deadline violation remains high at 0.938, so this still needs deadline/resource tuning.
+- `disaster_hotspot`: guard variants remain stable with task success 0.110, deadline violation 0.290, and no image use.
+- `edge_overload`: guard variants preserve useful behavior; `proposed_v2_nearest_uav_mobility` is strongest in this GPU run with task success 0.738 and deadline violation 0.000.
+
+Performance note:
+
+- The GPU run completed the mid-scale benchmark in about 15m45s. The speedup is not dramatic because this small benchmark is dominated by Python environment rollout/evaluation and CSV reporting rather than large neural-network batches.

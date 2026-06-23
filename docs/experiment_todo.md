@@ -888,3 +888,29 @@ Next steps before a 300-episode v2 formal run:
 2. Consider a best-feasible-service fallback that accepts semantic shortfall when all non-cache services violate deadline.
 3. Re-run formal with `proposed_v2_deadline_guard` and `proposed_v2_no_image_under_low_snr` after the low-SNR fix.
 4. Do not treat the current mid-scale run as a final paper table; use it as algorithm-selection evidence.
+
+## PPO CUDA Follow-up
+
+Completed 2026-06-23 Asia/Shanghai.
+
+CUDA support is now implemented and validated for PPO/two-timescale PPO in RA_DI:
+
+```text
+outputs/rl/gpu_smoke_v2_deadline_guard_20260623
+outputs/rl/two_timescale_mobility_v2_guard_mid_gpu_20260623
+```
+
+Confirmed:
+
+1. `--device auto/cpu/cuda/cuda:0` is wired through the runner and `PPOTrainConfig`.
+2. PPO models, rollout tensors, PPO update tensors, behavior-cloning tensors, and loaded checkpoints honor the selected device.
+3. RA_DI reports `torch 2.10.0+cu128`, CUDA `12.8`, and `NVIDIA GeForce RTX 4060`.
+4. `nvidia-smi` observed the training python process using about 144 MiB GPU memory.
+5. Full tests pass with the new CPU and conditional CUDA tests: `Ran 93 tests OK`.
+
+Next steps:
+
+1. Keep using `--device cuda` for medium/formal PPO runs when the GPU is free.
+2. Do not expect large speedups for the current small MLP/small-batch benchmark; environment rollout remains the bottleneck.
+3. If GPU acceleration is needed for wall-clock speed, increase vectorized rollout/batch size or move to larger model/batched scenario collection rather than only moving the tiny network to CUDA.
+4. Continue the low-SNR deadline-control fix before running a 300-episode v2 formal claim.

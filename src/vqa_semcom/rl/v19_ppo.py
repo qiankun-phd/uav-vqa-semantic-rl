@@ -38,6 +38,34 @@ def require_torch() -> None:
         raise ModuleNotFoundError("V1.9 semantic hybrid PPO requires torch.") from _TORCH_IMPORT_ERROR
 
 
+def resolve_torch_device(device: str | Any | None = "auto") -> Any:
+    require_torch()
+    if hasattr(device, "type"):
+        requested = str(device)
+    else:
+        requested = str(device or "auto").strip().lower()
+    if requested == "auto":
+        requested = "cuda" if torch.cuda.is_available() else "cpu"
+    if requested.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(f"requested torch device {requested!r}, but CUDA is not available")
+    return torch.device(requested)
+
+
+def torch_device_label(device: str | Any | None = "auto") -> str:
+    resolved = resolve_torch_device(device)
+    if resolved.type == "cuda":
+        index = resolved.index if resolved.index is not None else torch.cuda.current_device()
+        return f"cuda:{index} ({torch.cuda.get_device_name(index)})"
+    return str(resolved)
+
+
+def _model_device(model: Any) -> Any:
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return resolve_torch_device("auto")
+
+
 @dataclass(frozen=True)
 class PPOTrainConfig:
     train_episodes: int = 120
@@ -51,6 +79,7 @@ class PPOTrainConfig:
     entropy_decay_episodes: int = 120
     value_weight: float = 0.5
     hidden_size: int = 128
+    device: str = "auto"
     hybrid_actions: bool = True
     constrained: bool = True
     risk_aware_constraints: bool = False
@@ -277,13 +306,15 @@ class TwoTimescalePPOPolicy:
     ) -> None:
         require_torch()
         self.env = env
-        self.model = model
         self.cfg = cfg or PPOTrainConfig(two_timescale=True)
+        self.device = _model_device(model)
+        self.model = model.to(self.device)
+        self.model.eval()
         self._cached_mobility: dict[str, Any] | None = None
         self._cached_step = -1
 
     def act(self, obs: dict[str, Any], deterministic: bool = True) -> dict[str, Any]:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32).unsqueeze(0)
+        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=self.device).unsqueeze(0)
         step = int(obs.get("episode_step", 0))
         with torch.no_grad():
             (
@@ -338,11 +369,13 @@ class PPOServicePolicy:
     ) -> None:
         require_torch()
         self.env = env
-        self.model = model
         self.cfg = cfg or PPOTrainConfig()
+        self.device = _model_device(model)
+        self.model = model.to(self.device)
+        self.model.eval()
 
     def act(self, obs: dict[str, Any], deterministic: bool = True) -> dict[str, Any]:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32).unsqueeze(0)
+        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             logits, resource_mean, resource_log_std, _value = self.model(obs_tensor)
             mask = _service_mask_tensor(obs, self.env.service_levels, logits.device, self.cfg)
@@ -369,9 +402,11 @@ def train_ppo(
     torch.manual_seed(seed)
     if np is not None:
         np.random.seed(seed)
+    device = resolve_torch_device(cfg.device)
+    print(f"PPO training device: {torch_device_label(device)}; torch cuda available: {torch.cuda.is_available()}")
     obs = env.reset(seed=seed, options={"policy_name": "ppo_train_probe"})
     obs_dim = int(len(obs["vector"]))
-    model = HybridActorCritic(obs_dim, len(env.service_levels), cfg.hidden_size)
+    model = HybridActorCritic(obs_dim, len(env.service_levels), cfg.hidden_size).to(device)
     try:
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     except ImportError:
@@ -448,11 +483,13 @@ def train_two_timescale_ppo(
     torch.manual_seed(seed)
     if np is not None:
         np.random.seed(seed)
+    device = resolve_torch_device(cfg.device)
+    print(f"PPO training device: {torch_device_label(device)}; torch cuda available: {torch.cuda.is_available()}")
     obs = env.reset(seed=seed, options={"policy_name": "two_timescale_ppo_train_probe"})
     obs_dim = int(len(obs["vector"]))
     num_uavs = int(env.action_spec().get("num_uavs", max(1, len(obs.get("uav_state", []) or []))))
     cfg = PPOTrainConfig(**{**asdict(cfg), "two_timescale": True})
-    model = TwoTimescaleMobilitySemanticActorCritic(obs_dim, len(env.service_levels), num_uavs, cfg.hidden_size)
+    model = TwoTimescaleMobilitySemanticActorCritic(obs_dim, len(env.service_levels), num_uavs, cfg.hidden_size).to(device)
     try:
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     except ImportError:
@@ -558,28 +595,46 @@ def save_two_timescale_model(
     )
 
 
-def load_two_timescale_policy(path: Path, env: V19LUTResourceEnv, hidden_size: int = 128) -> TwoTimescalePPOPolicy:
+def load_two_timescale_policy(
+    path: Path,
+    env: V19LUTResourceEnv,
+    hidden_size: int = 128,
+    device: str | Any | None = None,
+) -> TwoTimescalePPOPolicy:
     require_torch()
-    payload = torch.load(path, map_location="cpu")
+    target_device = resolve_torch_device(device or "auto")
+    payload = torch.load(path, map_location=target_device)
     cfg_payload = payload.get("config") or {}
     cfg = PPOTrainConfig(**{key: value for key, value in cfg_payload.items() if key in PPOTrainConfig.__dataclass_fields__})
+    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device)})
     model = TwoTimescaleMobilitySemanticActorCritic(
         int(payload["obs_dim"]),
         int(payload["num_actions"]),
         int(payload.get("num_uavs", env.action_spec().get("num_uavs", 1))),
         int(cfg_payload.get("hidden_size", hidden_size)),
-    )
+    ).to(target_device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
     return TwoTimescalePPOPolicy(env, model, cfg)
 
 
-def load_ppo_policy(path: Path, env: V19LUTResourceEnv, hidden_size: int = 128) -> PPOServicePolicy:
+def load_ppo_policy(
+    path: Path,
+    env: V19LUTResourceEnv,
+    hidden_size: int = 128,
+    device: str | Any | None = None,
+) -> PPOServicePolicy:
     require_torch()
-    payload = torch.load(path, map_location="cpu")
+    target_device = resolve_torch_device(device or "auto")
+    payload = torch.load(path, map_location=target_device)
     cfg_payload = payload.get("config") or {}
     cfg = PPOTrainConfig(**{key: value for key, value in cfg_payload.items() if key in PPOTrainConfig.__dataclass_fields__})
-    model = HybridActorCritic(int(payload["obs_dim"]), int(payload["num_actions"]), int(cfg_payload.get("hidden_size", hidden_size)))
+    cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device)})
+    model = HybridActorCritic(
+        int(payload["obs_dim"]),
+        int(payload["num_actions"]),
+        int(cfg_payload.get("hidden_size", hidden_size)),
+    ).to(target_device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
     return PPOServicePolicy(env, model, cfg)
@@ -630,8 +685,9 @@ def _collect_episode(
         "gpu_shares": [],
     }
     done = False
+    device = _model_device(model)
     while not done:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32).unsqueeze(0)
+        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
         logits, resource_mean, resource_log_std, value = model(obs_tensor)
         mask = _service_mask_tensor(obs, env.service_levels, logits.device, cfg)
         masked_logits = _apply_service_mask(logits, mask)
@@ -734,9 +790,10 @@ def _collect_two_timescale_episode(
     cached_mobility: dict[str, Any] | None = None
     cached_action_idx: tuple[int, int] | None = None
     cached_raw = [0.0 for _ in MOBILITY_CONTINUOUS_KEYS]
+    device = _model_device(model)
     while not done:
         step = int(obs.get("episode_step", 0))
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32).unsqueeze(0)
+        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
         (
             uav_logits,
             mode_logits,
@@ -749,10 +806,10 @@ def _collect_two_timescale_episode(
         ) = model(obs_tensor)
         if cfg.no_mobility_actor:
             mobility_action = _default_mobility_action(env, obs, service_level=None)
-            mobility_log_prob = torch.zeros(1)
+            mobility_log_prob = torch.zeros(1, device=device)
             uav_idx = int(mobility_action["uav_assignment"])
             mode_idx = MOBILITY_MODES.index(str(mobility_action["mobility_mode"]))
-            raw_mobility = torch.zeros((1, len(MOBILITY_CONTINUOUS_KEYS)), dtype=torch.float32)
+            raw_mobility = torch.zeros((1, len(MOBILITY_CONTINUOUS_KEYS)), dtype=torch.float32, device=device)
             reused = True
         elif cached_mobility is None or step % max(1, int(cfg.mobility_update_interval)) == 0:
             mobility_action, mobility_log_prob, uav_idx, mode_idx, raw_mobility = _sample_mobility_action(
@@ -773,7 +830,7 @@ def _collect_two_timescale_episode(
             assert cached_mobility is not None and cached_action_idx is not None
             mobility_action = dict(cached_mobility)
             uav_idx, mode_idx = cached_action_idx
-            raw_mobility = torch.as_tensor([cached_raw], dtype=torch.float32)
+            raw_mobility = torch.as_tensor([cached_raw], dtype=torch.float32, device=device)
             mobility_log_prob = _mobility_log_prob(uav_logits, mode_logits, mobility_mean, mobility_log_std, uav_idx, mode_idx, raw_mobility)
             reused = True
 
@@ -975,13 +1032,14 @@ def _ppo_update(
     demos: list[dict[str, Any]],
     episode: int,
 ) -> None:
-    obs = torch.as_tensor(rollout["observations"], dtype=torch.float32)
-    service_actions = torch.as_tensor(rollout["service_actions"], dtype=torch.int64)
-    service_masks = torch.as_tensor(rollout["service_masks"], dtype=torch.bool)
-    resource_raw_actions = torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32)
-    old_log_probs = torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32)
-    returns = torch.as_tensor(rollout["returns"], dtype=torch.float32)
-    advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32)
+    device = _model_device(model)
+    obs = torch.as_tensor(rollout["observations"], dtype=torch.float32, device=device)
+    service_actions = torch.as_tensor(rollout["service_actions"], dtype=torch.int64, device=device)
+    service_masks = torch.as_tensor(rollout["service_masks"], dtype=torch.bool, device=device)
+    resource_raw_actions = torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32, device=device)
+    old_log_probs = torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32, device=device)
+    returns = torch.as_tensor(rollout["returns"], dtype=torch.float32, device=device)
+    advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32, device=device)
     for _ in range(cfg.update_epochs):
         logits, resource_mean, resource_log_std, values = model(obs)
         logits = _apply_service_mask(logits, service_masks)
@@ -1016,16 +1074,17 @@ def _two_timescale_ppo_update(
     demos: list[dict[str, Any]],
     episode: int,
 ) -> None:
-    obs = torch.as_tensor(rollout["observations"], dtype=torch.float32)
-    service_actions = torch.as_tensor(rollout["service_actions"], dtype=torch.int64)
-    service_masks = torch.as_tensor(rollout["service_masks"], dtype=torch.bool)
-    resource_raw_actions = torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32)
-    uav_actions = torch.as_tensor(rollout["uav_actions"], dtype=torch.int64)
-    mode_actions = torch.as_tensor(rollout["mobility_mode_actions"], dtype=torch.int64)
-    mobility_raw_actions = torch.as_tensor(rollout["mobility_raw_actions"], dtype=torch.float32)
-    old_log_probs = torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32)
-    returns = torch.as_tensor(rollout["returns"], dtype=torch.float32)
-    advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32)
+    device = _model_device(model)
+    obs = torch.as_tensor(rollout["observations"], dtype=torch.float32, device=device)
+    service_actions = torch.as_tensor(rollout["service_actions"], dtype=torch.int64, device=device)
+    service_masks = torch.as_tensor(rollout["service_masks"], dtype=torch.bool, device=device)
+    resource_raw_actions = torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32, device=device)
+    uav_actions = torch.as_tensor(rollout["uav_actions"], dtype=torch.int64, device=device)
+    mode_actions = torch.as_tensor(rollout["mobility_mode_actions"], dtype=torch.int64, device=device)
+    mobility_raw_actions = torch.as_tensor(rollout["mobility_raw_actions"], dtype=torch.float32, device=device)
+    old_log_probs = torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32, device=device)
+    returns = torch.as_tensor(rollout["returns"], dtype=torch.float32, device=device)
+    advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32, device=device)
     for _ in range(cfg.update_epochs):
         (
             uav_logits,
@@ -1798,14 +1857,15 @@ def _behavior_clone_two_timescale(
 
 
 def _bc_loss(model: HybridActorCritic, demos: list[dict[str, Any]], cfg: PPOTrainConfig) -> Any:
+    device = _model_device(model)
     batch = demos
     if len(demos) > int(cfg.bc_batch_size):
         idx = torch.randint(0, len(demos), (int(cfg.bc_batch_size),))
         batch = [demos[int(i)] for i in idx]
-    obs = torch.as_tensor([item["observation"] for item in batch], dtype=torch.float32)
-    service_actions = torch.as_tensor([item["service_action"] for item in batch], dtype=torch.int64)
-    service_masks = torch.as_tensor([item["service_mask"] for item in batch], dtype=torch.bool)
-    resource_targets = torch.as_tensor([item["resource_target"] for item in batch], dtype=torch.float32)
+    obs = torch.as_tensor([item["observation"] for item in batch], dtype=torch.float32, device=device)
+    service_actions = torch.as_tensor([item["service_action"] for item in batch], dtype=torch.int64, device=device)
+    service_masks = torch.as_tensor([item["service_mask"] for item in batch], dtype=torch.bool, device=device)
+    resource_targets = torch.as_tensor([item["resource_target"] for item in batch], dtype=torch.float32, device=device)
     logits, resource_mean, _log_std, _value = model(obs)
     logits = _apply_service_mask(logits, service_masks)
     loss = nn.functional.cross_entropy(logits, service_actions)
@@ -1819,14 +1879,15 @@ def _bc_loss_two_timescale(
     demos: list[dict[str, Any]],
     cfg: PPOTrainConfig,
 ) -> Any:
+    device = _model_device(model)
     batch = demos
     if len(demos) > int(cfg.bc_batch_size):
         idx = torch.randint(0, len(demos), (int(cfg.bc_batch_size),))
         batch = [demos[int(i)] for i in idx]
-    obs = torch.as_tensor([item["observation"] for item in batch], dtype=torch.float32)
-    service_actions = torch.as_tensor([item["service_action"] for item in batch], dtype=torch.int64)
-    service_masks = torch.as_tensor([item["service_mask"] for item in batch], dtype=torch.bool)
-    resource_targets = torch.as_tensor([item["resource_target"] for item in batch], dtype=torch.float32)
+    obs = torch.as_tensor([item["observation"] for item in batch], dtype=torch.float32, device=device)
+    service_actions = torch.as_tensor([item["service_action"] for item in batch], dtype=torch.int64, device=device)
+    service_masks = torch.as_tensor([item["service_mask"] for item in batch], dtype=torch.bool, device=device)
+    resource_targets = torch.as_tensor([item["resource_target"] for item in batch], dtype=torch.float32, device=device)
     (
         uav_logits,
         mode_logits,
@@ -1842,10 +1903,11 @@ def _bc_loss_two_timescale(
     if cfg.hybrid_actions:
         loss = loss + cfg.bc_weight * nn.functional.mse_loss(torch.sigmoid(resource_mean), resource_targets)
     if not cfg.no_mobility_actor:
-        target_uav = torch.zeros((len(batch),), dtype=torch.int64)
+        target_uav = torch.zeros((len(batch),), dtype=torch.int64, device=device)
         target_mode = torch.as_tensor(
             [0 if int(item["service_action"]) == 0 else 1 for item in batch],
             dtype=torch.int64,
+            device=device,
         )
         loss = loss + 0.1 * nn.functional.cross_entropy(uav_logits, target_uav)
         loss = loss + 0.1 * nn.functional.cross_entropy(mode_logits, target_mode)

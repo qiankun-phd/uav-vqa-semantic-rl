@@ -17,6 +17,7 @@ from vqa_semcom.rl.v19_ppo import (
     TwoTimescalePPOPolicy,
     _project_mobility_action,
     _project_semantic_feasible_action,
+    resolve_torch_device,
     train_ppo,
     train_two_timescale_ppo,
 )
@@ -165,12 +166,13 @@ class V19RLResourceAllocTest(unittest.TestCase):
         try:
             model, trace = train_ppo(
                 env,
-                PPOTrainConfig(train_episodes=2, update_epochs=1, hidden_size=32),
+                PPOTrainConfig(train_episodes=2, update_epochs=1, hidden_size=32, device="cpu"),
                 seed=2,
             )
         except ModuleNotFoundError:
             self.skipTest("torch is not installed")
         self.assertEqual(len(trace), 2)
+        self.assertEqual(next(model.parameters()).device.type, "cpu")
         self.assertIn("success_rate", trace[0])
         self.assertIn("lambda_quality", trace[0])
         self.assertIn("lambda_deadline", trace[0])
@@ -192,6 +194,20 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertLessEqual(float(action["cpu_share"]), 1.0)
         self.assertGreaterEqual(float(action["gpu_share"]), 0.01)
         self.assertLessEqual(float(action["gpu_share"]), 1.0)
+
+    def test_tiny_ppo_training_can_use_cuda_when_available(self) -> None:
+        try:
+            device = resolve_torch_device("cuda")
+        except (ModuleNotFoundError, RuntimeError):
+            self.skipTest("CUDA torch is not available")
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=17, tasks_per_episode=2)
+        model, trace = train_ppo(
+            env,
+            PPOTrainConfig(train_episodes=1, update_epochs=1, hidden_size=32, device=str(device)),
+            seed=17,
+        )
+        self.assertEqual(len(trace), 1)
+        self.assertEqual(next(model.parameters()).device.type, "cuda")
 
     def test_tiny_two_timescale_ppo_training_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=7, tasks_per_episode=4)

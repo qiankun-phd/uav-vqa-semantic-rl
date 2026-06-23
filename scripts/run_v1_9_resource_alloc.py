@@ -311,6 +311,7 @@ def main() -> int:
     parser.add_argument("--load-ppo-model", default=None, help="Load a trained PPO checkpoint and evaluate policy=ppo without training.")
     parser.add_argument("--train-episodes", type=int, default=120)
     parser.add_argument("--hidden-size", type=int, default=128)
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
     parser.add_argument("--mobility-update-interval", type=int, default=3, help="Slow mobility actor update interval K in slots.")
@@ -415,6 +416,7 @@ def run_experiment(
         ppo_cfg = PPOTrainConfig(
             train_episodes=args.train_episodes,
             hidden_size=args.hidden_size,
+            device=args.device,
             hybrid_actions=not args.service_only_ppo,
             constrained=not args.no_constrained_ppo,
             risk_aware_constraints=args.risk_aware_constraints,
@@ -479,9 +481,9 @@ def run_experiment(
         if policy == "ppo":
             if args.load_ppo_model:
                 if args.two_timescale_ppo:
-                    loaded_policy = load_two_timescale_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size)
+                    loaded_policy = load_two_timescale_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size, device=args.device)
                 else:
-                    loaded_policy = load_ppo_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size)
+                    loaded_policy = load_ppo_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size, device=args.device)
                 action_fn = lambda obs, policy=loaded_policy: policy.act(obs, deterministic=True)
             elif ppo_policy is not None:
                 if args.two_timescale_ppo:
