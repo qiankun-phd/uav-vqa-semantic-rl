@@ -57,6 +57,11 @@ class ServiceCandidateUtility:
     sample_count: int
     semantic_quality_gap: float
     semantic_efficiency: float
+    estimated_delay_s: float
+    semantic_feasible: bool
+    deadline_feasible: bool
+    estimated_delay_feasible: bool
+    joint_feasible: bool
     is_snr_sensitive: bool
     recommended_for_low_snr: bool
     recommended_for_critical: bool
@@ -401,12 +406,16 @@ class SemanticUtilityModel:
         freshness = str(obs.get("freshness_bin", "fresh"))
         risk = str(obs.get("risk_level", "normal"))
         epsilon = _float_value(obs.get("epsilon_k", obs.get("epsilon", 0.0)), 0.0)
+        deadline_s = _float_value(obs.get("deadline_s", obs.get("tau_k", obs.get("deadline", 0.0))), 0.0)
         levels = list(service_levels) if service_levels is not None else sorted({cell.service_level for cell in self.cells})
 
         candidates: list[ServiceCandidateUtility] = []
         for level in levels:
             estimate = self.U_sem(task_type, int(level), snr_value, view_quality, freshness, risk)
             gap = max(0.0, epsilon - estimate.accuracy_lcb)
+            estimated_delay_s = self._estimated_delay_for_service(obs, int(level), estimate)
+            semantic_feasible = gap <= 0.0
+            deadline_feasible = deadline_s <= 0.0 or estimated_delay_s <= deadline_s
             semantic_efficiency = self._semantic_efficiency(estimate, gap)
             snr_sensitive = int(level) != 0
             candidates.append(
@@ -420,6 +429,11 @@ class SemanticUtilityModel:
                     sample_count=estimate.sample_count,
                     semantic_quality_gap=round(gap, 6),
                     semantic_efficiency=semantic_efficiency,
+                    estimated_delay_s=round(estimated_delay_s, 6),
+                    semantic_feasible=semantic_feasible,
+                    deadline_feasible=deadline_feasible,
+                    estimated_delay_feasible=deadline_feasible,
+                    joint_feasible=semantic_feasible and deadline_feasible,
                     is_snr_sensitive=snr_sensitive,
                     recommended_for_low_snr=self._recommended_for_low_snr(int(level), estimate, gap, freshness),
                     recommended_for_critical=self._recommended_for_critical(int(level), estimate, gap, risk, freshness),
@@ -458,6 +472,28 @@ class SemanticUtilityModel:
         usable_lcb = max(0.0, estimate.accuracy_lcb - semantic_quality_gap)
         confidence_discount = max(0.0, 1.0 - min(1.0, estimate.uncertainty))
         return round((usable_lcb * confidence_discount) / (1.0 + max(0.0, estimate.payload_kb)), 6)
+
+    @staticmethod
+    def _estimated_delay_for_service(
+        obs: dict[str, Any],
+        service_level: int,
+        estimate: SemanticUtilityEstimate,
+    ) -> float:
+        for key in (
+            "estimated_delay_by_service",
+            "delay_by_service",
+            "service_delay_s",
+            "service_delay_by_level",
+            "estimated_delay_s_by_service",
+        ):
+            value = obs.get(key)
+            delay = _lookup_service_value(value, service_level)
+            if delay is not None:
+                return max(0.0, delay)
+        scalar = obs.get("estimated_delay_s", obs.get("delay_s", obs.get("total_delay_s", None)))
+        if scalar is not None and scalar != "":
+            return max(0.0, _float_value(scalar))
+        return _default_delay_estimate(service_level, estimate.payload_kb)
 
     @staticmethod
     def _recommended_for_low_snr(
@@ -499,6 +535,22 @@ def service_level_name(service_level: int) -> str:
         3: "roi_crop_image",
     }
     return names.get(int(service_level), f"service_{int(service_level)}")
+
+
+def _lookup_service_value(value: Any, service_level: int) -> float | None:
+    if isinstance(value, dict):
+        for key in (service_level, str(service_level), f"s{service_level}", f"service_{service_level}"):
+            if key in value:
+                return _float_value(value[key])
+    if isinstance(value, (list, tuple)) and 0 <= service_level < len(value):
+        return _float_value(value[service_level])
+    return None
+
+
+def _default_delay_estimate(service_level: int, payload_kb: float) -> float:
+    base = {0: 0.05, 1: 0.45, 2: 1.20, 3: 0.90}.get(int(service_level), 0.50)
+    payload_scale = {0: 0.0, 1: 0.02, 2: 0.04, 3: 0.03}.get(int(service_level), 0.02)
+    return round(base + max(0.0, payload_kb) * payload_scale, 6)
 
 
 def read_semantic_utility_csv(path: Path) -> list[SemanticUtilityCell]:

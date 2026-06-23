@@ -879,6 +879,22 @@ The report confirms that the current LUT still supports the paper explanation:
 - `s=1` semantic token is the lightweight semantic communication service and explains low-SNR/edge-overload payload advantages.
 - `s=2` image evidence carries more visual evidence but has much larger payload and higher link/queue sensitivity.
 
+Updated 2026-06-23 Asia/Shanghai:
+
+- Extended service candidates with deadline-aware feasibility fields:
+
+```text
+estimated_delay_s
+estimated_delay_feasible
+semantic_feasible
+deadline_feasible
+joint_feasible
+```
+
+- `semantic_feasible` is `accuracy_lcb >= epsilon_k`.
+- `deadline_feasible` is `estimated_delay_s <= deadline_s`.
+- `joint_feasible` is the semantic/deadline conjunction used to explain why image evidence can be semantically strong but operationally infeasible under low SNR or edge overload.
+
 ## Scenario-Aware Semantic Benchmark v4 2026-06-23 Asia/Shanghai
 
 Algorithm thread reran the semantic scenario benchmark after environment commit `8f903c2 fix(env): calibrate scenario feasibility for semantic benchmark`.

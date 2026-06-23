@@ -6,13 +6,13 @@ This report documents the RL/env-facing candidate-service utility interface buil
 question_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level
 ```
 
-The new helper evaluates every candidate service for the same task condition:
+The helper evaluates every candidate service for the same task condition:
 
 ```python
 candidates = SemanticUtilityModel.from_csv(...).get_service_candidates(obs)
 ```
 
-Each candidate returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `sample_count`, `semantic_quality_gap`, `semantic_efficiency`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+Each candidate returns semantic utility, payload, delay feasibility, and routing hints: `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `sample_count`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
 
 ## Service-Level Summary
 
@@ -22,40 +22,53 @@ Each candidate returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_
 | 1 | semantic_token | 216 | 0.550 | 0.920 | 0.319 | 247.8 | semantic token: lightweight semantic communication using compact detector evidence |
 | 2 | image_evidence | 216 | 0.486 | 90.198 | 0.305 | 247.8 | image evidence: high-payload visual evidence, stronger link/delay/queue sensitivity |
 
-## Candidate Examples
+## Feasibility Definitions
 
-### low_snr_blockage_token_route
+```text
+semantic_feasible = accuracy_lcb >= epsilon_k
+deadline_feasible = estimated_delay_s <= deadline_s
+estimated_delay_feasible = deadline_feasible
+joint_feasible = semantic_feasible and deadline_feasible
+```
 
-| service | name | acc mean | acc LCB | uncertainty | payload KB | gap | efficiency | SNR-sensitive | low-SNR rec | critical rec | samples |
-|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|
-| 0 | cache_answer | 0.530 | 0.506 | 0.083 | 0.000 | 0.274 | 0.213 | False | False | False | 281 |
-| 1 | semantic_token | 0.897 | 0.856 | 0.095 | 1.027 | 0.000 | 0.382 | True | True | True | 281 |
-| 2 | image_evidence | 0.954 | 0.922 | 0.085 | 37.487 | 0.000 | 0.022 | True | False | True | 281 |
+Delay can be provided by the environment through `estimated_delay_by_service`, `delay_by_service`, `service_delay_s`, `service_delay_by_level`, or `estimated_delay_s_by_service`. If no delay is provided, the helper uses a conservative service/payload fallback.
+
+## Low-SNR Blockage Service Feasibility
+
+| service | name | acc LCB | payload KB | delay s | semantic feasible | deadline feasible | joint feasible | gap | efficiency | low-SNR rec | critical rec |
+|---:|---|---:|---:|---:|---|---|---|---:|---:|---|---|
+| 0 | cache_answer | 0.506 | 0.000 | 0.050 | False | True | False | 0.274 | 0.213 | False | False |
+| 1 | semantic_token | 0.856 | 1.027 | 1.200 | True | True | True | 0.000 | 0.382 | True | True |
+| 2 | image_evidence | 0.922 | 37.487 | 8.500 | True | False | False | 0.000 | 0.022 | False | True |
+
+Interpretation for `low_snr_blockage`: image evidence has strong semantic LCB in this example, but its estimated delay is above the deadline because low SNR makes large payload transmission expensive. Semantic tokens keep the payload near 1 KB and satisfy both semantic and deadline feasibility, which is the paper claim of lightweight semantic communication. Cache has the lowest payload and delay, but it fails the semantic LCB threshold in this critical stale-cache setting.
+
+## Additional Candidate Examples
 
 ### edge_overload_compact_evidence
 
-| service | name | acc mean | acc LCB | uncertainty | payload KB | gap | efficiency | SNR-sensitive | low-SNR rec | critical rec | samples |
-|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|
-| 0 | cache_answer | 0.231 | 0.151 | 0.370 | 0.000 | 0.649 | 0.000 | False | False | False | 13 |
-| 1 | semantic_token | 1.000 | 0.772 | 0.391 | 1.188 | 0.028 | 0.207 | True | False | False | 13 |
-| 2 | image_evidence | 1.000 | 0.772 | 0.391 | 206.769 | 0.028 | 0.002 | True | False | False | 13 |
+| service | name | acc LCB | payload KB | delay s | semantic feasible | deadline feasible | joint feasible | gap | efficiency | low-SNR rec | critical rec |
+|---:|---|---:|---:|---:|---|---|---|---:|---:|---|---|
+| 0 | cache_answer | 0.151 | 0.000 | 0.050 | False | True | False | 0.649 | 0.000 | False | False |
+| 1 | semantic_token | 0.772 | 1.188 | 2.400 | False | True | False | 0.028 | 0.207 | False | False |
+| 2 | image_evidence | 0.772 | 206.769 | 9.000 | False | False | False | 0.028 | 0.002 | False | False |
 
 ### critical_counting_conservative_gate
 
-| service | name | acc mean | acc LCB | uncertainty | payload KB | gap | efficiency | SNR-sensitive | low-SNR rec | critical rec | samples |
-|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|
-| 0 | cache_answer | 0.615 | 0.504 | 0.383 | 0.000 | 0.316 | 0.117 | False | False | False | 13 |
-| 1 | semantic_token | 0.615 | 0.355 | 0.454 | 1.188 | 0.465 | 0.000 | True | False | False | 13 |
-| 2 | image_evidence | 0.000 | 0.000 | 0.391 | 191.093 | 0.820 | 0.000 | True | False | False | 13 |
+| service | name | acc LCB | payload KB | delay s | semantic feasible | deadline feasible | joint feasible | gap | efficiency | low-SNR rec | critical rec |
+|---:|---|---:|---:|---:|---|---|---|---:|---:|---|---|
+| 0 | cache_answer | 0.504 | 0.000 | 0.050 | False | True | False | 0.316 | 0.117 | False | False |
+| 1 | semantic_token | 0.355 | 1.188 | 1.300 | False | True | False | 0.465 | 0.000 | False | False |
+| 2 | image_evidence | 0.000 | 191.093 | 6.500 | False | False | False | 0.820 | 0.000 | False | False |
 
 ## Interpretation for Current Scenarios
 
-- `low_snr_blockage`: the interface supports explaining why token/cache can dominate image evidence. Token candidates keep payload near 1 KB, while image evidence carries tens to hundreds of KB and increases transmission delay under low SNR.
-- `edge_overload`: token candidates are the natural compact-evidence route because image evidence has high edge workload and payload. The candidate fields expose this through payload and efficiency without changing the LUT.
-- `critical` risk: controllers should use `accuracy_lcb`, `semantic_quality_gap`, `uncertainty`, and `sample_count` instead of mean accuracy alone. The `recommended_for_critical` flag is conservative and only fires when LCB clears epsilon with acceptable uncertainty.
+- `low_snr_blockage`: image can be semantically strong but deadline-infeasible because payload is large under weak links; semantic tokens are the main lightweight semantic communication route when their LCB clears epsilon.
+- `edge_overload`: token candidates are the compact-evidence route because image evidence has high payload and edge workload. Deadline feasibility makes this explicit instead of relying only on payload.
+- `critical` risk: controllers should use `accuracy_lcb`, `semantic_quality_gap`, `uncertainty`, `sample_count`, and `joint_feasible` instead of mean accuracy alone.
 
 ## Notes
 
 - `is_snr_sensitive=False` for cache because cache reuse does not transmit fresh visual evidence over the current link.
 - `recommended_for_low_snr` is a routing prior, not a hard constraint. It favors semantic tokens when their LCB clears epsilon and allows fresh cache only when it is already semantically sufficient.
-- `semantic_efficiency` is derived for ranking candidates. It should guide exploration/projection together with the explicit quality gap, not replace the semantic QoS constraint.
+- `joint_feasible` is the hard semantic-plus-deadline feasibility signal for projection; `semantic_efficiency` should only rank candidates among feasible or nearly feasible options.

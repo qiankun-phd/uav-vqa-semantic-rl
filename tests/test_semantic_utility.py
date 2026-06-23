@@ -123,6 +123,7 @@ class SemanticUtilityTest(unittest.TestCase):
         self.assertFalse(candidates[0].is_snr_sensitive)
         self.assertTrue(candidates[1].is_snr_sensitive)
         self.assertGreaterEqual(candidates[1].semantic_efficiency, candidates[2].semantic_efficiency)
+        self.assertTrue(all(hasattr(item, "estimated_delay_feasible") for item in candidates))
 
     def test_service_candidate_recommendation_flags_are_quality_aware(self) -> None:
         rows: list[dict[str, str]] = []
@@ -145,6 +146,57 @@ class SemanticUtilityTest(unittest.TestCase):
         self.assertTrue(by_level[1].recommended_for_low_snr)
         self.assertTrue(by_level[1].recommended_for_critical)
         self.assertFalse(by_level[2].recommended_for_low_snr)
+
+    def test_service_candidate_feasibility_combines_semantic_and_deadline(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="-5dB", correct=False, payload_bytes=0, risk="critical") for _ in range(30)])
+        rows.extend([_row(service_level=1, snr_bin="-5dB", correct=True, payload_bytes=1024, risk="critical") for _ in range(30)])
+        rows.extend([_row(service_level=2, snr_bin="-5dB", correct=True, payload_bytes=102400, risk="critical") for _ in range(30)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        candidates = model.get_service_candidates(
+            {
+                "question_type": "presence",
+                "snr_bin": "-5dB",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+                "risk_level": "critical",
+                "epsilon_k": 0.70,
+                "deadline_s": 2.0,
+                "estimated_delay_by_service": {"0": 0.05, "1": 0.8, "2": 9.5},
+            },
+            service_levels=[0, 1, 2],
+        )
+        by_level = {item.service_level: item for item in candidates}
+        self.assertFalse(by_level[0].semantic_feasible)
+        self.assertTrue(by_level[0].deadline_feasible)
+        self.assertFalse(by_level[0].joint_feasible)
+        self.assertTrue(by_level[1].semantic_feasible)
+        self.assertTrue(by_level[1].deadline_feasible)
+        self.assertTrue(by_level[1].estimated_delay_feasible)
+        self.assertTrue(by_level[1].joint_feasible)
+        self.assertTrue(by_level[2].semantic_feasible)
+        self.assertFalse(by_level[2].deadline_feasible)
+        self.assertFalse(by_level[2].joint_feasible)
+
+    def test_service_candidate_delay_fallback_supports_lists(self) -> None:
+        rows = [_row(service_level=1, snr_bin="0dB", correct=True, payload_bytes=1024) for _ in range(10)]
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        candidates = model.get_service_candidates(
+            {
+                "question_type": "presence",
+                "snr_bin": "0dB",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+                "risk_level": "normal",
+                "epsilon_k": 0.60,
+                "tau_k": 1.0,
+                "service_delay_s": [0.05, 1.5, 3.0],
+            },
+            service_levels=[1],
+        )
+        self.assertAlmostEqual(candidates[0].estimated_delay_s, 1.5)
+        self.assertFalse(candidates[0].deadline_feasible)
+        self.assertFalse(candidates[0].joint_feasible)
 
     def test_service_level_names_are_paper_facing(self) -> None:
         self.assertEqual(service_level_name(0), "cache_answer")

@@ -173,14 +173,19 @@ Candidate-service usage for mobility-aware RL/env:
 candidates = utility.get_service_candidates(obs)
 ```
 
-Each candidate keeps the same semantic utility LUT key and returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+Each candidate keeps the same semantic utility LUT key and returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
 
 The helper does not add a LUT dimension. It evaluates the same task condition across service levels and computes:
 
 ```text
 semantic_quality_gap = max(0, epsilon_k - accuracy_lcb)
+semantic_feasible = accuracy_lcb >= epsilon_k
+deadline_feasible = estimated_delay_s <= deadline_s
+joint_feasible = semantic_feasible and deadline_feasible
 semantic_efficiency = quality-adjusted conservative utility per payload unit
 ```
+
+The candidate helper reads deadline from `deadline_s`, `tau_k`, or `deadline`. It reads per-service delay estimates from `estimated_delay_by_service`, `delay_by_service`, `service_delay_s`, `service_delay_by_level`, or `estimated_delay_s_by_service`. If no delay estimate is provided, it uses a small conservative fallback based on service level and payload.
 
 Paper-facing service semantics:
 

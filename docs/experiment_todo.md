@@ -729,6 +729,23 @@ Next coordination items:
 2. Algorithm thread: use `semantic_efficiency` and low-SNR/critical flags as priors, not as hard rules.
 3. Paper/results thread: cite the report when explaining why token service is a lightweight semantic-communication baseline under low SNR and edge overload.
 
+Updated 2026-06-23 Asia/Shanghai:
+
+- Added service-candidate feasibility fields for semantic and deadline checks:
+
+```text
+semantic_feasible
+deadline_feasible
+estimated_delay_feasible
+joint_feasible
+```
+
+Next coordination items:
+
+1. Environment thread: pass per-service delay estimates through `estimated_delay_by_service` or `service_delay_s` so candidate feasibility uses physical/mobility-aware delay rather than fallback delay.
+2. Algorithm thread: prefer `joint_feasible` for hard service projection and use `semantic_efficiency` only for ranking among feasible candidates.
+3. Results thread: use the low-SNR candidate table to explain why image evidence may have high semantic LCB but miss deadline, while semantic tokens preserve the lightweight semantic communication claim.
+
 ## Output Naming Convention
 
 Use explicit run names:
