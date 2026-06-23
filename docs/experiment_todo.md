@@ -261,6 +261,16 @@ Do not overwrite V1.9 VLM/LUT/report files.
 
 Completed 2026-06-23 Asia/Shanghai:
 
+1. Upgraded the canonical multi-UAV environment from implicit task-center motion to an explicit mobility-policy action interface.
+2. Added mobility actions: `stay`, `serve_task`, `reposition`, `avoid_conflict`, and `return_base`, while preserving `service_level`, bandwidth, power, CPU share, GPU share, and UAV assignment.
+3. Added `waypoint_delta` and `altitude_delta` controls plus backward-compatible absolute `waypoint` handling.
+4. Added mobility actor observation fields: UAV-task distances, UAV battery ratios, predicted fly delay/energy, task `Area4D`, UTM conflict risk, future-task proximity, coverage score, and feasible mobility mask.
+5. Added info fields for mobility diagnostics: `mobility_mode`, waypoint position, altitude, fly distance, coverage gain, mobility energy, arrival delay, and UTM conflict risk.
+6. Added tests for stay hover cost, serve-task movement, delta repositioning, avoid-conflict risk reduction, and cache-only no forced operational intent.
+7. Next algorithm step: wire the high-level mobility actor to these fields without changing the semantic utility LUT or PPO reward schema.
+
+Completed 2026-06-23 Asia/Shanghai:
+
 1. Audited the five semantic scenario presets against `outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_report.md`.
 2. Confirmed `scenario` was passed into the benchmark runner and `utm_conflict_violation` was present in rollout/summary fields.
 3. Identified the UTM mismatch root cause: benchmark actions are single-task actions without explicit `concurrent_actions`, while env smoke injected concurrent operational intents.

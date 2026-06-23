@@ -41,6 +41,9 @@ class UAVNode:
     altitude_m: float
     battery_j: float
     speed_mps: float
+    base_x_m: float = 0.0
+    base_y_m: float = 0.0
+    base_altitude_m: float = 90.0
     current_task_id: str = ""
     camera_state: str = "idle"
     total_flight_m: float = 0.0
@@ -453,6 +456,7 @@ SERVICE_LEVELS: dict[int, dict[str, Any]] = {
 }
 
 OPERATIONAL_INTENT_STATES = ("accepted", "activated", "nonconforming", "contingent")
+MOBILITY_MODES = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
 
 
 FORMAL_SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
@@ -948,7 +952,7 @@ class MultiUAVVQAEnv:
         self._move_uav(uav, task, parsed)
         uav.battery_j = max(0.0, uav.battery_j - float(info["energy_j"]))
         uav.current_task_id = task.task_id
-        uav.camera_state = "cache" if int(parsed["service_level"]) == 0 else "sensing"
+        uav.camera_state = str(parsed["mobility_mode"]) if int(parsed["service_level"]) == 0 else f"sensing:{parsed['mobility_mode']}"
         uav.utilization = min(1.0, uav.utilization + 1.0 / max(1, len(self.tasks)))
 
         self._update_edge(edge, parsed, info)
@@ -971,6 +975,11 @@ class MultiUAVVQAEnv:
             assignment = assignment[0]
         if assignment is None and task is not None:
             assignment = self._nearest_uav(task).uav_id
+        waypoint_delta_raw = action.get("waypoint_delta", action.get("waypoint_delta_xy", None))
+        if waypoint_delta_raw is None and action.get("dx") is not None and action.get("dy") is not None:
+            waypoint_delta_raw = [action.get("dx"), action.get("dy")]
+        waypoint_delta = self._waypoint_delta(waypoint_delta_raw)
+        mobility_mode = self._mobility_mode(action, service_level)
         return {
             "task_id": action.get("task_id", task.task_id if task else ""),
             "service_level": service_level,
@@ -981,7 +990,10 @@ class MultiUAVVQAEnv:
             "gpu_share": self._share(action.get("gpu_share", 0.5)),
             "uav_assignment": int(assignment or 0) % max(1, len(self.uavs)),
             "edge_id": int(action.get("edge_id", 0)) % max(1, len(self.edges)),
+            "mobility_mode": mobility_mode,
             "waypoint": action.get("waypoint"),
+            "waypoint_delta": waypoint_delta,
+            "altitude_delta": float(action.get("altitude_delta", action.get("dz", 0.0))),
             "concurrent_actions": list(action.get("concurrent_actions", [])),
         }
 
@@ -994,7 +1006,10 @@ class MultiUAVVQAEnv:
         }
         action = dict(presets.get(int(service_level), presets[max(self.service_levels())]))
         action["service_level"] = int(service_level)
+        action["mobility_mode"] = "stay" if int(service_level) == 0 else "serve_task"
         action["waypoint"] = None
+        action["waypoint_delta"] = [0.0, 0.0]
+        action["altitude_delta"] = 0.0
         if obs and obs.get("task_id"):
             action["task_id"] = obs["task_id"]
         return action
@@ -1141,6 +1156,15 @@ class MultiUAVVQAEnv:
             "cpu_share": round(float(parsed["cpu_share"]), 6),
             "gpu_share": round(float(parsed["gpu_share"]), 6),
             "uav_assignment": int(parsed["uav_assignment"]),
+            "mobility_mode": str(parsed["mobility_mode"]),
+            "waypoint_x": round(float(delay["waypoint_x"]), 6),
+            "waypoint_y": round(float(delay["waypoint_y"]), 6),
+            "altitude_m": round(float(delay["target_altitude_m"]), 6),
+            "fly_distance_m": round(float(delay["fly_distance_m"]), 6),
+            "coverage_gain": round(float(delay["coverage_gain"]), 6),
+            "mobility_energy_j": round(float(energy["mobility_energy_j"]), 6),
+            "arrival_delay_s": round(float(delay["arrival_delay_s"]), 6),
+            "utm_conflict_risk": round(float(delay["utm_conflict_risk"]), 6),
             "semantic_service_name": route["service_name"],
             "semantic_evidence_type": route["evidence_type"],
             "semantic_utility": round(float(utility["semantic_utility"]), 6),
@@ -1243,11 +1267,12 @@ class MultiUAVVQAEnv:
         return {
             "type": "hybrid",
             "service_levels": self.service_levels(),
+            "mobility_modes": list(MOBILITY_MODES),
             "num_uavs": len(self.uavs),
             "num_edges": len(self.edges),
-            "high_level": ["task_id", "uav_assignment", "edge_id", "sensing_decision", "waypoint"],
-            "low_level_discrete": ["service_level"],
-            "low_level_continuous": ["bandwidth", "power", "cpu_share", "gpu_share"],
+            "high_level": ["task_id", "uav_assignment", "edge_id", "sensing_decision", "mobility_mode"],
+            "low_level_discrete": ["service_level", "mobility_mode"],
+            "low_level_continuous": ["bandwidth", "power", "cpu_share", "gpu_share", "waypoint_delta", "altitude_delta"],
             "constraint_mask": "action_mask",
         }
 
@@ -1271,6 +1296,8 @@ class MultiUAVVQAEnv:
             "active_task_ids": [task.task_id for task in active],
             "active_task_mask": [1.0 for _ in active],
             "service_level_allowed": service_allowed,
+            "mobility_mode_allowed": {mode: True for mode in MOBILITY_MODES},
+            "feasible_mobility_mask": self._feasible_mobility_mask(active),
             "uav_battery_ok": {
                 uav.uav_id: uav.battery_j > float(self.env_cfg["return_energy_reserve_j"])
                 for uav in self.uavs
@@ -1290,14 +1317,20 @@ class MultiUAVVQAEnv:
         out: list[UAVNode] = []
         for uid in range(num):
             angle = 2.0 * math.pi * uid / max(1, num)
+            x_m = radius * math.cos(angle)
+            y_m = radius * math.sin(angle)
+            altitude_m = float(self.env_cfg["uav_altitude_m"])
             out.append(
                 UAVNode(
                     uav_id=uid,
-                    x_m=radius * math.cos(angle),
-                    y_m=radius * math.sin(angle),
-                    altitude_m=float(self.env_cfg["uav_altitude_m"]),
+                    x_m=x_m,
+                    y_m=y_m,
+                    altitude_m=altitude_m,
                     battery_j=float(self.env_cfg["initial_battery_j"]),
                     speed_mps=float(self.env_cfg["uav_speed_mps"]),
+                    base_x_m=x_m,
+                    base_y_m=y_m,
+                    base_altitude_m=altitude_m,
                 )
             )
         return out
@@ -1523,6 +1556,21 @@ class MultiUAVVQAEnv:
     def _share(value: Any) -> float:
         return max(0.01, min(1.0, float(value)))
 
+    def _mobility_mode(self, action: dict[str, Any], service_level: int) -> str:
+        raw = action.get("mobility_mode")
+        if raw is None:
+            raw = "reposition" if action.get("waypoint") is not None else ("stay" if int(service_level) == 0 else "serve_task")
+        mode = str(raw)
+        return mode if mode in MOBILITY_MODES else ("stay" if int(service_level) == 0 else "serve_task")
+
+    @staticmethod
+    def _waypoint_delta(value: Any) -> tuple[float, float]:
+        if isinstance(value, dict):
+            return float(value.get("dx", value.get("x", 0.0))), float(value.get("dy", value.get("y", 0.0)))
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            return float(value[0]), float(value[1])
+        return 0.0, 0.0
+
     @staticmethod
     def _tx_dbm(power_w: float) -> float:
         return 30.0 + 10.0 * math.log10(max(1e-9, power_w))
@@ -1708,9 +1756,8 @@ class MultiUAVVQAEnv:
         link: dict[str, float],
     ) -> dict[str, float]:
         level = int(action["service_level"])
-        operational = self._requires_operational_intent(action)
-        distance_2d = task.area4d.distance_to(uav.x_m, uav.y_m)
-        fly_delay = distance_2d / max(1e-6, uav.speed_mps) if operational else 0.0
+        mobility = self._mobility_plan(uav, task, action)
+        fly_delay = float(mobility["arrival_delay_s"])
         sense_delay = float(self.env_cfg["sensing_delay_s_by_level"].get(str(level), 0.0))
         rate_bps = max(1.0, float(link["rate_mbps"]) * 1_000_000.0)
         tx_delay = 0.0 if level == 0 else 8.0 * max(0.0, payload_bytes) / rate_bps
@@ -1726,6 +1773,14 @@ class MultiUAVVQAEnv:
         total = fly_delay + sense_delay + tx_delay + queue_delay + infer_delay + load_delay
         return {
             "fly_delay_s": fly_delay,
+            "arrival_delay_s": fly_delay,
+            "fly_distance_m": float(mobility["fly_distance_m"]),
+            "step_fly_distance_m": float(mobility["step_fly_distance_m"]),
+            "waypoint_x": float(mobility["waypoint_x"]),
+            "waypoint_y": float(mobility["waypoint_y"]),
+            "target_altitude_m": float(mobility["altitude_m"]),
+            "coverage_gain": float(mobility["coverage_gain"]),
+            "utm_conflict_risk": float(mobility["utm_conflict_risk"]),
             "sense_delay_s": sense_delay,
             "tx_delay_s": tx_delay,
             "queue_delay_s": queue_delay,
@@ -1736,23 +1791,27 @@ class MultiUAVVQAEnv:
 
     def _energy_parts(self, delay: dict[str, float], action: dict[str, Any]) -> dict[str, float]:
         level = int(action["service_level"])
-        fly_energy = delay["fly_delay_s"] * float(self.env_cfg["uav_speed_mps"]) * float(self.env_cfg["flight_energy_j_per_m"])
-        hover_energy = (delay["sense_delay_s"] + delay["infer_delay_s"]) * float(self.env_cfg["hover_power_w"])
+        fly_energy = float(delay.get("fly_distance_m", 0.0)) * float(self.env_cfg["flight_energy_j_per_m"])
+        stay_hover_s = float(self.env_cfg["slot_s"]) if str(action.get("mobility_mode", "stay")) == "stay" else 0.0
+        hover_energy = (delay["sense_delay_s"] + delay["infer_delay_s"] + stay_hover_s) * float(self.env_cfg["hover_power_w"])
         tx_energy = float(action["power"]) * delay["tx_delay_s"]
         compute_energy = float(self.env_cfg["compute_energy_j_by_level"].get(str(level), 0.0))
         total = fly_energy + hover_energy + tx_energy + compute_energy
         return {
             "fly_energy_j": fly_energy,
             "hover_energy_j": hover_energy,
+            "mobility_energy_j": fly_energy + stay_hover_s * float(self.env_cfg["hover_power_w"]),
             "tx_energy_j": tx_energy,
             "compute_energy_j": compute_energy,
             "total_energy_j": total,
         }
 
     def _requires_operational_intent(self, action: dict[str, Any]) -> bool:
-        return int(action["service_level"]) > 0 and (
-            str(action.get("sensing_decision", "observe")) in {"observe", "revisit"} or action.get("waypoint") is not None
-        )
+        if int(action["service_level"]) <= 0:
+            return False
+        return str(action.get("sensing_decision", "observe")) in {"observe", "revisit"} or str(
+            action.get("mobility_mode", "serve_task")
+        ) in {"serve_task", "reposition", "avoid_conflict", "return_base"}
 
     def _airspace_conflict(self, task: EnvTask, action: dict[str, Any]) -> bool:
         return bool(self._strategic_conflict_task_ids(task, action))
@@ -1860,19 +1919,107 @@ class MultiUAVVQAEnv:
         required = float(self.env_cfg["model_memory_mb_by_level"].get(str(service_level), 0.0))
         return edge.gpu_memory_used_mb + required <= edge.gpu_memory_capacity_mb + 1e-9
 
+    def _mobility_plan(self, uav: UAVNode, task: EnvTask, action: dict[str, Any]) -> dict[str, float]:
+        mode = str(action.get("mobility_mode", "serve_task"))
+        target_x, target_y = uav.x_m, uav.y_m
+        target_altitude = uav.altitude_m
+        if mode == "serve_task":
+            target_x, target_y = task.x_m, task.y_m
+            target_altitude = max(task.area4d.altitude_min_m, min(task.area4d.altitude_max_m, uav.altitude_m))
+        elif mode == "reposition":
+            waypoint = action.get("waypoint")
+            if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2:
+                target_x, target_y = float(waypoint[0]), float(waypoint[1])
+                if len(waypoint) >= 3:
+                    target_altitude = float(waypoint[2])
+            else:
+                dx, dy = action.get("waypoint_delta", (0.0, 0.0))
+                target_x, target_y = uav.x_m + float(dx), uav.y_m + float(dy)
+            target_altitude = uav.altitude_m + float(action.get("altitude_delta", 0.0))
+        elif mode == "avoid_conflict":
+            conflict_center = self._conflict_centroid(task)
+            if conflict_center is None:
+                conflict_center = (task.x_m, task.y_m)
+            away_x = uav.x_m - float(conflict_center[0])
+            away_y = uav.y_m - float(conflict_center[1])
+            norm = math.hypot(away_x, away_y)
+            if norm <= 1e-9:
+                away_x, away_y, norm = 1.0, 0.0, 1.0
+            step = uav.speed_mps * float(self.env_cfg["slot_s"])
+            target_x = uav.x_m + away_x / norm * step
+            target_y = uav.y_m + away_y / norm * step
+            target_altitude = uav.altitude_m + max(5.0, float(self.env_cfg.get("utm", {}).get("altitude_buffer_m", 0.0)))
+        elif mode == "return_base":
+            target_x, target_y = uav.base_x_m, uav.base_y_m
+            target_altitude = uav.base_altitude_m
+        target_altitude = max(5.0, min(200.0, target_altitude))
+        distance_2d = math.hypot(target_x - uav.x_m, target_y - uav.y_m)
+        altitude_distance = abs(target_altitude - uav.altitude_m)
+        distance_3d = math.hypot(distance_2d, altitude_distance)
+        step_distance = 0.0 if mode == "stay" else min(distance_3d, uav.speed_mps * float(self.env_cfg["slot_s"]))
+        before = self._coverage_score(uav.x_m, uav.y_m)
+        after = self._coverage_score(target_x, target_y)
+        risk = self._utm_conflict_risk(task, action)
+        if mode == "avoid_conflict":
+            risk = max(0.0, risk - 0.35)
+        return {
+            "waypoint_x": target_x,
+            "waypoint_y": target_y,
+            "altitude_m": target_altitude,
+            "fly_distance_m": 0.0 if mode == "stay" else distance_3d,
+            "step_fly_distance_m": step_distance,
+            "arrival_delay_s": 0.0 if mode == "stay" else distance_3d / max(1e-6, uav.speed_mps),
+            "coverage_gain": after - before,
+            "utm_conflict_risk": risk,
+        }
+
+    def _conflict_centroid(self, task: EnvTask) -> tuple[float, float] | None:
+        candidates = [
+            other
+            for other in self._active_tasks()
+            if other.task_id != task.task_id and self._area4d_overlaps_with_buffer(task.area4d, other.area4d)
+        ]
+        if not candidates:
+            return None
+        return (
+            sum(candidate.x_m for candidate in candidates) / len(candidates),
+            sum(candidate.y_m for candidate in candidates) / len(candidates),
+        )
+
+    def _coverage_score(self, x_m: float, y_m: float) -> float:
+        tasks = [task for task in self.tasks if not task.completed and task.generation_time <= self.step_count + 2]
+        if not tasks:
+            return 0.0
+        radius = max(1.0, float(self.env_cfg["area_spacing_m"]))
+        scores = [max(0.0, 1.0 - math.hypot(task.x_m - x_m, task.y_m - y_m) / radius) * task.priority for task in tasks]
+        return sum(scores) / max(1.0, sum(task.priority for task in tasks))
+
+    def _utm_conflict_risk(self, task: EnvTask, action: dict[str, Any] | None = None) -> float:
+        parsed = self.parse_action(action or {"service_level": 1}, task) if action is None or "bandwidth" not in action else action
+        if not self._requires_operational_intent(parsed):
+            return 0.0
+        active = [other for other in self._active_tasks() if other.task_id != task.task_id and not other.completed]
+        if not active:
+            return 0.0
+        overlaps = [
+            other
+            for other in active
+            if self._background_intent_is_active(other) and self._area4d_overlaps_with_buffer(task.area4d, other.area4d)
+        ]
+        return max(0.0, min(1.0, len(overlaps) / max(1.0, len(active))))
+
     def _move_uav(self, uav: UAVNode, task: EnvTask, action: dict[str, Any]) -> None:
-        if not self._requires_operational_intent(action):
-            return
-        target_x, target_y = task.x_m, task.y_m
-        waypoint = action.get("waypoint")
-        if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2:
-            target_x, target_y = float(waypoint[0]), float(waypoint[1])
-        distance = math.hypot(target_x - uav.x_m, target_y - uav.y_m)
-        step_distance = min(distance, uav.speed_mps * float(self.env_cfg["slot_s"]))
+        mobility = self._mobility_plan(uav, task, action)
+        target_x, target_y = float(mobility["waypoint_x"]), float(mobility["waypoint_y"])
+        target_altitude = float(mobility["altitude_m"])
+        distance = math.hypot(math.hypot(target_x - uav.x_m, target_y - uav.y_m), target_altitude - uav.altitude_m)
+        step_distance = min(distance, float(mobility["step_fly_distance_m"]))
         uav.total_flight_m += step_distance
         if distance > 1e-9:
-            uav.x_m += (target_x - uav.x_m) * step_distance / distance
-            uav.y_m += (target_y - uav.y_m) * step_distance / distance
+            ratio = step_distance / distance
+            uav.x_m += (target_x - uav.x_m) * ratio
+            uav.y_m += (target_y - uav.y_m) * ratio
+            uav.altitude_m += (target_altitude - uav.altitude_m) * ratio
 
     def _update_edge(self, edge: EdgeNode, action: dict[str, Any], info: dict[str, Any]) -> None:
         edge.load = min(1.0, float(self.env_cfg["edge_load_decay"]) * edge.load + (1.0 - float(self.env_cfg["edge_load_decay"])) * float(action["cpu_share"]))
@@ -1967,6 +2114,16 @@ class MultiUAVVQAEnv:
                 "task_queue": [],
                 "pending_tasks": 0,
                 "feasible_uavs": [],
+                "uav_task_distances_m": {},
+                "uav_battery_ratio": {},
+                "predicted_fly_delay_s": {},
+                "predicted_fly_energy_j": {},
+                "task_area4d": {},
+                "utm_conflict_risk": 0.0,
+                "future_task_proximity": {},
+                "coverage_score_by_uav": {},
+                "feasible_mobility_mask": self._feasible_mobility_mask([]),
+                "mobility_actor_state": {},
                 "vector": [],
                 "action_mask": self.action_mask(),
             }
@@ -2016,6 +2173,7 @@ class MultiUAVVQAEnv:
             "feasible_uavs": [uav.uav_id for uav in self.uavs if uav.battery_j > float(self.env_cfg["return_energy_reserve_j"])],
             "action_mask": self.action_mask(),
         }
+        obs.update(self._mobility_observation(task))
         obs["vector"] = self._observation_vector(obs)
         obs["graph"] = self.graph_observation()
         return obs
@@ -2162,6 +2320,66 @@ class MultiUAVVQAEnv:
             "front_task_hit_probability": self._semantic_cache_hit_probability(task) if task else 0.0,
         }
 
+    def _mobility_observation(self, task: EnvTask) -> dict[str, Any]:
+        active = self._active_tasks()
+        distances: dict[int, dict[str, float]] = {}
+        predicted_delay: dict[int, dict[str, float]] = {}
+        predicted_energy: dict[int, dict[str, float]] = {}
+        battery_ratio: dict[int, float] = {}
+        proximity: dict[int, float] = {}
+        coverage: dict[int, float] = {}
+        for uav in self.uavs:
+            battery_ratio[uav.uav_id] = round(uav.battery_j / max(1.0, float(self.env_cfg["initial_battery_j"])), 6)
+            distances[uav.uav_id] = {
+                item.task_id: round(math.hypot(item.x_m - uav.x_m, item.y_m - uav.y_m), 6)
+                for item in active
+            }
+            predicted_delay[uav.uav_id] = {
+                item.task_id: round(math.hypot(item.x_m - uav.x_m, item.y_m - uav.y_m) / max(1e-6, uav.speed_mps), 6)
+                for item in active
+            }
+            predicted_energy[uav.uav_id] = {
+                item.task_id: round(math.hypot(item.x_m - uav.x_m, item.y_m - uav.y_m) * float(self.env_cfg["flight_energy_j_per_m"]), 6)
+                for item in active
+            }
+            coverage[uav.uav_id] = round(self._coverage_score(uav.x_m, uav.y_m), 6)
+            future_tasks = [item for item in self.tasks if not item.completed and item.generation_time > self.step_count]
+            if future_tasks:
+                nearest = min(math.hypot(item.x_m - uav.x_m, item.y_m - uav.y_m) for item in future_tasks)
+                proximity[uav.uav_id] = round(max(0.0, 1.0 - nearest / max(1.0, float(self.env_cfg["area_spacing_m"]) * 2.0)), 6)
+            else:
+                proximity[uav.uav_id] = 0.0
+        default_intent_action = self.parse_action({"service_level": 1, "mobility_mode": "serve_task"}, task)
+        state = {
+            "uav_task_distances_m": distances,
+            "uav_battery_ratio": battery_ratio,
+            "predicted_fly_delay_s": predicted_delay,
+            "predicted_fly_energy_j": predicted_energy,
+            "task_area4d": asdict(task.area4d),
+            "utm_conflict_risk": round(self._utm_conflict_risk(task, default_intent_action), 6),
+            "future_task_proximity": proximity,
+            "coverage_score_by_uav": coverage,
+            "feasible_mobility_mask": self._feasible_mobility_mask(active),
+        }
+        state["mobility_actor_state"] = dict(state)
+        return state
+
+    def _feasible_mobility_mask(self, active_tasks: list[EnvTask] | None = None) -> dict[str, bool]:
+        active_tasks = self._active_tasks() if active_tasks is None else active_tasks
+        has_active = bool(active_tasks)
+        any_battery = any(uav.battery_j > float(self.env_cfg["return_energy_reserve_j"]) for uav in self.uavs)
+        has_conflict_risk = any(
+            any(self._area4d_overlaps_with_buffer(task.area4d, other.area4d) for other in active_tasks if other.task_id != task.task_id)
+            for task in active_tasks
+        )
+        return {
+            "stay": True,
+            "serve_task": has_active and any_battery,
+            "reposition": any_battery,
+            "avoid_conflict": has_active and any_battery and has_conflict_risk,
+            "return_base": any_battery,
+        }
+
     def _observation_vector(self, obs: dict[str, Any]) -> list[float]:
         task_types = ("presence", "counting", "risk")
         risk_levels = ("normal", "critical")
@@ -2180,6 +2398,7 @@ class MultiUAVVQAEnv:
             min(1.0, float(obs["deadline_s"]) / 10.0),
             float(obs["epsilon_k"]),
             float(obs["cache_state"]["front_task_hit_probability"]),
+            float(obs.get("utm_conflict_risk", 0.0)),
             min(1.0, float(obs["pending_tasks"]) / max(1.0, float(len(self.tasks)))),
         ]
         for level in self.service_levels():
@@ -2194,9 +2413,11 @@ class MultiUAVVQAEnv:
                     uav.altitude_m / 200.0,
                     uav.battery_j / max(1.0, float(self.env_cfg["initial_battery_j"])),
                     min(1.0, uav.utilization),
+                    float(obs.get("coverage_score_by_uav", {}).get(uav.uav_id, 0.0)),
+                    float(obs.get("future_task_proximity", {}).get(uav.uav_id, 0.0)),
                 ]
             )
-        vec.extend([0.0] * max(0, (4 - min(len(self.uavs), 4)) * 5))
+        vec.extend([0.0] * max(0, (4 - min(len(self.uavs), 4)) * 7))
         for edge in self.edges[:2]:
             vec.extend(
                 [
@@ -2249,6 +2470,15 @@ class MultiUAVVQAEnv:
             "conflict_notification_pending": False,
             "snr_bin": "",
             "service_level": 0,
+            "mobility_mode": "stay",
+            "waypoint_x": 0.0,
+            "waypoint_y": 0.0,
+            "altitude_m": 0.0,
+            "fly_distance_m": 0.0,
+            "coverage_gain": 0.0,
+            "mobility_energy_j": 0.0,
+            "arrival_delay_s": 0.0,
+            "utm_conflict_risk": 0.0,
             "semantic_service_name": "",
             "semantic_evidence_type": "",
             "semantic_utility": 0.0,
@@ -2341,6 +2571,15 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "uav_id",
         "edge_id",
         "service_level",
+        "mobility_mode",
+        "waypoint_x",
+        "waypoint_y",
+        "altitude_m",
+        "fly_distance_m",
+        "coverage_gain",
+        "mobility_energy_j",
+        "arrival_delay_s",
+        "utm_conflict_risk",
         "semantic_service_name",
         "semantic_evidence_type",
         "semantic_utility",
@@ -2397,6 +2636,7 @@ def write_env_trace(rows: list[dict[str, Any]], csv_path: Path, summary_path: Pa
         "gpu_memory_capacity_mb",
         "battery_remaining_j",
         "fly_delay_s",
+        "step_fly_distance_m",
         "sense_delay_s",
         "tx_delay_s",
         "queue_delay_s",

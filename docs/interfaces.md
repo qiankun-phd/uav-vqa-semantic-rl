@@ -1,6 +1,6 @@
 # Interfaces
 
-Last updated: 2026-06-22 Asia/Macau
+Last updated: 2026-06-23 Asia/Shanghai
 Primary project root: /home/qiankun/phd_research/vqa_semcom
 
 ## Stable Environment API
@@ -43,6 +43,15 @@ Recommended additional fields:
 - task_id
 - episode_step
 - feasible_uavs
+- uav_task_distances_m
+- uav_battery_ratio
+- predicted_fly_delay_s
+- predicted_fly_energy_j
+- task_area4d
+- utm_conflict_risk
+- future_task_proximity
+- coverage_score_by_uav
+- feasible_mobility_mask
 
 ## Action Contract
 
@@ -56,7 +65,10 @@ Algorithm thread outputs an action with these fields:
 | cpu_share | float | 0..1 normalized edge/local CPU share. |
 | gpu_share | float | 0..1 normalized GPU share, if used. |
 | uav_assignment | int/list | UAV id or task-to-UAV mapping. |
-| waypoint | list/array | Optional next UAV waypoint or movement command. |
+| mobility_mode | str | `stay`, `serve_task`, `reposition`, `avoid_conflict`, or `return_base`. Old actions without this field default to `stay` for cache and `serve_task` for token/image service. |
+| waypoint_delta | list/array/dict | Optional relative `dx, dy` movement command for `reposition`. |
+| altitude_delta | float | Optional relative altitude command for `reposition`. |
+| waypoint | list/array | Backward-compatible absolute waypoint. If present without `mobility_mode`, it is treated as `reposition`. |
 
 Minimal V1.9-compatible action:
 
@@ -68,6 +80,9 @@ action = {
     'cpu_share': 0.0,
     'gpu_share': 0.0,
     'uav_assignment': 0,
+    'mobility_mode': 'stay',
+    'waypoint_delta': [0.0, 0.0],
+    'altitude_delta': 0.0,
     'waypoint': None,
 }
 ```
@@ -187,6 +202,15 @@ info = {
     'dss_delay_s': float,
     'snr_bin': str,
     'service_level': int,
+    'mobility_mode': str,
+    'waypoint_x': float,
+    'waypoint_y': float,
+    'altitude_m': float,
+    'fly_distance_m': float,
+    'coverage_gain': float,
+    'mobility_energy_j': float,
+    'arrival_delay_s': float,
+    'utm_conflict_risk': float,
 }
 ```
 
@@ -204,6 +228,15 @@ UTM/risk cost semantics for journal-level constrained semantic control:
 - `utm_conflict_violation` is true when strategic airspace conflict or UTM coordination violation is active.
 - `risk_violation` is true when a critical/high-risk task violates semantic QoS, deadline, or UTM coordination.
 - `airspace_state` mirrors the operational intent state: accepted, activated, nonconforming, or contingent.
+
+Mobility-control semantics:
+
+- `mobility_mode=stay` keeps the UAV at its current position and altitude and accounts for hover energy.
+- `mobility_mode=serve_task` moves toward the selected task's 4D area.
+- `mobility_mode=reposition` follows `waypoint_delta` or the backward-compatible absolute `waypoint`.
+- `mobility_mode=avoid_conflict` moves away from the local UTM conflict centroid and reports reduced predicted conflict risk.
+- `mobility_mode=return_base` moves toward the UAV's initial base/safe point.
+- `service_level=0` cache answer reuse does not by itself create an operational intent or airspace conflict; explicit mobility can still consume flight/hover energy.
 
 Suggested scalar reward:
 

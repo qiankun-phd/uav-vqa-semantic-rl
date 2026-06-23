@@ -71,11 +71,22 @@ class MultiUAVEnvTest(unittest.TestCase):
             "uav_state",
             "edge_load",
             "cache_state",
+            "uav_task_distances_m",
+            "uav_battery_ratio",
+            "predicted_fly_delay_s",
+            "predicted_fly_energy_j",
+            "task_area4d",
+            "utm_conflict_risk",
+            "future_task_proximity",
+            "coverage_score_by_uav",
+            "feasible_mobility_mask",
+            "mobility_actor_state",
         ]:
             self.assertIn(field, obs)
         self.assertEqual(obs["task_type"], "presence")
         self.assertTrue(obs["uav_state"])
         self.assertIn(obs["snr_bin"], {"0dB", "10dB", "20dB"})
+        self.assertIn("serve_task", obs["feasible_mobility_mask"])
 
     def test_step_info_contains_reward_components(self) -> None:
         env = self._env()
@@ -115,9 +126,19 @@ class MultiUAVEnvTest(unittest.TestCase):
             "freshness_bin",
             "snr_bin",
             "service_level",
+            "mobility_mode",
+            "waypoint_x",
+            "waypoint_y",
+            "altitude_m",
+            "fly_distance_m",
+            "coverage_gain",
+            "mobility_energy_j",
+            "arrival_delay_s",
+            "utm_conflict_risk",
         ]:
             self.assertIn(field, info)
         self.assertEqual(info["service_level"], 1)
+        self.assertEqual(info["mobility_mode"], "serve_task")
         self.assertGreaterEqual(info["answer_accuracy_est"], 0.0)
         self.assertEqual(info["quality_violation"], not info["semantic_success"])
         self.assertAlmostEqual(info["semantic_payload_kb"], info["payload_kb"])
@@ -132,6 +153,91 @@ class MultiUAVEnvTest(unittest.TestCase):
         self.assertLess(after[2], before[2])
         self.assertGreater(info["delay_s"], 0.0)
         self.assertGreater(info["energy_j"], 0.0)
+
+    def test_mobility_stay_hovers_without_moving(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        before = (env.uavs[0].x_m, env.uavs[0].y_m, env.uavs[0].altitude_m)
+        _obs, _reward, _done, info = env.step(
+            {"service_level": 0, "uav_assignment": 0, "mobility_mode": "stay"}
+        )
+        after = (env.uavs[0].x_m, env.uavs[0].y_m, env.uavs[0].altitude_m)
+        self.assertEqual(before, after)
+        self.assertEqual(info["mobility_mode"], "stay")
+        self.assertEqual(info["fly_distance_m"], 0.0)
+        self.assertGreater(info["mobility_energy_j"], 0.0)
+
+    def test_mobility_serve_task_moves_toward_task_area(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        before = task.area4d.distance_to(env.uavs[0].x_m, env.uavs[0].y_m)
+        _obs, _reward, _done, info = env.step(
+            {"service_level": 1, "uav_assignment": 0, "mobility_mode": "serve_task"}
+        )
+        after = task.area4d.distance_to(env.uavs[0].x_m, env.uavs[0].y_m)
+        self.assertLess(after, before)
+        self.assertEqual(info["mobility_mode"], "serve_task")
+        self.assertGreater(info["arrival_delay_s"], 0.0)
+
+    def test_mobility_reposition_uses_waypoint_delta(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        before = (env.uavs[0].x_m, env.uavs[0].y_m)
+        _obs, _reward, _done, info = env.step(
+            {
+                "service_level": 0,
+                "uav_assignment": 0,
+                "mobility_mode": "reposition",
+                "waypoint_delta": [40.0, 0.0],
+            }
+        )
+        after = (env.uavs[0].x_m, env.uavs[0].y_m)
+        self.assertGreater(after[0], before[0])
+        self.assertAlmostEqual(after[1], before[1], places=6)
+        self.assertEqual(info["mobility_mode"], "reposition")
+        self.assertGreater(info["fly_distance_m"], 0.0)
+
+    def test_mobility_avoid_conflict_reduces_predicted_risk(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        active = env._active_tasks()
+        task = next(
+            (
+                item
+                for item in active
+                if env.evaluate_action(
+                    {"task_id": item.task_id, "service_level": 1, "mobility_mode": "serve_task"},
+                    task_id=item.task_id,
+                )["utm_conflict_risk"]
+                > 0.0
+            ),
+            None,
+        )
+        self.assertIsNotNone(task)
+        serve = env.evaluate_action(
+            {"task_id": task.task_id, "service_level": 1, "mobility_mode": "serve_task"},
+            task_id=task.task_id,
+        )
+        avoid = env.evaluate_action(
+            {"task_id": task.task_id, "service_level": 1, "mobility_mode": "avoid_conflict"},
+            task_id=task.task_id,
+        )
+        self.assertGreater(serve["utm_conflict_risk"], avoid["utm_conflict_risk"])
+        self.assertEqual(avoid["mobility_mode"], "avoid_conflict")
+
+    def test_cache_service_does_not_force_operational_intent_with_mobility_fields(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        info = env.evaluate_action(
+            {"task_id": task.task_id, "service_level": 0, "mobility_mode": "serve_task"},
+            task_id=task.task_id,
+        )
+        self.assertFalse(info["utm_conflict_violation"])
+        self.assertFalse(info["airspace_conflict"])
 
     def test_area4d_overlap_and_cache_only_conflict_policy(self) -> None:
         env = self._env()

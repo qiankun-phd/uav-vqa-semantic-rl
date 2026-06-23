@@ -484,6 +484,13 @@ Latest fixed-scenario environment smokes:
 
 ## Current Blockers / Watch Items
 
+- Mobility-policy action interface completed 2026-06-23 Asia/Shanghai:
+  - Canonical env `src/vqa_semcom/sim/multi_uav_env.py` now accepts explicit `mobility_mode`: `stay`, `serve_task`, `reposition`, `avoid_conflict`, and `return_base`.
+  - Actions now keep the original semantic/resource fields and add `waypoint_delta`, `altitude_delta`, and backward-compatible absolute `waypoint` support.
+  - UAV movement, fly delay, mobility energy, waypoint/altitude reporting, coverage gain, and UTM conflict risk now use the same mobility plan instead of always assuming automatic flight to the task center.
+  - Observations now expose UAV-task distance matrices, battery ratios, predicted fly delay/energy, task `Area4D`, UTM conflict risk, future-task proximity, coverage scores, and feasible mobility masks for a future mobility actor.
+  - Cache-only service remains free of forced operational-intent/airspace conflict; explicit cache-mode repositioning can still consume mobility energy for patrol behavior.
+
 - Semantic scenario benchmark signal audit completed 2026-06-23 Asia/Shanghai:
   - Root cause for `utm_conflict` mismatch: environment smoke used explicit `concurrent_actions`, while algorithm benchmark v2 uses algorithm-style single-task actions, so no second operational intent was available for strategic conflict detection.
   - Fix: `utm_conflict` now enables background operational-intent detection. Observe/revisit/image/token actions conflict with other active overlapping intents; cache-only reuse still creates no airspace/UTM conflict.

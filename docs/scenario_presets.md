@@ -102,6 +102,20 @@ semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)
 
 This non-negative quantity is the recommended input to semantic QoS queues.
 
+## Mobility Policy Fields
+
+The canonical simulator now exposes UAV mobility as an explicit policy action instead of always moving to the task center. All presets support:
+
+```text
+mobility_mode = stay / serve_task / reposition / avoid_conflict / return_base
+waypoint_delta = [dx, dy]
+altitude_delta = dz
+```
+
+The environment reports `mobility_mode`, `waypoint_x`, `waypoint_y`, `altitude_m`, `fly_distance_m`, `arrival_delay_s`, `mobility_energy_j`, `coverage_gain`, and `utm_conflict_risk` in `info`. Observations include UAV-task distance matrices, battery ratios, predicted fly delay/energy, task `Area4D`, future-task proximity, coverage scores, and a feasible mobility mask.
+
+`mobility-stress` and `utm_conflict` are the main presets for evaluating mobility policies. Cache-only service still does not force an operational intent, so `s=0` remains a clean semantic-cache baseline unless the action explicitly spends mobility energy for patrol/repositioning.
+
 ## Smoke Artifacts
 
 The preset smoke summary is stored under:
