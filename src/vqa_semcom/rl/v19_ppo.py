@@ -137,6 +137,15 @@ class PPOTrainConfig:
     arrival_delay_cost_weight: float = 0.35
     coverage_gain_weight: float = 0.5
     edge_queue_cost_weight: float = 0.15
+    deadline_aware_evidence_guard: bool = False
+    deadline_guard_slack: float = 0.95
+    payload_delay_aware_projection: bool = False
+    no_image_under_low_snr: bool = False
+    low_snr_guard_threshold_db: float = -5.0
+    high_payload_guard_kb: float = 20.0
+    short_deadline_guard_s: float = 6.0
+    nearest_uav_mobility: bool = False
+    critical_burst_nearest_uav: bool = True
 
 
 @dataclass
@@ -1150,7 +1159,7 @@ def _mobility_action_from_raw(
         "waypoint_delta": [dx_unit * float(cfg.waypoint_delta_max_m), dy_unit * float(cfg.waypoint_delta_max_m)],
         "altitude_delta": dz_unit * float(cfg.altitude_delta_max_m),
     }
-    return _project_mobility_action(env, obs, action)
+    return _project_mobility_action(env, obs, action, cfg)
 
 
 def _default_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], service_level: int | None) -> dict[str, Any]:
@@ -1159,7 +1168,8 @@ def _default_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], servic
     return {"uav_assignment": _select_uav_assignment(obs, PPOTrainConfig()), "mobility_mode": mode, "waypoint_delta": [0.0, 0.0], "altitude_delta": 0.0}
 
 
-def _project_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+def _project_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], action: dict[str, Any], cfg: PPOTrainConfig | None = None) -> dict[str, Any]:
+    cfg = cfg or PPOTrainConfig()
     mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
     allowed = mask.get("mobility_mode_allowed", {})
     mode = str(action.get("mobility_mode", "serve_task"))
@@ -1167,9 +1177,26 @@ def _project_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], action
         mode = "serve_task" if bool(allowed.get("serve_task", True)) else "stay"
     if str(obs.get("operational_intent_state", "accepted")) in {"nonconforming", "contingent"}:
         mode = "avoid_conflict"
+    if _prefer_nearest_uav_mobility(obs, cfg):
+        if mode in {"reposition", "return_base"}:
+            mode = "serve_task" if bool(allowed.get("serve_task", True)) else "stay"
+        action["uav_assignment"] = _select_uav_assignment(obs, cfg)
+        action["waypoint_delta"] = [0.0, 0.0]
+        action["altitude_delta"] = 0.0
     action["mobility_mode"] = mode
-    action["uav_assignment"] = _select_uav_assignment(obs, PPOTrainConfig()) if action.get("uav_assignment") is None else int(action["uav_assignment"])
+    action["uav_assignment"] = _select_uav_assignment(obs, cfg) if action.get("uav_assignment") is None else int(action["uav_assignment"])
     return action
+
+
+def _prefer_nearest_uav_mobility(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    if bool(cfg.nearest_uav_mobility):
+        return True
+    if not bool(cfg.critical_burst_nearest_uav):
+        return False
+    scenario = str(obs.get("scenario", obs.get("formal_scenario", "")))
+    risk = str(obs.get("risk_level", "normal"))
+    queue_len = len(list(obs.get("task_queue", []) or []))
+    return scenario == "disaster_hotspot" and (risk == "critical" or queue_len >= 2)
 
 
 def _apply_uav_mask(logits: Any, obs: dict[str, Any]) -> Any:
@@ -1306,7 +1333,7 @@ def _project_semantic_feasible_action(
         if cache_override and int(level) > 0:
             candidate_gap = _semantic_gap(evaluated, obs)
             improves_gap = (best_gap - candidate_gap) >= float(cfg.cache_override_min_improvement)
-            semantic_success = bool(evaluated.get("semantic_success", evaluated.get("success", False)))
+            semantic_success = bool(evaluated.get("semantic_success", evaluated.get("success", False))) and not _evidence_guard_blocks(evaluated, obs, cfg)
             projection_score = _semantic_projection_score(evaluated, obs, cfg)
             if improves_gap or semantic_success or projection_score < best_projection_score:
                 best_gap = candidate_gap
@@ -1350,6 +1377,8 @@ def _semantic_safety_score(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTr
     score += 4.0 * float(not bool(info.get("dss_available", True)))
     score += cfg.off_nominal_cost_weight * float(info.get("off_nominal_planning_penalty", 0.0))
     score += 10.0 * risk_weight * max(0.0, epsilon - accuracy)
+    if _evidence_guard_blocks(info, obs, cfg):
+        score += 64.0 * risk_weight
     if int(info.get("service_level", 0)) == 0:
         cache_gap = _semantic_gap(info, obs)
         if cache_gap >= float(cfg.cache_override_gap_threshold):
@@ -1387,6 +1416,60 @@ def _semantic_gap(info: dict[str, Any], obs: dict[str, Any]) -> float:
     return max(0.0, epsilon - accuracy)
 
 
+def _evidence_guard_blocks(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    return _deadline_guard_blocks(info, obs, cfg) or _payload_delay_guard_blocks(info, obs, cfg)
+
+
+def _deadline_guard_blocks(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    if not bool(cfg.deadline_aware_evidence_guard):
+        return False
+    service_level = int(info.get("service_level", 0))
+    if service_level <= 0:
+        return False
+    deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0)))))
+    evidence_delay = _evidence_delay_s(info)
+    return evidence_delay > max(1e-6, float(cfg.deadline_guard_slack) * deadline)
+
+
+def _payload_delay_guard_blocks(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    service_level = int(info.get("service_level", 0))
+    if service_level != 2:
+        return False
+    if bool(cfg.no_image_under_low_snr) and _is_low_snr(obs, cfg):
+        return True
+    if not bool(cfg.payload_delay_aware_projection):
+        return False
+    payload_kb = float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0)))
+    deadline = float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0))))
+    return (
+        _is_low_snr(obs, cfg)
+        and payload_kb >= float(cfg.high_payload_guard_kb)
+        and deadline <= float(cfg.short_deadline_guard_s)
+    )
+
+
+def _evidence_delay_s(info: dict[str, Any]) -> float:
+    tx = float(info.get("tx_delay_s", info.get("transmission_delay_s", 0.0)))
+    queue = float(info.get("queue_delay_s", info.get("edge_queue_delay_s", info.get("edge_queue_s", 0.0))))
+    infer = float(info.get("infer_delay_s", info.get("inference_delay_s", 0.0)))
+    total = tx + queue + infer
+    if total <= 0.0:
+        total = float(info.get("delay_s", info.get("total_delay_s", 0.0)))
+    return float(total)
+
+
+def _is_low_snr(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    snr_value = obs.get("sensed_snr_db", obs.get("snr_db", None))
+    try:
+        if snr_value is not None and float(snr_value) <= float(cfg.low_snr_guard_threshold_db):
+            return True
+    except (TypeError, ValueError):
+        pass
+    snr_bin = str(obs.get("snr_bin", "")).lower()
+    scenario = str(obs.get("scenario", obs.get("formal_scenario", ""))).lower()
+    return "low" in snr_bin or "blockage" in scenario or "low_snr" in scenario
+
+
 def _cache_risk_multiplier(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> float:
     risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
     freshness = str(info.get("freshness_bin", obs.get("freshness_bin", "fresh")))
@@ -1419,6 +1502,11 @@ def _semantic_projection_score(info: dict[str, Any], obs: dict[str, Any], cfg: P
     score += 4.0 * float(info.get("off_nominal_planning_penalty", 0.0))
     score += 0.02 * float(info.get("energy_j", 0.0)) / 10.0
     score += 0.01 * float(info.get("payload_kb", 0.0))
+    if _deadline_guard_blocks(info, obs, cfg):
+        deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0)))))
+        score += 80.0 * max(1.0, _evidence_delay_s(info) / deadline)
+    if _payload_delay_guard_blocks(info, obs, cfg):
+        score += 120.0 if bool(cfg.no_image_under_low_snr) else 48.0
     if service_level == 0 and gap > 0.0:
         score += 25.0 * _cache_risk_multiplier(info, obs, cfg) * gap
     if service_level == 1:

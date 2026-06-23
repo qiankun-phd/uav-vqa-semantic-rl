@@ -49,6 +49,9 @@ SCENARIO_BENCHMARK_POLICIES = (
     "ppo_without_projection",
     "proposed_ppo",
     "proposed_two_timescale_ppo",
+    "proposed_v2_deadline_guard",
+    "proposed_v2_no_image_under_low_snr",
+    "proposed_v2_nearest_uav_mobility",
 )
 
 SCENARIO_BENCHMARK_BASELINES = (
@@ -67,6 +70,9 @@ SCENARIO_BENCHMARK_PPO_VARIANTS = (
     "ppo_without_projection",
     "proposed_ppo",
     "proposed_two_timescale_ppo",
+    "proposed_v2_deadline_guard",
+    "proposed_v2_no_image_under_low_snr",
+    "proposed_v2_nearest_uav_mobility",
 )
 
 BASELINE_POLICIES = (
@@ -329,6 +335,10 @@ def main() -> int:
     parser.add_argument("--no-semantic-lcb", "--no-lcb", dest="no_semantic_lcb", action="store_true", help="Use raw/mean accuracy instead of conservative semantic accuracy LCB.")
     parser.add_argument("--no-lyapunov-queues", action="store_true", help="Disable virtual queue penalties while keeping other semantic PPO settings.")
     parser.add_argument("--no-resource-projection", "--no-projection", dest="no_resource_projection", action="store_true", help="Disable service-dependent resource floors/projection.")
+    parser.add_argument("--deadline-aware-evidence-guard", action="store_true", help="Penalize token/image evidence whose tx+queue+infer delay exceeds the deadline.")
+    parser.add_argument("--payload-delay-aware-projection", action="store_true", help="Avoid image escalation when low SNR, high payload, and short deadline coincide.")
+    parser.add_argument("--no-image-under-low-snr", action="store_true", help="Diagnostic ablation: forbid image projection under low-SNR/blockage conditions.")
+    parser.add_argument("--nearest-uav-mobility", action="store_true", help="Diagnostic ablation: force nearest feasible UAV mobility and suppress extra reposition.")
     parser.add_argument("--disable-semantic-token", action="store_true", help="Disable service level 1 semantic-token evidence for ablations.")
     parser.add_argument("--queue-quality-weight", type=float, default=1.5)
     parser.add_argument("--queue-deadline-weight", type=float, default=0.8)
@@ -444,6 +454,10 @@ def run_experiment(
             two_timescale=args.two_timescale_ppo,
             mobility_update_interval=args.mobility_update_interval,
             no_mobility_actor=args.no_mobility_actor,
+            deadline_aware_evidence_guard=args.deadline_aware_evidence_guard,
+            payload_delay_aware_projection=args.payload_delay_aware_projection,
+            no_image_under_low_snr=args.no_image_under_low_snr,
+            nearest_uav_mobility=args.nearest_uav_mobility,
         )
         if args.two_timescale_ppo:
             model, train_trace = train_two_timescale_ppo(train_env, ppo_cfg, seed=args.seed)
@@ -548,6 +562,13 @@ def _enable_proposed_semantic_rl_defaults(args: argparse.Namespace) -> None:
     args.bc_epochs = max(int(args.bc_epochs), 6)
 
 
+def _enable_proposed_v2_defaults(args: argparse.Namespace) -> None:
+    _enable_proposed_semantic_rl_defaults(args)
+    args.two_timescale_ppo = True
+    args.deadline_aware_evidence_guard = True
+    args.payload_delay_aware_projection = True
+
+
 def _scenario_args(args: argparse.Namespace, root: Path, scenario: str, seed: int, run_name: str) -> argparse.Namespace:
     scenario_args = argparse.Namespace(**vars(args))
     scenario_args.scenario_benchmark = False
@@ -587,6 +608,14 @@ def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
     elif variant == "proposed_two_timescale_ppo":
         _enable_proposed_semantic_rl_defaults(args)
         args.two_timescale_ppo = True
+    elif variant == "proposed_v2_deadline_guard":
+        _enable_proposed_v2_defaults(args)
+    elif variant == "proposed_v2_no_image_under_low_snr":
+        _enable_proposed_v2_defaults(args)
+        args.no_image_under_low_snr = True
+    elif variant == "proposed_v2_nearest_uav_mobility":
+        _enable_proposed_v2_defaults(args)
+        args.nearest_uav_mobility = True
     else:
         raise ValueError(f"unknown PPO benchmark variant: {variant}")
 

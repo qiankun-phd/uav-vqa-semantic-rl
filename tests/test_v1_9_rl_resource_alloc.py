@@ -11,7 +11,15 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from vqa_semcom.config import load_config, resolve_path
-from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, TwoTimescalePPOPolicy, train_ppo, train_two_timescale_ppo
+from vqa_semcom.rl.v19_ppo import (
+    PPOServicePolicy,
+    PPOTrainConfig,
+    TwoTimescalePPOPolicy,
+    _project_mobility_action,
+    _project_semantic_feasible_action,
+    train_ppo,
+    train_two_timescale_ppo,
+)
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
 from run_v1_9_resource_alloc import SCENARIO_BENCHMARK_POLICIES, SCENARIO_BENCHMARK_SCENARIOS, choose_baseline_action
@@ -141,7 +149,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=6, tasks_per_episode=1)
         obs = env.reset(seed=6)
         for policy in SCENARIO_BENCHMARK_POLICIES:
-            if "ppo" in policy or policy in {"monolithic_ppo", "no_mobility_actor"}:
+            if "ppo" in policy or policy in {"monolithic_ppo", "no_mobility_actor"} or policy.startswith("proposed_v2_"):
                 continue
             action = choose_baseline_action(policy, env, obs)
             for key in ["service_level", "bandwidth", "power", "cpu_share", "gpu_share", "uav_assignment"]:
@@ -273,6 +281,138 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.coverage_gain_weight, 0.0)
         self.assertGreater(cfg.flight_energy_cost_weight, 0.0)
         self.assertGreater(cfg.semantic_token_exploration_bonus, 0.0)
+        self.assertGreater(cfg.deadline_guard_slack, 0.0)
+        self.assertGreater(cfg.high_payload_guard_kb, 0.0)
+        self.assertTrue(cfg.critical_burst_nearest_uav)
+
+    def test_deadline_guard_prefers_token_over_slow_image(self) -> None:
+        env = _ProjectionEnv()
+        obs = {
+            "epsilon_k": 0.8,
+            "deadline_s": 2.0,
+            "sensed_snr_db": -8.0,
+            "snr_bin": "low",
+            "action_mask": {"service_level_allowed": {0: True, 1: True, 2: True}},
+            "uav_state": [{"uav_id": 0, "x_m": 0.0, "y_m": 0.0}],
+        }
+        current = env.candidate_action(2, obs)
+        projected = _project_semantic_feasible_action(
+            env,
+            obs,
+            current,
+            PPOTrainConfig(deadline_aware_evidence_guard=True, payload_delay_aware_projection=True),
+        )
+        self.assertEqual(projected["service_level"], 1)
+
+    def test_no_image_under_low_snr_blocks_image_projection(self) -> None:
+        env = _ProjectionEnv()
+        obs = {
+            "epsilon_k": 0.8,
+            "deadline_s": 5.0,
+            "sensed_snr_db": -9.0,
+            "snr_bin": "low",
+            "action_mask": {"service_level_allowed": {0: True, 1: True, 2: True}},
+            "uav_state": [{"uav_id": 0, "x_m": 0.0, "y_m": 0.0}],
+        }
+        projected = _project_semantic_feasible_action(
+            env,
+            obs,
+            env.candidate_action(2, obs),
+            PPOTrainConfig(no_image_under_low_snr=True),
+        )
+        self.assertEqual(projected["service_level"], 1)
+
+    def test_nearest_uav_mobility_suppresses_burst_reposition(self) -> None:
+        obs = {
+            "scenario": "disaster_hotspot",
+            "risk_level": "critical",
+            "task_id": "t0",
+            "task_queue": [{"task_id": "t0", "area4d": {"center_x_m": 10.0, "center_y_m": 0.0}}],
+            "uav_state": [
+                {"uav_id": 0, "x_m": 200.0, "y_m": 0.0},
+                {"uav_id": 1, "x_m": 12.0, "y_m": 0.0},
+            ],
+            "action_mask": {"uav_battery_ok": {0: True, 1: True}, "mobility_mode_allowed": {"serve_task": True}},
+        }
+        action = _project_mobility_action(
+            self,
+            obs,
+            {"uav_assignment": 0, "mobility_mode": "reposition", "waypoint_delta": [80.0, 40.0], "altitude_delta": 10.0},
+            PPOTrainConfig(nearest_uav_mobility=True),
+        )
+        self.assertEqual(action["uav_assignment"], 1)
+        self.assertEqual(action["mobility_mode"], "serve_task")
+        self.assertEqual(action["waypoint_delta"], [0.0, 0.0])
+        self.assertEqual(action["altitude_delta"], 0.0)
+
+
+class _ProjectionEnv:
+    service_levels = [0, 1, 2]
+
+    def candidate_action(self, service_level: int, obs: dict) -> dict:
+        return {
+            "service_level": int(service_level),
+            "bandwidth": 1.0,
+            "power": 0.5,
+            "cpu_share": 0.5,
+            "gpu_share": 0.5,
+            "uav_assignment": 0,
+        }
+
+    def parse_action(self, action: dict) -> dict:
+        return dict(action)
+
+    def evaluate_action(self, action: dict, obs: dict) -> dict:
+        level = int(action["service_level"])
+        base = {
+            "service_level": level,
+            "risk_level": obs.get("risk_level", "normal"),
+            "semantic_uncertainty": 0.1,
+            "battery_violation": False,
+            "resource_violation": False,
+            "utm_constraint_violation": False,
+            "utm_conflict_violation": False,
+            "off_nominal_planning_penalty": 0.0,
+            "energy_j": 100.0,
+        }
+        if level == 0:
+            base.update(
+                semantic_accuracy_lcb=0.35,
+                semantic_success=False,
+                quality_violation=True,
+                deadline_violation=False,
+                delay_s=0.1,
+                payload_kb=0.0,
+                tx_delay_s=0.0,
+                queue_delay_s=0.0,
+                infer_delay_s=0.0,
+            )
+        elif level == 1:
+            base.update(
+                semantic_accuracy_lcb=0.74,
+                semantic_success=False,
+                quality_violation=True,
+                deadline_violation=False,
+                delay_s=1.3,
+                payload_kb=1.0,
+                tx_delay_s=0.4,
+                queue_delay_s=0.4,
+                infer_delay_s=0.3,
+            )
+        else:
+            base.update(
+                semantic_accuracy_lcb=0.95,
+                semantic_success=True,
+                quality_violation=False,
+                deadline_violation=True,
+                delay_s=3.2,
+                payload_kb=80.0,
+                semantic_payload_kb=80.0,
+                tx_delay_s=1.4,
+                queue_delay_s=0.9,
+                infer_delay_s=0.8,
+            )
+        return base
 
 
 if __name__ == "__main__":
