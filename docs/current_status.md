@@ -1231,3 +1231,69 @@ Headline GPU mid-scale results:
 Performance note:
 
 - The GPU run completed the mid-scale benchmark in about 15m45s. The speedup is not dramatic because this small benchmark is dominated by Python environment rollout/evaluation and CSV reporting rather than large neural-network batches.
+
+## State Vector / MLP Train-only PPO Ablation 2026-06-24 Asia/Shanghai
+
+Implemented and validated a train-only PPO ablation for observation state vector and MLP capacity.
+
+Implementation commit:
+
+```text
+d0baef3 feat(rl): add state-vector and mlp ablations for train-only PPO
+```
+
+Output directory:
+
+```text
+outputs/rl/state_mlp_ablation_trainonly_20260624/
+```
+
+Experiment settings:
+
+```text
+scenarios: low_snr_blockage, disaster_hotspot, edge_overload
+seeds: 0,1,2
+train episodes: 120
+evaluation episodes: 0
+tasks per episode: 12
+device: cuda:0
+```
+
+Ablation groups:
+
+```text
+A: state_v1 + hidden_layers=128,128
+B: state_v2 + hidden_layers=128,128
+C: state_v2 + hidden_layers=256,256
+D: state_v2 + hidden_layers=256,256,128
+```
+
+Completion:
+
+```text
+completed trace files: 36/36
+failed or missing runs: 0
+```
+
+Artifacts:
+
+```text
+outputs/rl/state_mlp_ablation_trainonly_20260624/train_trace_summary.md
+```
+
+Validation:
+
+```text
+source /home/qiankun/miniconda3/etc/profile.d/conda.sh
+conda activate RA_DI
+python -m unittest discover -s tests
+Ran 95 tests in 1.973s
+OK
+```
+
+Notes:
+
+- No final evaluation rollout was run; every training command used `--episodes 0`.
+- GPU use was confirmed during training through logs and `nvidia-smi`.
+- Empty rollout/result CSVs produced by the runner are not used for analysis and should remain uncommitted.
+- Model checkpoints and per-run training traces are left uncommitted; only the root training summary is committed.
