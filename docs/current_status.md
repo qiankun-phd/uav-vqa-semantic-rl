@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-06-22 Asia/Macau
+Last updated: 2026-06-23 Asia/Shanghai
 Remote host: qiankun@172.27.57.160
 
 ## Code Locations
@@ -592,7 +592,7 @@ Small-scale result in `outputs/rl/v1_9_rl_fix_cache_collapse/`:
 - `ppo` deadline violation: 0.500 versus greedy 0.812.
 - `ppo` service mix: cache 0.417, semantic tokens 0.479, image 0.104; the policy no longer collapses to all cache in this validation.
 
-Next required algorithm step: rerun formal multi-seed comparison with the fixed controller and include unseen conflict/interference/mobility scenarios.
+Next required algorithm step: scale the scenario-aware v2 comparison below to longer training/evaluation budgets and export paper tables/figures.
 
 ## Semantic-Lyapunov Hybrid Control 2026-06-22 Asia/Shanghai
 
@@ -666,4 +666,61 @@ Validation:
 ```bash
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
 # Ran 12 tests OK
+```
+
+## Scenario-Aware Semantic Benchmark v2 2026-06-23 Asia/Shanghai
+
+Algorithm thread fixed the scenario benchmark PPO cache-collapse issue and ran a formal small multi-seed comparison.
+
+Code updates:
+
+- `src/vqa_semcom/rl/v19_ppo.py` adds stronger semantic success/gap shaping, high-epsilon/high-risk cache penalties, and a cache override in the semantic projection layer.
+- The projection layer now compares semantic-token/image candidates when a cache action has large `accuracy_lcb` shortfall, while still respecting hard safety masks.
+- Cache actions are projected to minimal/no resource use; token/image actions retain service-dependent resource floors.
+- `scripts/run_v1_9_resource_alloc.py` scenario benchmark now runs seeds and PPO ablations: `ppo_without_lcb`, `ppo_without_queues`, `ppo_without_projection`, and `proposed_ppo`.
+
+Formal-small command:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v2
+```
+
+Artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v2/cache_collapse_analysis.md
+```
+
+Headline v2 proposed PPO results:
+
+| scenario | semantic success | accuracy LCB | quality gap | delay | energy | payload KB | deadline vio | cache | token | image |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.303 | 0.611 | 0.186 | 3.336 | 403.832 | 34.219 | 0.330 | 0.367 | 0.451 | 0.182 |
+| disaster_hotspot | 0.238 | 0.585 | 0.267 | 1.506 | 149.392 | 3.998 | 0.289 | 0.185 | 0.799 | 0.017 |
+| low_snr_blockage | 0.785 | 0.746 | 0.108 | 10.355 | 1339.330 | 1.726 | 0.699 | 0.276 | 0.697 | 0.027 |
+| edge_overload | 0.000 | 0.691 | 0.121 | 4.472 | 519.261 | 0.820 | 0.531 | 0.309 | 0.691 | 0.000 |
+| utm_conflict | 0.000 | 0.581 | 0.239 | 1.268 | 130.915 | 0.686 | 0.177 | 0.420 | 0.580 | 0.000 |
+
+Interpretation:
+
+- Proposed PPO no longer collapses to `always_cache`; token/image service mix is nonzero in all five scenarios.
+- In `low_snr_blockage`, proposed PPO reaches 0.785 semantic success versus 0.053 for cache and 0.950 for semantic greedy, with far lower payload than image/oracle-heavy policies.
+- In `edge_overload` and `utm_conflict`, semantic success remains near zero for most methods, but proposed PPO substantially improves conservative LCB/gap over cache while keeping payload small.
+- `ppo_without_projection` is consistently weaker or less stable, supporting the resource-projection component.
+
+Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
 ```

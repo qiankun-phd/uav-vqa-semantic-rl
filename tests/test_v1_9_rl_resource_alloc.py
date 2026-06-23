@@ -129,11 +129,16 @@ class V19RLResourceAllocTest(unittest.TestCase):
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=6, tasks_per_episode=1)
         obs = env.reset(seed=6)
         for policy in SCENARIO_BENCHMARK_POLICIES:
-            if policy == "ppo":
+            if policy.startswith("ppo_") or policy == "proposed_ppo":
                 continue
             action = choose_baseline_action(policy, env, obs)
             for key in ["service_level", "bandwidth", "power", "cpu_share", "gpu_share", "uav_assignment"]:
                 self.assertIn(key, action)
+            if policy == "always_cache":
+                self.assertLessEqual(float(action["bandwidth"]), 1.0)
+                self.assertLessEqual(float(action["power"]), 1e-5)
+                self.assertLessEqual(float(action["cpu_share"]), 0.01)
+                self.assertLessEqual(float(action["gpu_share"]), 0.01)
 
     def test_tiny_ppo_training_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=2, tasks_per_episode=4)
@@ -199,6 +204,16 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("non_cache_ratio", trace[0])
         self.assertIn("mean_semantic_accuracy_lcb", trace[0])
         self.assertIn("mean_q_utm", trace[0])
+
+    def test_semantic_reward_config_has_cache_collapse_controls(self) -> None:
+        cfg = PPOTrainConfig(semantic_reward_mode="semantic_utility", lyapunov_reward=True)
+        self.assertGreater(cfg.semantic_success_weight, 6.0)
+        self.assertGreater(cfg.semantic_gap_weight, 2.0)
+        self.assertGreater(cfg.cache_shortfall_penalty_weight, 0.0)
+        self.assertGreater(cfg.high_risk_cache_penalty_weight, 0.0)
+        self.assertGreater(cfg.cache_override_gap_threshold, 0.0)
+        self.assertGreater(cfg.cache_override_min_improvement, 0.0)
+        self.assertGreater(cfg.semantic_token_exploration_bonus, 0.0)
 
 
 if __name__ == "__main__":

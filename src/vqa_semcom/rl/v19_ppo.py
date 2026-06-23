@@ -54,10 +54,17 @@ class PPOTrainConfig:
     risk_aware_constraints: bool = False
     safety_layer: bool = True
     semantic_reward_mode: str = "env"
-    semantic_success_weight: float = 6.0
-    semantic_accuracy_weight: float = 2.0
-    semantic_margin_weight: float = 3.0
-    semantic_gap_weight: float = 2.0
+    semantic_success_weight: float = 10.0
+    semantic_accuracy_weight: float = 3.0
+    semantic_margin_weight: float = 5.0
+    semantic_gap_weight: float = 7.0
+    cache_shortfall_penalty_weight: float = 10.0
+    high_risk_cache_penalty_weight: float = 3.0
+    high_epsilon_cache_threshold: float = 0.65
+    cache_override_gap_threshold: float = 0.20
+    cache_override_min_improvement: float = 0.08
+    non_cache_semantic_bonus: float = 1.0
+    semantic_token_exploration_bonus: float = 0.35
     delay_cost_weight: float = 0.25
     energy_cost_weight: float = 0.12
     payload_cost_weight: float = 0.10
@@ -70,7 +77,7 @@ class PPOTrainConfig:
     use_semantic_lcb: bool = True
     lyapunov_reward: bool = False
     use_lyapunov_queues: bool = True
-    queue_quality_weight: float = 1.5
+    queue_quality_weight: float = 2.5
     queue_deadline_weight: float = 0.8
     queue_energy_weight: float = 0.25
     queue_risk_weight: float = 1.0
@@ -506,7 +513,9 @@ def _build_hybrid_action(
     cfg: PPOTrainConfig,
 ) -> dict[str, Any]:
     action = env.candidate_action(service_level, obs)
-    if cfg.hybrid_actions and int(service_level) > 0:
+    if int(service_level) == 0:
+        action.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
+    elif cfg.hybrid_actions:
         bandwidth_floor = _resource_floor(cfg, service_level, "bandwidth")
         power_floor = _resource_floor(cfg, service_level, "power")
         cpu_floor = _resource_floor(cfg, service_level, "cpu_share")
@@ -566,6 +575,8 @@ def _project_semantic_feasible_action(
     current_info = current_info or env.evaluate_action(current, obs)
     best_action = current
     best_score = _semantic_safety_score(current_info, obs, cfg)
+    cache_override = _needs_cache_override(current, current_info, obs, cfg)
+    best_gap = _semantic_gap(current_info, obs)
     if best_score <= 0.0:
         return best_action
     for level in env.service_levels:
@@ -576,6 +587,15 @@ def _project_semantic_feasible_action(
         evaluated = env.evaluate_action(candidate, obs)
         if _has_hard_safety_violation(evaluated):
             continue
+        if cache_override and int(level) > 0:
+            candidate_gap = _semantic_gap(evaluated, obs)
+            improves_gap = (best_gap - candidate_gap) >= float(cfg.cache_override_min_improvement)
+            semantic_success = bool(evaluated.get("semantic_success", evaluated.get("success", False)))
+            if improves_gap or semantic_success:
+                best_gap = candidate_gap
+                best_action = candidate
+                best_score = _semantic_safety_score(evaluated, obs, cfg)
+                continue
         score = _semantic_safety_score(evaluated, obs, cfg)
         if score < best_score:
             best_score = score
@@ -585,7 +605,9 @@ def _project_semantic_feasible_action(
 
 def _resource_floor_candidate(env: V19LUTResourceEnv, obs: dict[str, Any], service_level: int, cfg: PPOTrainConfig) -> dict[str, Any]:
     candidate = env.candidate_action(service_level, obs)
-    if int(service_level) > 0 and cfg.hybrid_actions:
+    if int(service_level) == 0:
+        candidate.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
+    elif cfg.hybrid_actions:
         candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _resource_floor(cfg, service_level, "bandwidth"))
         candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _resource_floor(cfg, service_level, "power"), cfg.power_min_w)
         candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _resource_floor(cfg, service_level, "cpu_share"))
@@ -610,11 +632,31 @@ def _semantic_safety_score(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTr
     score += 4.0 * float(not bool(info.get("dss_available", True)))
     score += cfg.off_nominal_cost_weight * float(info.get("off_nominal_planning_penalty", 0.0))
     score += 10.0 * risk_weight * max(0.0, epsilon - accuracy)
+    if int(info.get("service_level", 0)) == 0:
+        cache_gap = _semantic_gap(info, obs)
+        if cache_gap >= float(cfg.cache_override_gap_threshold):
+            score += 28.0 * risk_weight * cache_gap
     score += 4.0 * max(0.0, delay / deadline - 1.0)
     score += 0.25 * float(info.get("semantic_uncertainty", 0.0))
     score += 0.02 * float(info.get("payload_kb", 0.0)) / 100.0
     score += 0.01 * float(info.get("energy_j", 0.0)) / 100.0
     return float(score)
+
+
+def _needs_cache_override(action: dict[str, Any], info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    if int(action.get("service_level", info.get("service_level", 0))) != 0:
+        return False
+    gap = _semantic_gap(info, obs)
+    epsilon = float(obs.get("epsilon_k", 0.0))
+    risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
+    high_priority = risk == "critical" or epsilon >= float(cfg.high_epsilon_cache_threshold)
+    return gap >= float(cfg.cache_override_gap_threshold) or (high_priority and gap > 0.0)
+
+
+def _semantic_gap(info: dict[str, Any], obs: dict[str, Any]) -> float:
+    epsilon = float(obs.get("epsilon_k", 0.0))
+    accuracy = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
+    return max(0.0, epsilon - accuracy)
 
 
 def _has_hard_safety_violation(info: dict[str, Any]) -> bool:
@@ -690,7 +732,9 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     accuracy_mean = float(info.get("semantic_accuracy_mean", accuracy))
     uncertainty = float(info.get("semantic_uncertainty", 0.0))
     epsilon = float(obs.get("epsilon_k", 0.0))
-    success = float(bool(info.get("success", False)))
+    semantic_success = float(bool(info.get("semantic_success", info.get("success", False))))
+    task_success = float(bool(info.get("success", False)))
+    service_level = int(info.get("service_level", 0))
     delay_norm = float(info.get("delay_s", 0.0)) / max(0.5, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))
     energy_norm = float(info.get("energy_j", 0.0)) / max(1.0, float(info.get("energy_budget_j", cfg.energy_budget_j)))
     payload_norm = float(info.get("payload_kb", 0.0)) / 200.0
@@ -712,13 +756,23 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     margin = accuracy - epsilon
     if cfg.semantic_reward_mode == "accuracy_only":
         return float(risk_weight * accuracy_mean - 0.1 * resource_cost)
+    semantic_gap = max(0.0, -margin)
     utility = (
-        cfg.semantic_success_weight * risk_weight * success
+        cfg.semantic_success_weight * risk_weight * semantic_success
         + cfg.semantic_accuracy_weight * risk_weight * accuracy
         + cfg.semantic_margin_weight * risk_weight * max(0.0, margin)
-        - cfg.semantic_gap_weight * risk_weight * max(0.0, -margin)
+        - cfg.semantic_gap_weight * risk_weight * semantic_gap
+        + 0.5 * cfg.semantic_success_weight * risk_weight * task_success
         - resource_cost
     )
+    if service_level == 0 and semantic_gap > 0.0:
+        utility -= cfg.cache_shortfall_penalty_weight * risk_weight * (1.0 + epsilon) * semantic_gap
+        if risk_weight > 1.0 or epsilon >= float(cfg.high_epsilon_cache_threshold):
+            utility -= cfg.high_risk_cache_penalty_weight * risk_weight
+    elif service_level > 0 and semantic_success > 0.0:
+        utility += cfg.non_cache_semantic_bonus * risk_weight
+    if service_level == 1 and semantic_gap > 0.0:
+        utility += cfg.semantic_token_exploration_bonus * risk_weight
     if cfg.semantic_reward_mode == "uncertainty_aware":
         utility += 0.5 * risk_weight * max(0.0, margin) - 0.4 * uncertainty
     if cfg.lyapunov_reward and cfg.use_lyapunov_queues:

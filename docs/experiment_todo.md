@@ -1,6 +1,6 @@
 # Experiment TODO
 
-Last updated: 2026-06-22 Asia/Macau
+Last updated: 2026-06-23 Asia/Shanghai
 Primary project root: /home/qiankun/phd_research/vqa_semcom
 
 ## Completed VQA / SNR-LUT Tasks
@@ -489,6 +489,65 @@ Next algorithm steps:
 1. Promote the scenario benchmark from smoke to multi-seed formal runs after checking queue/deadline scaling.
 2. Add the no-LCB/no-queue/no-projection/no-semantic-token ablations to the scenario table.
 3. Use the scenario benchmark report as the paper-facing stress-test table template.
+
+## Scenario Benchmark v2 Cache-Collapse Fix
+
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Diagnosed PPO cache bias in `outputs/rl/semantic_scenario_benchmark/scenario_comparison_report.md`: cache minimized delay/energy/payload while semantic shortfall penalties were too weak.
+2. Strengthened the proposed controller in `src/vqa_semcom/rl/v19_ppo.py`:
+   - semantic success and LCB gap reward scaling,
+   - explicit cache shortfall penalty,
+   - high-epsilon/high-risk cache penalty,
+   - semantic-token exploration bonus,
+   - cache override inside semantic projection when `semantic_quality_gap` is large.
+3. Confirmed `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)` remains the standardized queue gap.
+4. Confirmed resource projection behavior:
+   - cache actions use minimal/no resource allocation,
+   - semantic-token/image evidence keeps service-dependent bandwidth/power/cpu/gpu floors,
+   - no-projection ablation remains available for comparison.
+5. Ran formal-small scenario benchmark:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v2
+```
+
+Generated artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v2/cache_collapse_analysis.md
+```
+
+Key observation:
+
+- Proposed PPO no longer collapses to `always_cache` in any of the five scenarios.
+- `low_snr_blockage`: proposed semantic success 0.785 vs cache 0.053 and semantic greedy 0.950, with 1.726 KB payload.
+- `nominal_patrol`: proposed semantic success 0.303 vs semantic greedy 0.087 under this small run, but payload/seed variance should be checked in longer runs.
+- `edge_overload` and `utm_conflict`: semantic success remains near zero for most policies, but proposed PPO improves LCB/gap while keeping payload small.
+
+Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
+```
+
+Next algorithm steps:
+
+1. Run a paper-scale version of `semantic_scenario_benchmark_v2` with seeds 0-4, 200+ eval episodes, and 500-1000+ train episodes per PPO variant.
+2. Add/commit only summary/report/small CSV artifacts; keep `.pt`, rollout CSV, and logs untracked.
+3. Turn `scenario_comparison_summary.csv` into paper tables and plot semantic success/resource tradeoff curves.
+4. Investigate `edge_overload` and `utm_conflict` feasibility: success is near zero for almost all methods, so these may need to be framed as LCB/gap robustness rather than success-rate wins.
 
 ## Output Naming Convention
 

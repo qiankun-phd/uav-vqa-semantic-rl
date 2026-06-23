@@ -32,7 +32,25 @@ SCENARIO_BENCHMARK_POLICIES = (
     "always_image",
     "semantic_greedy",
     "lyapunov_greedy",
-    "ppo",
+    "ppo_without_lcb",
+    "ppo_without_queues",
+    "ppo_without_projection",
+    "proposed_ppo",
+)
+
+SCENARIO_BENCHMARK_BASELINES = (
+    "always_cache",
+    "always_semantic_token",
+    "always_image",
+    "semantic_greedy",
+    "lyapunov_greedy",
+)
+
+SCENARIO_BENCHMARK_PPO_VARIANTS = (
+    "ppo_without_lcb",
+    "ppo_without_queues",
+    "ppo_without_projection",
+    "proposed_ppo",
 )
 
 BASELINE_POLICIES = (
@@ -249,6 +267,7 @@ def main() -> int:
     parser.add_argument("--formal-scenario", default=None, help="Optional formal semantic-network scenario, e.g. train_mixed_random/test_utm_dss_outage.")
     parser.add_argument("--scenario-benchmark", action="store_true", help="Run the five scenario-aware semantic communication benchmark smokes.")
     parser.add_argument("--benchmark-scenarios", default=",".join(SCENARIO_BENCHMARK_SCENARIOS), help="Comma-separated scenario benchmark list.")
+    parser.add_argument("--seeds", default="0", help="Comma-separated seeds for scenario benchmark mode.")
     parser.add_argument("--policy", default="all", choices=["all", "ppo", *BASELINE_POLICIES])
     parser.add_argument("--train-ppo", action="store_true", help="Train and evaluate centralized hybrid PPO.")
     parser.add_argument("--load-ppo-model", default=None, help="Load a trained PPO checkpoint and evaluate policy=ppo without training.")
@@ -311,15 +330,7 @@ def main() -> int:
         if args.output_dir == default_output_dir:
             args.output_dir = str(ROOT / "outputs" / "rl" / "v1_9_hybrid_tch_ppo_smoke")
     if args.proposed_semantic_rl:
-        args.train_ppo = True
-        args.risk_aware_constraints = True
-        args.semantic_reward_mode = "semantic_utility"
-        args.semantic_lyapunov_control = True
-        args.imitation_warm_start = True
-        args.entropy_start = max(float(args.entropy_start), 0.06)
-        args.service_prior_weight = max(float(args.service_prior_weight), 0.30)
-        args.bc_aux_weight = max(float(args.bc_aux_weight), 0.10)
-        args.demo_episodes = max(int(args.demo_episodes), min(20, int(args.train_episodes)))
+        _enable_proposed_semantic_rl_defaults(args)
 
     cfg = load_config(args.config)
     tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
@@ -432,36 +443,135 @@ def _run_scenario_benchmark(
     root.mkdir(parents=True, exist_ok=True)
     all_rows: list[dict[str, Any]] = []
     scenarios = [item.strip() for item in str(args.benchmark_scenarios).split(",") if item.strip()]
+    seeds = _parse_seed_list(str(args.seeds))
+    ppo_variants = ("proposed_ppo",) if bool(args.smoke) else SCENARIO_BENCHMARK_PPO_VARIANTS
     for scenario in scenarios:
-        scenario_args = argparse.Namespace(**vars(args))
-        scenario_args.scenario_benchmark = False
-        scenario_args.scenario = scenario
-        scenario_args.formal_scenario = None
-        scenario_args.output_dir = str(root / scenario)
-        scenario_args.policy = "all"
-        scenario_args.train_ppo = True
-        scenario_args.semantic_lyapunov_control = True
-        scenario_args.risk_aware_constraints = True
-        if scenario_args.semantic_reward_mode == "env":
-            scenario_args.semantic_reward_mode = "semantic_utility"
-        summaries = run_experiment(scenario_args, cfg, tasks, lut)
-        by_policy = {row.policy: row for row in summaries}
-        for policy in SCENARIO_BENCHMARK_POLICIES:
-            if policy in by_policy:
-                row = by_policy[policy]
-            elif policy == "semantic_greedy" and "greedy_min_sufficient_evidence" in by_policy:
-                row = by_policy["greedy_min_sufficient_evidence"]
-            elif policy == "always_semantic_token" and "always_light" in by_policy:
-                row = by_policy["always_light"]
-            else:
-                continue
-            all_rows.append(asdict(row) | {"scenario": scenario, "benchmark_policy": policy})
-        for row in summaries:
-            _print_summary_row(row)
-    _write_dict_csv(root / "scenario_comparison_summary.csv", all_rows)
-    _write_scenario_benchmark_report(root / "scenario_comparison_report.md", all_rows, args)
+        for seed in seeds:
+            baseline_args = _scenario_args(args, root, scenario, seed, "baselines")
+            baseline_args.policy = "all"
+            baseline_args.train_ppo = False
+            summaries = run_experiment(baseline_args, cfg, tasks, lut)
+            by_policy = {row.policy: row for row in summaries}
+            for policy in SCENARIO_BENCHMARK_BASELINES:
+                row = by_policy.get(policy)
+                if row is None:
+                    continue
+                all_rows.append(asdict(row) | {"seed": seed, "benchmark_policy": policy, "variant_kind": "heuristic"})
+            for row in summaries:
+                _print_summary_row(row)
+            for variant in ppo_variants:
+                variant_args = _scenario_args(args, root, scenario, seed, variant)
+                _configure_ppo_variant(variant_args, variant)
+                summaries = run_experiment(variant_args, cfg, tasks, lut)
+                ppo_row = next((row for row in summaries if row.policy == "ppo"), summaries[0])
+                all_rows.append(asdict(ppo_row) | {"seed": seed, "benchmark_policy": variant, "variant_kind": "rl"})
+                _print_summary_row(ppo_row)
+    _write_dict_csv(root / "scenario_comparison_all_seed_results.csv", all_rows)
+    summary_rows = _aggregate_benchmark_rows(all_rows)
+    _write_dict_csv(root / "scenario_comparison_summary.csv", summary_rows)
+    _write_scenario_benchmark_report(root / "scenario_comparison_report.md", summary_rows, args)
+    _write_benchmark_analysis(root / "cache_collapse_analysis.md", all_rows, summary_rows)
+    print(f"wrote {root / 'scenario_comparison_all_seed_results.csv'}")
     print(f"wrote {root / 'scenario_comparison_summary.csv'}")
     print(f"wrote {root / 'scenario_comparison_report.md'}")
+
+
+def _enable_proposed_semantic_rl_defaults(args: argparse.Namespace) -> None:
+    args.train_ppo = True
+    args.risk_aware_constraints = True
+    args.semantic_reward_mode = "semantic_utility"
+    args.semantic_lyapunov_control = True
+    args.imitation_warm_start = True
+    args.entropy_start = max(float(args.entropy_start), 0.08)
+    args.entropy_end = max(float(args.entropy_end), 0.015)
+    args.service_prior_weight = max(float(args.service_prior_weight), 0.45)
+    args.service_prior_decay_episodes = max(int(args.service_prior_decay_episodes), 240)
+    args.bc_aux_weight = max(float(args.bc_aux_weight), 0.18)
+    args.demo_episodes = max(int(args.demo_episodes), min(30, int(args.train_episodes)))
+    args.bc_epochs = max(int(args.bc_epochs), 4)
+
+
+def _scenario_args(args: argparse.Namespace, root: Path, scenario: str, seed: int, run_name: str) -> argparse.Namespace:
+    scenario_args = argparse.Namespace(**vars(args))
+    scenario_args.scenario_benchmark = False
+    scenario_args.scenario = scenario
+    scenario_args.formal_scenario = None
+    scenario_args.seed = int(seed)
+    scenario_args.output_dir = str(root / scenario / f"seed{seed}" / run_name)
+    return scenario_args
+
+
+def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
+    args.policy = "ppo"
+    args.train_ppo = True
+    args.semantic_lyapunov_control = True
+    args.risk_aware_constraints = True
+    args.semantic_reward_mode = "semantic_utility"
+    if variant == "ppo_without_lcb":
+        _enable_proposed_semantic_rl_defaults(args)
+        args.no_semantic_lcb = True
+    elif variant == "ppo_without_queues":
+        _enable_proposed_semantic_rl_defaults(args)
+        args.no_lyapunov_queues = True
+    elif variant == "ppo_without_projection":
+        _enable_proposed_semantic_rl_defaults(args)
+        args.no_resource_projection = True
+        args.no_semantic_projection = True
+    elif variant == "proposed_ppo":
+        _enable_proposed_semantic_rl_defaults(args)
+    else:
+        raise ValueError(f"unknown PPO benchmark variant: {variant}")
+
+
+def _parse_seed_list(raw: str) -> list[int]:
+    seeds = [int(item.strip()) for item in str(raw).split(",") if item.strip()]
+    if not seeds:
+        raise ValueError("--seeds must include at least one seed")
+    return seeds
+
+
+def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (str(row.get("scenario", "")), str(row.get("benchmark_policy", row.get("policy", ""))))
+        grouped.setdefault(key, []).append(row)
+    metric_keys = [
+        "semantic_success_rate",
+        "task_success_rate",
+        "average_accuracy",
+        "average_accuracy_mean",
+        "average_uncertainty",
+        "average_semantic_quality_gap",
+        "average_q_quality",
+        "average_q_deadline",
+        "average_q_energy",
+        "average_q_utm",
+        "average_delay",
+        "average_energy",
+        "average_payload_kb",
+        "deadline_violation_rate",
+        "utm_conflict_violation_rate",
+        "service_level_0_ratio",
+        "service_level_1_ratio",
+        "service_level_2_ratio",
+    ]
+    out: list[dict[str, Any]] = []
+    for (scenario, policy), items in sorted(grouped.items()):
+        row: dict[str, Any] = {
+            "scenario": scenario,
+            "benchmark_policy": policy,
+            "seeds": ",".join(str(int(item.get("seed", 0))) for item in items),
+            "runs": len(items),
+            "episodes_per_seed": items[0].get("episodes", ""),
+            "tasks_total": int(sum(float(item.get("tasks", 0.0)) for item in items)),
+            "variant_kind": items[0].get("variant_kind", ""),
+        }
+        for key in metric_keys:
+            values = [float(item.get(key, 0.0)) for item in items]
+            row[f"{key}_mean"] = round(_mean_float(values), 6)
+            row[f"{key}_std"] = round(_std_float(values), 6)
+        out.append(row)
+    return out
 
 
 def _print_summary_row(row: EvalSummary) -> None:
@@ -502,6 +612,9 @@ def _candidate_for_level(env: V19LUTResourceEnv, level: int, obs: dict[str, Any]
 
 
 def _with_action_defaults(env: V19LUTResourceEnv, action: dict[str, Any]) -> dict[str, Any]:
+    if int(action.get("service_level", 0)) == 0:
+        action = dict(action)
+        action.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
     return env.parse_action(action)
 
 
@@ -591,6 +704,17 @@ def _rate(records: list[V19StepRecord], field: str) -> float:
     return sum(float(bool(getattr(record, field))) for record in records) / len(records)
 
 
+def _mean_float(values: list[float]) -> float:
+    return sum(float(value) for value in values) / max(1, len(values))
+
+
+def _std_float(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    avg = _mean_float(values)
+    return (sum((float(value) - avg) ** 2 for value in values) / (len(values) - 1)) ** 0.5
+
+
 def _service_ratio(records: list[V19StepRecord], level: int) -> float:
     if not records:
         return 0.0
@@ -657,8 +781,9 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         "",
         f"- scenarios: `{args.benchmark_scenarios}`",
         f"- smoke: `{bool(args.smoke)}`",
+        f"- seeds: `{args.seeds}`",
         f"- episodes per scenario/policy: `{args.episodes}`",
-        f"- train episodes per PPO smoke: `{args.train_episodes}`",
+        f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
         "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |",
@@ -667,15 +792,15 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
     for row in rows:
         lines.append(
             f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
-            f"{float(row.get('semantic_success_rate', 0.0)):.3f} | {float(row.get('average_accuracy', 0.0)):.3f} | "
-            f"{float(row.get('average_accuracy_mean', 0.0)):.3f} | {float(row.get('average_uncertainty', 0.0)):.3f} | "
-            f"{float(row.get('average_semantic_quality_gap', 0.0)):.3f} | {float(row.get('average_q_quality', 0.0)):.3f} | "
-            f"{float(row.get('average_q_deadline', 0.0)):.3f} | {float(row.get('average_q_energy', 0.0)):.3f} | "
-            f"{float(row.get('average_q_utm', 0.0)):.3f} | {float(row.get('average_delay', 0.0)):.3f} | "
-            f"{float(row.get('average_energy', 0.0)):.3f} | {float(row.get('average_payload_kb', 0.0)):.3f} | "
-            f"{float(row.get('deadline_violation_rate', 0.0)):.3f} | {float(row.get('utm_conflict_violation_rate', 0.0)):.3f} | "
-            f"{float(row.get('service_level_0_ratio', 0.0)):.3f} | {float(row.get('service_level_1_ratio', 0.0)):.3f} | "
-            f"{float(row.get('service_level_2_ratio', 0.0)):.3f} |"
+            f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'average_accuracy'):.3f} | "
+            f"{_metric(row, 'average_accuracy_mean'):.3f} | {_metric(row, 'average_uncertainty'):.3f} | "
+            f"{_metric(row, 'average_semantic_quality_gap'):.3f} | {_metric(row, 'average_q_quality'):.3f} | "
+            f"{_metric(row, 'average_q_deadline'):.3f} | {_metric(row, 'average_q_energy'):.3f} | "
+            f"{_metric(row, 'average_q_utm'):.3f} | {_metric(row, 'average_delay'):.3f} | "
+            f"{_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
+            f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
+            f"{_metric(row, 'service_level_0_ratio'):.3f} | {_metric(row, 'service_level_1_ratio'):.3f} | "
+            f"{_metric(row, 'service_level_2_ratio'):.3f} |"
         )
     lines.extend(
         [
@@ -683,10 +808,47 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
             "## Notes",
             "",
             "- `semantic_quality_gap = max(0, epsilon_k - semantic_accuracy_lcb)`.",
-            "- PPO rows use Semantic-LCB Lyapunov reward/projection in smoke mode.",
+            "- Proposed PPO rows use Semantic-LCB Lyapunov reward/projection, oracle warm-start, service-level curriculum, and cache shortfall penalties.",
             "- Scenario subdirectories contain per-scenario summaries and traces; large rollout/model artifacts remain ignored.",
         ]
     )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _metric(row: dict[str, Any], key: str) -> float:
+    if f"{key}_mean" in row:
+        return float(row.get(f"{key}_mean", 0.0))
+    return float(row.get(key, 0.0))
+
+
+def _write_benchmark_analysis(path: Path, all_rows: list[dict[str, Any]], summary_rows: list[dict[str, Any]]) -> None:
+    proposed_rows = [row for row in summary_rows if str(row.get("benchmark_policy", "")) == "proposed_ppo"]
+    cache_rows = [row for row in summary_rows if str(row.get("benchmark_policy", "")) == "always_cache"]
+    cache_by_scenario = {str(row.get("scenario", "")): row for row in cache_rows}
+    lines = [
+        "# Scenario Benchmark Cache-Collapse Analysis",
+        "",
+        "## Diagnosis",
+        "",
+        "- Previous smoke PPO had high cache ratios because cache minimized delay/energy/payload while the semantic shortfall penalty was too small.",
+        "- The v2 controller uses semantic-only success bonus, stronger LCB/margin reward, explicit cache shortfall penalty, high-epsilon/high-risk cache penalty, oracle warm-start, service-level curriculum, and token exploration bonus.",
+        "- Cache actions are projected to zero bandwidth/power/cpu/gpu; token/image actions retain service-dependent resource floors.",
+        "",
+        "## Proposed PPO vs Always Cache",
+        "",
+        "| scenario | proposed semantic success | cache semantic success | proposed cache mix | proposed token mix | proposed image mix | cache gap | proposed gap |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in proposed_rows:
+        scenario = str(row.get("scenario", ""))
+        cache = cache_by_scenario.get(scenario, {})
+        lines.append(
+            f"| {scenario} | {_metric(row, 'semantic_success_rate'):.3f} | {_metric(cache, 'semantic_success_rate'):.3f} | "
+            f"{_metric(row, 'service_level_0_ratio'):.3f} | {_metric(row, 'service_level_1_ratio'):.3f} | "
+            f"{_metric(row, 'service_level_2_ratio'):.3f} | {_metric(cache, 'average_semantic_quality_gap'):.3f} | "
+            f"{_metric(row, 'average_semantic_quality_gap'):.3f} |"
+        )
+    lines.extend(["", f"- raw seed rows: {len(all_rows)}", "- `scenario_comparison_summary.csv` reports mean/std across seeds."])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
