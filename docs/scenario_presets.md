@@ -62,6 +62,8 @@ Use this preset to validate the claim that task-oriented semantic evidence can r
 
 High edge CPU/GPU load, larger queue delay constants, single model-cache slot, and reduced GPU memory capacity. The channel is not the primary stressor.
 
+The preset caps semantic thresholds more gently than `disaster_hotspot` so that the benchmark measures edge queue/resource pressure rather than making all semantic QoS infeasible. In lightweight V1.9 probes, semantic-token evidence remains feasible for a subset of tasks while deadline violations are driven by queue and model-cache delay.
+
 Use this preset to test MEC-aware semantic routing and Lyapunov/resource-projection behavior.
 
 ### `utm_conflict`
@@ -73,6 +75,8 @@ accepted / activated / nonconforming / contingent
 ```
 
 Use this preset to test UTM/risk costs and conflict-aware task/UAV matching. Cache-only service does not create an operational intent and should not trigger an airspace conflict by itself.
+
+The preset enables background operational-intent conflict detection. This makes algorithm-style single-task actions observe the same UTM pressure that environment smoke tests observe with explicit `concurrent_actions`, while preserving cache-only no-conflict behavior.
 
 ## Required Info Fields
 

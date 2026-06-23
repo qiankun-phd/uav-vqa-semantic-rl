@@ -259,6 +259,16 @@ Do not overwrite V1.9 VLM/LUT/report files.
 
 ## Environment Thread TODO
 
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Audited the five semantic scenario presets against `outputs/rl/semantic_scenario_benchmark_v2/scenario_comparison_report.md`.
+2. Confirmed `scenario` was passed into the benchmark runner and `utm_conflict_violation` was present in rollout/summary fields.
+3. Identified the UTM mismatch root cause: benchmark actions are single-task actions without explicit `concurrent_actions`, while env smoke injected concurrent operational intents.
+4. Added background operational-intent conflict detection for the `utm_conflict` preset only; cache-only service remains conflict-free.
+5. Recalibrated `edge_overload` so semantic evidence can be feasible for a subset of tasks while edge queue/deadline pressure remains high.
+6. Regenerated environment-owned small summaries under `outputs/env/semantic_scenario_presets/`.
+7. Verified lightweight V1.9 probes: `utm_conflict` token/image actions now produce UTM conflict 12/12; `edge_overload` token/image semantic feasibility is 9/12 and 4/12 while deadline pressure remains 12/12.
+
 Completed 2026-06-22 Asia/Shanghai:
 
 1. Added five paper-facing UAV semantic VQA scenario presets in `src/vqa_semcom/sim/multi_uav_env.py`: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.

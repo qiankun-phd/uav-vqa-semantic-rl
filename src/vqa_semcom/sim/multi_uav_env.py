@@ -343,24 +343,25 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "episode_steps": 12,
             "area_spacing_m": 240.0,
             "area_radius_m": 75.0,
-            "edge_load_range": [0.76, 0.92],
-            "gpu_load_range": [0.72, 0.90],
-            "queue_delay_scale_s": 1.25,
-            "gpu_queue_delay_scale_s": 0.95,
-            "model_load_delay_s": 0.95,
+            "edge_load_range": [0.66, 0.84],
+            "gpu_load_range": [0.62, 0.82],
+            "queue_delay_scale_s": 0.95,
+            "gpu_queue_delay_scale_s": 0.72,
+            "model_load_delay_s": 0.78,
             "model_cache_hit_delay_s": 0.08,
             "model_cache_capacity": 1,
             "gpu_memory_capacity_mb": 4096.0,
             "gpu_memory_load": 0.48,
-            "semantic_threshold_by_risk": {"normal": 0.60, "critical": 0.80, "high": 0.80},
+            "semantic_threshold_by_risk": {"normal": 0.54, "critical": 0.64, "high": 0.64},
+            "semantic_threshold_cap_by_risk": {"normal": 0.62, "critical": 0.64, "high": 0.64},
         },
         "task_layout": {
             "generation_mode": "wave",
             "jitter_ratio": 0.12,
-            "risk_cycle": ["normal", "critical", "normal", "normal"],
-            "freshness_cycle": ["fresh", "stale", "expired", "stale"],
-            "view_quality_cycle": ["good", "medium", "medium", "poor"],
-            "tau_scale": 0.9,
+            "risk_cycle": ["normal", "normal", "normal", "critical", "normal", "normal"],
+            "freshness_cycle": ["fresh", "fresh", "fresh", "stale"],
+            "view_quality_cycle": ["good", "good", "medium", "good"],
+            "tau_scale": 1.1,
         },
     },
     "utm_conflict": {
@@ -380,6 +381,7 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "utm": {
                 "enabled": True,
                 "mode": "flight_intent_validation",
+                "background_operational_intents": True,
                 "dss_available": True,
                 "dss_delay_s": 0.18,
                 "subscription_notification_delay_s": 0.80,
@@ -1382,7 +1384,13 @@ class MultiUAVVQAEnv:
         base = float(row.get("epsilon_k", default))
         thresholds = self.env_cfg.get("semantic_threshold_by_risk", {})
         floor = float(thresholds.get(risk, thresholds.get("normal", 0.0)))
-        return max(base, floor)
+        epsilon = max(base, floor)
+        caps = self.env_cfg.get("semantic_threshold_cap_by_risk", {})
+        if risk in caps:
+            epsilon = min(epsilon, float(caps[risk]))
+        elif "normal" in caps:
+            epsilon = min(epsilon, float(caps["normal"]))
+        return epsilon
 
     def _initial_operational_intent_state(self, idx: int, risk: str) -> str:
         layout = self.scenario_cfg.get("task_layout", {})
@@ -1758,6 +1766,13 @@ class MultiUAVVQAEnv:
             other = self.parse_action(other_raw, other_task)
             if self._requires_operational_intent(other) and self._area4d_overlaps_with_buffer(task.area4d, other_task.area4d):
                 conflict_ids.append(other_task.task_id)
+        utm = self.env_cfg.get("utm", {})
+        if bool(utm.get("background_operational_intents", False)):
+            for other_task in self._active_tasks():
+                if other_task.task_id == task.task_id or other_task.completed or other_task.task_id in conflict_ids:
+                    continue
+                if self._area4d_overlaps_with_buffer(task.area4d, other_task.area4d):
+                    conflict_ids.append(other_task.task_id)
         return conflict_ids
 
     def _area4d_overlaps_with_buffer(self, first: Area4D, second: Area4D) -> bool:

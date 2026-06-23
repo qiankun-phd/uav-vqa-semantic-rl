@@ -460,6 +460,24 @@ Latest fixed-scenario environment smokes:
 
 ## Current Blockers / Watch Items
 
+- Semantic scenario benchmark signal audit completed 2026-06-23 Asia/Shanghai:
+  - Root cause for `utm_conflict` mismatch: environment smoke used explicit `concurrent_actions`, while algorithm benchmark v2 uses algorithm-style single-task actions, so no second operational intent was available for strategic conflict detection.
+  - Fix: `utm_conflict` now enables background operational-intent detection. Observe/revisit/image/token actions conflict with other active overlapping intents; cache-only reuse still creates no airspace/UTM conflict.
+  - Edge calibration: `edge_overload` now uses high but less extreme CPU/GPU load and queue constants, cleaner view/freshness mix, and a scenario-specific semantic threshold cap. This keeps the stress source on edge queue/resource pressure instead of making semantic QoS uniformly infeasible.
+  - Lightweight V1.9 probe after calibration:
+
+| scenario | semantic-token feasible | image feasible | deadline violations | UTM conflicts |
+|---|---:|---:|---:|---:|
+| edge_overload | 9/12 | 4/12 | 12/12 | 0/12 |
+| utm_conflict | 2/12 | 2/12 | 12/12 | 12/12 |
+
+  - Updated small env artifacts:
+
+```text
+outputs/env/semantic_scenario_presets/scenario_preset_summary.csv
+outputs/env/semantic_scenario_presets/summary.md
+```
+
 - Environment paper scenario preset library completed 2026-06-22 Asia/Shanghai:
   - Added five canonical `scenario` presets in `src/vqa_semcom/sim/multi_uav_env.py`: `nominal_patrol`, `disaster_hotspot`, `low_snr_blockage`, `edge_overload`, and `utm_conflict`.
   - Presets are available via `env.reset(options={"scenario": "<name>"})`; the existing formal train/test split remains unchanged.

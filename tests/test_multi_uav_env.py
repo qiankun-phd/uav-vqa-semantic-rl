@@ -355,9 +355,14 @@ class MultiUAVEnvTest(unittest.TestCase):
 
         edge = self._env()
         edge.reset(seed=5, options={"scenario": "edge_overload"})
-        self.assertGreaterEqual(edge.edges[0].load, 0.70)
-        self.assertGreaterEqual(edge.edges[0].gpu_load, 0.70)
+        self.assertGreaterEqual(edge.edges[0].load, 0.60)
+        self.assertGreaterEqual(edge.edges[0].gpu_load, 0.60)
         self.assertEqual(edge.env_cfg["model_cache_capacity"], 1)
+        edge_task = next((task for task in edge._active_tasks() if task.risk_level == "normal"), edge._front_task())
+        self.assertIsNotNone(edge_task)
+        edge_info = edge.evaluate_action(edge.default_action(1), task_id=edge_task.task_id)
+        self.assertGreaterEqual(edge_info["queue_delay_s"], 0.9)
+        self.assertTrue(edge_info["semantic_success"])
 
         utm = self._env()
         utm.reset(seed=5, options={"scenario": "utm_conflict"})
@@ -377,6 +382,25 @@ class MultiUAVEnvTest(unittest.TestCase):
         self.assertTrue(info["utm_conflict_violation"])
         self.assertGreater(info["utm_delay_s"], 0.0)
         self.assertIn(info["airspace_state"], {"accepted", "activated", "nonconforming", "contingent"})
+
+    def test_utm_conflict_background_intents_affect_algorithm_style_single_actions(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        active = env._active_tasks()
+        self.assertGreaterEqual(len(active), 2)
+        observe = env.evaluate_action(
+            {"task_id": active[0].task_id, "service_level": 1, "sensing_decision": "observe"},
+            task_id=active[0].task_id,
+        )
+        cache = env.evaluate_action(
+            {"task_id": active[0].task_id, "service_level": 0, "sensing_decision": "reuse_cache"},
+            task_id=active[0].task_id,
+        )
+        self.assertTrue(observe["utm_conflict_violation"])
+        self.assertTrue(observe["airspace_conflict"])
+        self.assertGreaterEqual(observe["strategic_conflict_count"], 1)
+        self.assertFalse(cache["utm_conflict_violation"])
+        self.assertFalse(cache["airspace_conflict"])
 
     def test_conflict_heavy_has_overlapping_burst_tasks(self) -> None:
         env = self._env()
