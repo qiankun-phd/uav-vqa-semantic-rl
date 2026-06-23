@@ -50,11 +50,15 @@ Use this preset as the main sanity check for nominal task completion, semantic a
 
 Clustered burst where most tasks are critical. The preset forces high-risk tasks into the same hotspot area, raises `epsilon_k` for critical tasks, and tightens deadlines.
 
+The current formal diagnostic does not support blaming low task success only on `tau_scale`: always-semantic-token and oracle-style evidence retain a partial deadline-feasible region, while semantic success is mostly limited by the strict critical-task `epsilon_k`. If a future paper table needs this scenario to show higher final task success, first consider easing the critical threshold/mix or mobility arrival behavior; only then tune `tau_scale`.
+
 Use this preset to test risk-aware semantic QoS and whether high-priority VQA tasks are protected under resource pressure.
 
 ### `low_snr_blockage`
 
 Large-area patrol with strong excess path loss, higher NLoS loss, slower fading recovery, and lower bandwidth. A small semantic cache seed is included to make cache/token choices meaningful.
+
+This preset is intentionally an image-impossible stress scenario for formal evaluation: full-image evidence may satisfy conservative semantic QoS, but the low-SNR link makes its payload nearly impossible to deliver within the deadline. Use it to expose the semantic QoS versus payload/deadline trade-off, not as a nominal image-service feasibility benchmark.
 
 Use this preset to validate the claim that task-oriented semantic evidence can remain useful when transmitting full image evidence is slow or unreliable.
 

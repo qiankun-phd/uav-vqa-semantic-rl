@@ -89,3 +89,43 @@ Interpretation: the formal PPO used avoid_conflict in about 24.9% of utm_conflic
 ## Verdict
 
 The formal mobility benchmark constraints are mostly coherent. The only clearly sharp edge is low_snr_blockage, where conservative semantic quality pushes the policy toward image evidence while the low-SNR link makes image upload nearly impossible within deadline. That is a useful stress scenario, but paper claims should present it as a semantic-QoS/payload trade-off rather than as a mobility limitation.
+
+## Follow-up Checks: Stress Feasibility And Delay Consistency
+
+### 1. `low_snr_blockage` image feasibility
+
+Conclusion: yes, the formal evidence supports treating `low_snr_blockage` as an image-impossible stress scenario.
+
+Evidence from the formal proposed rollout: service level 2/image is selected in 91.7% of attempts, reaches high conservative semantic quality (`LCB=0.920`, `epsilon=0.803`, gap about 0.001), but has 100% deadline violation and average delay about 554.7s under sensed SNR around -29.6 dB. This is not a mobility artifact because arrival delay is 0.000s and mobility energy stays at the 78 J hover baseline.
+
+Implication: document this scenario as a low-SNR semantic QoS versus payload/deadline stress test. Do not use it to claim that full-image service should be feasible under blockage.
+
+### 2. `disaster_hotspot` tau-scale diagnosis
+
+Conclusion: `disaster_hotspot` is severe, but the evidence does not show that `tau_scale` alone makes every non-cache route impossible.
+
+Formal baseline evidence:
+
+| policy | semantic success | task success | deadline violation | avg delay s | avg arrival s | avg LCB | epsilon | gap |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| always_semantic_token | 0.105 | 0.039 | 0.298 | 1.596 | 0.812 | 0.471 | 0.840 | 0.376 |
+| always_image | 0.220 | 0.000 | 1.000 | 4.330 | 0.787 | 0.469 | 0.840 | 0.395 |
+| oracle_best_feasible_evidence | 0.230 | 0.130 | 0.273 | 1.560 | 0.762 | 0.618 | 0.840 | 0.238 |
+| proposed_two_timescale_ppo | 0.317 | 0.064 | 0.733 | 4.252 | 3.562 | 0.659 | 0.840 | 0.194 |
+
+The always-token and oracle rows have deadline violation around 0.27-0.30, so there is a partial deadline-feasible non-cache region. Final task success is mainly limited by strict all-critical semantic QoS (`epsilon=0.84`) plus, for proposed PPO, longer arrival delay from its selected mobility behavior.
+
+Recommendation: do not immediately loosen `tau_scale` and blame the environment for all failures. If paper presentation needs `disaster_hotspot` to be less brittle, first reduce the all-critical mix or cap critical `epsilon_k`; tune `tau_scale` only after semantic feasibility is not the dominant bottleneck.
+
+### 3. Predicted delay versus realized delay
+
+A direct consistency smoke compared `env.evaluate_action(action, obs)` against `env.step(action)` for the same candidate actions over 4 scenarios, 20 seeds, and service levels 0/1/2.
+
+| scenario | checks | mean abs delay diff | max abs delay diff | SNR-bin mismatches |
+|---|---:|---:|---:|---:|
+| nominal_patrol | 60 | 0.000000000 | 0.000000000 | 0/60 |
+| low_snr_blockage | 60 | 0.000000000 | 0.000000000 | 0/60 |
+| disaster_hotspot | 60 | 0.000000000 | 0.000000000 | 0/60 |
+| utm_conflict | 60 | 0.000000000 | 0.000000000 | 0/60 |
+
+Conclusion: projection is not misled by a stale or biased delay model in this path. It evaluates candidates with the same canonical environment delay decomposition that `step()` returns. The image-heavy behavior in `low_snr_blockage` is therefore a scoring/objective trade-off: reducing semantic QoS gap dominates even though deadline overrun is visible and correctly estimated.
