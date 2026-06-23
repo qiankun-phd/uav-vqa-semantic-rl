@@ -866,3 +866,25 @@ Environment-side interpretation for the formal 300-episode mobility benchmark:
 2. Treat  as a semantic-QoS/payload stress scenario unless a future paper table requires partial image feasibility; then tune only scenario-local .
 3. For , use aggregate conflict reduction as the supported claim. A paired counterfactual rollout is needed before claiming that  alone always lowers conflict risk.
 4. Keep large formal rollout directories and  files uncommitted; commit only small summaries/reports.
+
+## Algorithm v2 Deadline Guard Follow-up
+
+Completed 2026-06-23 Asia/Shanghai:
+
+```text
+outputs/rl/two_timescale_mobility_v2_guard_mid_20260623
+```
+
+The mid-scale validation confirms:
+
+1. `proposed_v2_deadline_guard` and `proposed_v2_no_image_under_low_snr` eliminate the low-SNR image-overuse pattern in the tested setting.
+2. `edge_overload` remains strong under the v2 guards.
+3. `disaster_hotspot` improves deadline/task-success behavior relative to the previous 300-episode proposed baseline.
+4. Low-SNR task success remains too low despite lower payload and much lower delay than the old image-heavy proposed run.
+
+Next steps before a 300-episode v2 formal run:
+
+1. Add a second low-SNR deadline-control pass that explicitly optimizes task success, not only semantic LCB success.
+2. Consider a best-feasible-service fallback that accepts semantic shortfall when all non-cache services violate deadline.
+3. Re-run formal with `proposed_v2_deadline_guard` and `proposed_v2_no_image_under_low_snr` after the low-SNR fix.
+4. Do not treat the current mid-scale run as a final paper table; use it as algorithm-selection evidence.

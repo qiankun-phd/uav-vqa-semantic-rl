@@ -1107,3 +1107,44 @@ Main conclusions:
 -  deadline failures are primarily low-SNR transmission/payload failures, not UAV flight-speed or flight-energy failures; image evidence satisfies conservative semantic QoS but becomes infeasible under the weak link.
 -  proposed-policy deadline behavior is healthy and aggregate UTM conflict is reduced versus serve-task baselines; the remaining semantic failure is mainly the strict epsilon=0.82 conservative-QoS threshold.
 - Do not globally tune  or  based on this run. Consider only scenario-local /presentation tuning for  if it should be partially image-feasible.
+
+## Algorithm v2 Deadline Guard Mid-scale Validation 2026-06-23 Asia/Shanghai
+
+Completed a mid-scale validation for deadline-aware evidence guards:
+
+```text
+outputs/rl/two_timescale_mobility_v2_guard_mid_20260623
+```
+
+Settings:
+
+```text
+scenarios: low_snr_blockage, disaster_hotspot, edge_overload
+policies: proposed_two_timescale_ppo,
+          proposed_v2_deadline_guard,
+          proposed_v2_no_image_under_low_snr,
+          proposed_v2_nearest_uav_mobility
+seeds: 0,1,2
+eval episodes: 20 per seed
+train episodes: 120
+tasks per episode: 12
+```
+
+Artifacts:
+
+```text
+outputs/rl/two_timescale_mobility_v2_guard_mid_20260623/scenario_comparison_summary.csv
+outputs/rl/two_timescale_mobility_v2_guard_mid_20260623/scenario_comparison_report.md
+outputs/rl/two_timescale_mobility_v2_guard_mid_20260623/guard_mid_summary.md
+```
+
+Key result:
+
+- `low_snr_blockage`: deadline/no-image guards fix image overuse. The old formal proposed image ratio was 0.917 and the mid-scale baseline proposed still uses 0.972 image, while `proposed_v2_deadline_guard` and `proposed_v2_no_image_under_low_snr` reduce image ratio to 0.000. Deadline violation remains high at 0.938 and task success is only 0.058, so the low-SNR deadline problem is not fully solved.
+- `disaster_hotspot`: v2 improves over the old formal proposed task success 0.064. Mid-scale deadline guard task success is 0.110 with deadline violation 0.290 and image ratio 0.000.
+- `edge_overload`: v2 preserves the strong result. Deadline/no-image guards reach semantic success 0.738, task success 0.738, and deadline violation 0.000, compared with the old formal proposed 0.697 / 0.681 / 0.046.
+
+Interpretation:
+
+- v2 is worth continuing because it fixes low-SNR image overuse and keeps edge-overload performance.
+- It is not yet ready as the final formal result because low-SNR task success remains low; another delay-aware resource/projection tuning pass is needed before a 300-episode v2 formal run.
