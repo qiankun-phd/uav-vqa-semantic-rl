@@ -21,6 +21,7 @@ class V19StepRecord:
     risk_level: str
     view_quality_bin: str
     freshness_bin: str
+    epsilon_k: float
     sensed_snr_db: float
     snr_bin: str
     service_level: int
@@ -248,6 +249,7 @@ class V19LUTResourceEnv:
             risk_level=str(info.get("risk_level", "normal")),
             view_quality_bin=str(info.get("view_quality_bin", "medium")),
             freshness_bin=str(info.get("freshness_bin", "fresh")),
+            epsilon_k=float(info.get("epsilon_k", 0.0)),
             sensed_snr_db=float(info.get("sensed_snr_db", 0.0)),
             snr_bin=str(info.get("snr_bin", "")),
             service_level=int(info.get("service_level", self.service_levels[0])),
@@ -334,6 +336,7 @@ class V19LUTResourceEnv:
         energy_j = float(info.get("energy_j", info.get("total_energy_j", 0.0)))
         energy_budget_j = self._energy_budget_from_obs_or_info(info, obs)
         info.setdefault("semantic_payload_kb", float(info.get("payload_kb", 0.0)))
+        info["epsilon_k"] = float(epsilon)
         info["semantic_quality_gap"] = max(0.0, epsilon - accuracy_lcb)
         info["semantic_success"] = bool(accuracy_lcb >= epsilon)
         info["deadline_s"] = float(deadline_s)

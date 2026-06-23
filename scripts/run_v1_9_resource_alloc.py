@@ -84,6 +84,10 @@ class EvalSummary:
     average_payload_kb: float
     average_semantic_payload_kb: float
     average_semantic_quality_gap: float
+    average_epsilon_k: float
+    failed_epsilon_k_mean: float
+    failed_epsilon_k_min: float
+    failed_epsilon_k_max: float
     average_q_quality: float
     average_q_deadline: float
     average_q_energy: float
@@ -198,6 +202,10 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, 
                 average_payload_kb=round(payload, 6),
                 average_semantic_payload_kb=round(_mean(records, "semantic_payload_kb"), 6),
                 average_semantic_quality_gap=round(_mean(records, "semantic_quality_gap"), 6),
+                average_epsilon_k=round(_mean(records, "epsilon_k"), 6),
+                failed_epsilon_k_mean=round(_failed_epsilon_mean(records), 6),
+                failed_epsilon_k_min=round(_failed_epsilon_min(records), 6),
+                failed_epsilon_k_max=round(_failed_epsilon_max(records), 6),
                 average_q_quality=round(_mean(records, "q_quality"), 6),
                 average_q_deadline=round(_mean(records, "q_deadline"), 6),
                 average_q_energy=round(_mean(records, "q_energy"), 6),
@@ -482,13 +490,14 @@ def _enable_proposed_semantic_rl_defaults(args: argparse.Namespace) -> None:
     args.semantic_reward_mode = "semantic_utility"
     args.semantic_lyapunov_control = True
     args.imitation_warm_start = True
-    args.entropy_start = max(float(args.entropy_start), 0.08)
-    args.entropy_end = max(float(args.entropy_end), 0.015)
-    args.service_prior_weight = max(float(args.service_prior_weight), 0.45)
-    args.service_prior_decay_episodes = max(int(args.service_prior_decay_episodes), 240)
-    args.bc_aux_weight = max(float(args.bc_aux_weight), 0.18)
-    args.demo_episodes = max(int(args.demo_episodes), min(30, int(args.train_episodes)))
-    args.bc_epochs = max(int(args.bc_epochs), 4)
+    args.demo_policy = "semantic_greedy" if str(args.demo_policy) == "oracle_best_feasible_evidence" else args.demo_policy
+    args.entropy_start = max(float(args.entropy_start), 0.10)
+    args.entropy_end = max(float(args.entropy_end), 0.02)
+    args.service_prior_weight = max(float(args.service_prior_weight), 0.65)
+    args.service_prior_decay_episodes = max(int(args.service_prior_decay_episodes), 360)
+    args.bc_aux_weight = max(float(args.bc_aux_weight), 0.28)
+    args.demo_episodes = max(int(args.demo_episodes), min(50, int(args.train_episodes)))
+    args.bc_epochs = max(int(args.bc_epochs), 6)
 
 
 def _scenario_args(args: argparse.Namespace, root: Path, scenario: str, seed: int, run_name: str) -> argparse.Namespace:
@@ -542,6 +551,10 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "average_accuracy_mean",
         "average_uncertainty",
         "average_semantic_quality_gap",
+        "average_epsilon_k",
+        "failed_epsilon_k_mean",
+        "failed_epsilon_k_min",
+        "failed_epsilon_k_max",
         "average_q_quality",
         "average_q_deadline",
         "average_q_energy",
@@ -704,6 +717,25 @@ def _rate(records: list[V19StepRecord], field: str) -> float:
     return sum(float(bool(getattr(record, field))) for record in records) / len(records)
 
 
+def _failed_epsilons(records: list[V19StepRecord]) -> list[float]:
+    return [float(record.epsilon_k) for record in records if not bool(record.semantic_success)]
+
+
+def _failed_epsilon_mean(records: list[V19StepRecord]) -> float:
+    values = _failed_epsilons(records)
+    return sum(values) / len(values) if values else 0.0
+
+
+def _failed_epsilon_min(records: list[V19StepRecord]) -> float:
+    values = _failed_epsilons(records)
+    return min(values) if values else 0.0
+
+
+def _failed_epsilon_max(records: list[V19StepRecord]) -> float:
+    values = _failed_epsilons(records)
+    return max(values) if values else 0.0
+
+
 def _mean_float(values: list[float]) -> float:
     return sum(float(value) for value in values) / max(1, len(values))
 
@@ -745,13 +777,14 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
         f"- trained PPO: {trained_ppo}",
         "- LUT oracle: outputs/lut/v1_9_snr_semantic_quality_lut.csv",
         "",
-        "| policy | semantic success | success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM conflict | reward |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| policy | semantic success | success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed epsilon mean | failed epsilon range | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM conflict | reward |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         lines.append(
             f"| {row.policy} | {row.semantic_success_rate:.3f} | {row.task_success_rate:.3f} | {row.average_accuracy:.3f} | {row.average_accuracy_mean:.3f} | "
-            f"{row.average_uncertainty:.3f} | {row.average_semantic_quality_gap:.3f} | {row.average_q_quality:.3f} | "
+            f"{row.average_uncertainty:.3f} | {row.average_epsilon_k:.3f} | {row.failed_epsilon_k_mean:.3f} | "
+            f"{row.failed_epsilon_k_min:.3f}-{row.failed_epsilon_k_max:.3f} | {row.average_semantic_quality_gap:.3f} | {row.average_q_quality:.3f} | "
             f"{row.average_q_deadline:.3f} | {row.average_q_energy:.3f} | {row.average_q_utm:.3f} | {row.average_delay:.3f} | {row.average_energy:.3f} | "
             f"{row.average_payload_kb:.3f} | {row.payload_reduction_vs_always_image:.3f} | "
             f"{row.quality_violation_rate:.3f} | {row.deadline_violation_rate:.3f} | {row.battery_violation_rate:.3f} | "
@@ -786,14 +819,15 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed eps mean | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
             f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'average_accuracy'):.3f} | "
             f"{_metric(row, 'average_accuracy_mean'):.3f} | {_metric(row, 'average_uncertainty'):.3f} | "
+            f"{_metric(row, 'average_epsilon_k'):.3f} | {_metric(row, 'failed_epsilon_k_mean'):.3f} | "
             f"{_metric(row, 'average_semantic_quality_gap'):.3f} | {_metric(row, 'average_q_quality'):.3f} | "
             f"{_metric(row, 'average_q_deadline'):.3f} | {_metric(row, 'average_q_energy'):.3f} | "
             f"{_metric(row, 'average_q_utm'):.3f} | {_metric(row, 'average_delay'):.3f} | "
@@ -831,7 +865,8 @@ def _write_benchmark_analysis(path: Path, all_rows: list[dict[str, Any]], summar
         "## Diagnosis",
         "",
         "- Previous smoke PPO had high cache ratios because cache minimized delay/energy/payload while the semantic shortfall penalty was too small.",
-        "- The v2 controller uses semantic-only success bonus, stronger LCB/margin reward, explicit cache shortfall penalty, high-epsilon/high-risk cache penalty, oracle warm-start, service-level curriculum, and token exploration bonus.",
+        "- The v3 controller persists `epsilon_k`, uses risk/staleness/UTM-aware cache shortfall penalties, distills semantic-greedy routing, and keeps a stronger semantic-token prior.",
+        "- Compute-aware projection prefers semantic tokens over cache when token evidence reduces LCB shortfall under edge/deadline pressure; UTM conflicts are recorded as risk/queue costs instead of being hidden by cache fallback.",
         "- Cache actions are projected to zero bandwidth/power/cpu/gpu; token/image actions retain service-dependent resource floors.",
         "",
         "## Proposed PPO vs Always Cache",

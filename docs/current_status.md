@@ -766,3 +766,65 @@ Validation:
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
 # Ran 13 tests OK
 ```
+
+## Scenario-Aware Semantic Benchmark v3 2026-06-23 Asia/Shanghai
+
+Algorithm thread reran the semantic scenario benchmark after the Environment background operational-intent fix and VQA semantic-utility diagnostics.
+
+Code updates:
+
+- `src/vqa_semcom/rl/v19_resource_env.py` now persists `epsilon_k` in `info["record"]` and rollout CSV rows.
+- `scripts/run_v1_9_resource_alloc.py` reports average epsilon and failed-task epsilon statistics in summaries and scenario comparison tables.
+- `src/vqa_semcom/rl/v19_ppo.py` adds risk/staleness/UTM-aware cache shortfall penalties and a stronger semantic-token prior distilled from `semantic_greedy`.
+- Compute-aware projection now prefers semantic-token evidence over cache when token evidence reduces LCB shortfall under edge/deadline pressure.
+- UTM/airspace conflicts are recorded through risk/queue costs instead of being hidden by a cache fallback, so `utm_conflict` now exposes the quality-vs-UTM tradeoff.
+
+Command:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v3
+```
+
+Artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v3/cache_collapse_analysis.md
+```
+
+Headline v3 proposed PPO results:
+
+| scenario | semantic success | accuracy LCB | epsilon | quality gap | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.283 | 0.617 | 0.793 | 0.182 | 0.000 | 4.346 | 552.698 | 18.384 | 0.450 | 0.000 | 0.094 | 0.793 | 0.113 |
+| disaster_hotspot | 0.228 | 0.577 | 0.840 | 0.274 | 0.000 | 1.560 | 157.644 | 1.064 | 0.291 | 0.000 | 0.089 | 0.911 | 0.000 |
+| low_snr_blockage | 0.786 | 0.756 | 0.803 | 0.099 | 0.000 | 11.017 | 1428.400 | 1.748 | 0.729 | 0.000 | 0.247 | 0.727 | 0.027 |
+| edge_overload | 0.010 | 0.419 | 0.640 | 0.222 | 0.000 | 7.441 | 974.501 | 1.153 | 0.902 | 0.000 | 0.000 | 1.000 | 0.000 |
+| utm_conflict | 0.000 | 0.625 | 0.820 | 0.195 | 4.660 | 2.560 | 191.845 | 1.084 | 0.371 | 0.913 | 0.087 | 0.913 | 0.000 |
+
+Interpretation:
+
+- v3 directly records epsilon; diagnostics no longer need to reconstruct failed-row thresholds.
+- Proposed PPO avoids cache collapse more aggressively than v2: cache ratio drops to 0.000 in `edge_overload` and 0.087 in `utm_conflict`.
+- `low_snr_blockage` remains stable around 0.786 semantic success, close to v2 and below semantic greedy 0.950, with low payload.
+- `utm_conflict` now correctly exposes background operational-intent conflicts; proposed improves LCB/gap over cache but pays UTM conflict/risk cost.
+- `edge_overload` is token-only under proposed PPO; success remains limited by deadline/edge pressure rather than cache collapse.
+
+Validation:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 78 tests OK
+```

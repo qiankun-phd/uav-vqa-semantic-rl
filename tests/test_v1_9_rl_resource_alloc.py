@@ -53,6 +53,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("semantic_payload_kb", info)
         self.assertIn("semantic_quality_gap", info)
         self.assertIn("semantic_success", info)
+        self.assertIn("epsilon_k", info)
+        self.assertIn("epsilon_k", info["record"])
+        self.assertGreater(float(info["epsilon_k"]), 0.0)
         self.assertGreaterEqual(float(info["semantic_quality_gap"]), 0.0)
         self.assertIn("q_quality", info)
         self.assertIn("q_deadline", info)
@@ -213,6 +216,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.high_risk_cache_penalty_weight, 0.0)
         self.assertGreater(cfg.cache_override_gap_threshold, 0.0)
         self.assertGreater(cfg.cache_override_min_improvement, 0.0)
+        self.assertGreater(cfg.cache_stale_penalty_weight, 0.0)
+        self.assertGreater(cfg.cache_utm_penalty_weight, 0.0)
+        self.assertGreater(cfg.token_projection_bonus, 0.0)
         self.assertGreater(cfg.semantic_token_exploration_bonus, 0.0)
 
 

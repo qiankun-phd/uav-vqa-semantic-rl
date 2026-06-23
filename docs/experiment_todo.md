@@ -586,6 +586,65 @@ Next coordination items:
 2. Algorithm thread: add risk-aware cache penalties and token exploration/distillation for low-SNR and edge-overload cases.
 3. Total-control thread: use the diagnostics report to decide whether `edge_overload` and `utm_conflict` should be framed as robustness/gap-reduction scenarios or tuned into feasible success-rate scenarios.
 
+## Scenario Benchmark v3 Risk-Aware Routing
+
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Integrated the VQA semantic-utility diagnostics into the Algorithm runner without changing the LUT schema or environment dynamics.
+2. Persisted `epsilon_k` in the V1.9 rollout record path so future diagnostics can directly audit quality thresholds.
+3. Strengthened proposed PPO routing in `src/vqa_semcom/rl/v19_ppo.py`:
+   - risk/staleness/UTM-aware cache shortfall penalties,
+   - higher semantic-token prior and `semantic_greedy` distillation weight,
+   - compute-aware projection that prefers semantic-token evidence over cache when token evidence reduces LCB shortfall under deadline or edge pressure,
+   - UTM/airspace conflicts are recorded as risk/queue costs rather than silently hidden by a cache fallback.
+4. Added epsilon statistics to scenario summaries:
+   average epsilon, failed-task epsilon mean, and failed-task epsilon range.
+5. Ran the v3 scenario benchmark after the Environment background operational-intent fix:
+
+```bash
+cd /home/qiankun/phd_research/vqa_semcom
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --seeds 0,1,2 \
+  --episodes 50 \
+  --train-episodes 120 \
+  --tasks-per-episode 12 \
+  --output-dir outputs/rl/semantic_scenario_benchmark_v3
+```
+
+Generated artifacts:
+
+```text
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_all_seed_results.csv
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_summary.csv
+outputs/rl/semantic_scenario_benchmark_v3/scenario_comparison_report.md
+outputs/rl/semantic_scenario_benchmark_v3/cache_collapse_analysis.md
+```
+
+Key observation:
+
+- Proposed PPO avoids cache collapse more aggressively than v2: cache ratio is 0.000 in `edge_overload`, 0.087 in `utm_conflict`, and below 0.25 in all scenarios except `low_snr_blockage` where cache remains a minority fallback.
+- `low_snr_blockage` remains the strongest success case: proposed PPO reaches 0.786 semantic success with 0.756 accuracy LCB and 1.748 KB payload, still below `semantic_greedy` and worth longer training/distillation.
+- `edge_overload` becomes token-only under proposed PPO; semantic success is still low because deadline/edge pressure dominates, not because of cache collapse.
+- `utm_conflict` now exposes the expected quality-vs-UTM tradeoff after the background operational-intent fix: proposed PPO improves LCB/gap over cache but pays a high UTM conflict rate that should be treated as a constrained-control target in the next paper run.
+
+Verified:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+# Ran 13 tests OK
+
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+# Ran 78 tests OK
+```
+
+Next algorithm steps:
+
+1. Decide whether `utm_conflict` should prioritize conflict-free evidence routing or semantic-gap reduction under explicit UTM queue constraints.
+2. Run a longer paper-scale v3/v4 benchmark with seeds 0-4, 200+ evaluation episodes, and 500-1000+ training episodes after the UTM objective is finalized.
+3. Add paper plots for semantic success/resource tradeoff and epsilon-conditioned failure analysis.
+4. Keep `.pt`, rollout CSV, and run logs out of commits; retain only summary/report/small CSV artifacts.
+
 ## Output Naming Convention
 
 Use explicit run names:

@@ -54,17 +54,21 @@ class PPOTrainConfig:
     risk_aware_constraints: bool = False
     safety_layer: bool = True
     semantic_reward_mode: str = "env"
-    semantic_success_weight: float = 10.0
-    semantic_accuracy_weight: float = 3.0
-    semantic_margin_weight: float = 5.0
-    semantic_gap_weight: float = 7.0
-    cache_shortfall_penalty_weight: float = 10.0
-    high_risk_cache_penalty_weight: float = 3.0
+    semantic_success_weight: float = 12.0
+    semantic_accuracy_weight: float = 3.5
+    semantic_margin_weight: float = 6.0
+    semantic_gap_weight: float = 9.0
+    cache_shortfall_penalty_weight: float = 16.0
+    high_risk_cache_penalty_weight: float = 5.0
     high_epsilon_cache_threshold: float = 0.65
-    cache_override_gap_threshold: float = 0.20
-    cache_override_min_improvement: float = 0.08
-    non_cache_semantic_bonus: float = 1.0
-    semantic_token_exploration_bonus: float = 0.35
+    cache_override_gap_threshold: float = 0.12
+    cache_override_min_improvement: float = 0.04
+    cache_stale_penalty_weight: float = 3.0
+    cache_utm_penalty_weight: float = 4.0
+    token_near_success_gap: float = 0.08
+    token_projection_bonus: float = 3.0
+    non_cache_semantic_bonus: float = 1.5
+    semantic_token_exploration_bonus: float = 0.75
     delay_cost_weight: float = 0.25
     energy_cost_weight: float = 0.12
     payload_cost_weight: float = 0.10
@@ -113,8 +117,8 @@ class PPOTrainConfig:
     power_max_w: float = 1.0
     semantic_projection: bool = True
     resource_projection: bool = True
-    service_prior_weight: float = 0.25
-    service_prior_decay_episodes: int = 200
+    service_prior_weight: float = 0.35
+    service_prior_decay_episodes: int = 240
     imitation_warm_start: bool = False
     demo_policy: str = "oracle_best_feasible_evidence"
     demo_episodes: int = 40
@@ -577,6 +581,7 @@ def _project_semantic_feasible_action(
     best_score = _semantic_safety_score(current_info, obs, cfg)
     cache_override = _needs_cache_override(current, current_info, obs, cfg)
     best_gap = _semantic_gap(current_info, obs)
+    best_projection_score = _semantic_projection_score(current_info, obs, cfg)
     if best_score <= 0.0:
         return best_action
     for level in env.service_levels:
@@ -591,9 +596,11 @@ def _project_semantic_feasible_action(
             candidate_gap = _semantic_gap(evaluated, obs)
             improves_gap = (best_gap - candidate_gap) >= float(cfg.cache_override_min_improvement)
             semantic_success = bool(evaluated.get("semantic_success", evaluated.get("success", False)))
-            if improves_gap or semantic_success:
+            projection_score = _semantic_projection_score(evaluated, obs, cfg)
+            if improves_gap or semantic_success or projection_score < best_projection_score:
                 best_gap = candidate_gap
                 best_action = candidate
+                best_projection_score = projection_score
                 best_score = _semantic_safety_score(evaluated, obs, cfg)
                 continue
         score = _semantic_safety_score(evaluated, obs, cfg)
@@ -628,14 +635,16 @@ def _semantic_safety_score(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTr
     score += 100.0 * float(_has_hard_safety_violation(info))
     score += 24.0 * risk_weight * float(bool(info.get("quality_violation", False)))
     score += 16.0 * risk_weight * float(bool(info.get("deadline_violation", False)))
-    score += 8.0 * float(bool(info.get("utm_constraint_violation", False)))
+    score += 8.0 * float(bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False)))
     score += 4.0 * float(not bool(info.get("dss_available", True)))
     score += cfg.off_nominal_cost_weight * float(info.get("off_nominal_planning_penalty", 0.0))
     score += 10.0 * risk_weight * max(0.0, epsilon - accuracy)
     if int(info.get("service_level", 0)) == 0:
         cache_gap = _semantic_gap(info, obs)
         if cache_gap >= float(cfg.cache_override_gap_threshold):
-            score += 28.0 * risk_weight * cache_gap
+            score += 36.0 * _cache_risk_multiplier(info, obs, cfg) * cache_gap
+    elif int(info.get("service_level", 0)) == 1 and _semantic_gap(info, obs) <= float(cfg.token_near_success_gap):
+        score -= float(cfg.token_projection_bonus)
     score += 4.0 * max(0.0, delay / deadline - 1.0)
     score += 0.25 * float(info.get("semantic_uncertainty", 0.0))
     score += 0.02 * float(info.get("payload_kb", 0.0)) / 100.0
@@ -649,7 +658,15 @@ def _needs_cache_override(action: dict[str, Any], info: dict[str, Any], obs: dic
     gap = _semantic_gap(info, obs)
     epsilon = float(obs.get("epsilon_k", 0.0))
     risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
-    high_priority = risk == "critical" or epsilon >= float(cfg.high_epsilon_cache_threshold)
+    freshness = str(info.get("freshness_bin", obs.get("freshness_bin", "fresh")))
+    state = str(info.get("operational_intent_state", obs.get("operational_intent_state", "accepted")))
+    high_priority = (
+        risk == "critical"
+        or epsilon >= float(cfg.high_epsilon_cache_threshold)
+        or freshness in {"stale", "expired"}
+        or state in {"nonconforming", "contingent"}
+        or bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))
+    )
     return gap >= float(cfg.cache_override_gap_threshold) or (high_priority and gap > 0.0)
 
 
@@ -659,8 +676,51 @@ def _semantic_gap(info: dict[str, Any], obs: dict[str, Any]) -> float:
     return max(0.0, epsilon - accuracy)
 
 
+def _cache_risk_multiplier(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> float:
+    risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
+    freshness = str(info.get("freshness_bin", obs.get("freshness_bin", "fresh")))
+    state = str(info.get("operational_intent_state", obs.get("operational_intent_state", "accepted")))
+    epsilon = float(obs.get("epsilon_k", info.get("epsilon_k", 0.0)))
+    multiplier = 1.0
+    if risk == "critical":
+        multiplier += 1.2
+    if epsilon >= float(cfg.high_epsilon_cache_threshold):
+        multiplier += 0.8 + max(0.0, epsilon - float(cfg.high_epsilon_cache_threshold))
+    if freshness == "stale":
+        multiplier += 0.4
+    elif freshness == "expired":
+        multiplier += 0.9
+    if state in {"nonconforming", "contingent"}:
+        multiplier += 0.8
+    if bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False)):
+        multiplier += 0.8
+    return float(multiplier)
+
+
+def _semantic_projection_score(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTrainConfig) -> float:
+    service_level = int(info.get("service_level", 0))
+    deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0)))))
+    delay = float(info.get("delay_s", info.get("total_delay_s", 0.0)))
+    gap = _semantic_gap(info, obs)
+    deadline_overrun = max(0.0, delay / deadline - 1.0)
+    score = 90.0 * gap + 14.0 * deadline_overrun
+    score += 8.0 * float(bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False)))
+    score += 4.0 * float(info.get("off_nominal_planning_penalty", 0.0))
+    score += 0.02 * float(info.get("energy_j", 0.0)) / 10.0
+    score += 0.01 * float(info.get("payload_kb", 0.0))
+    if service_level == 0 and gap > 0.0:
+        score += 25.0 * _cache_risk_multiplier(info, obs, cfg) * gap
+    if service_level == 1:
+        score -= float(cfg.token_projection_bonus)
+        if gap <= float(cfg.token_near_success_gap):
+            score -= float(cfg.token_projection_bonus)
+    if service_level == 2 and deadline_overrun > 0.0:
+        score += 4.0
+    return float(score)
+
+
 def _has_hard_safety_violation(info: dict[str, Any]) -> bool:
-    return bool(info.get("battery_violation", False) or info.get("resource_violation", False) or info.get("airspace_conflict", False))
+    return bool(info.get("battery_violation", False) or info.get("resource_violation", False))
 
 
 def _select_uav_assignment(obs: dict[str, Any], cfg: PPOTrainConfig) -> int:
@@ -766,9 +826,14 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         - resource_cost
     )
     if service_level == 0 and semantic_gap > 0.0:
-        utility -= cfg.cache_shortfall_penalty_weight * risk_weight * (1.0 + epsilon) * semantic_gap
+        cache_multiplier = _cache_risk_multiplier(info, obs, cfg)
+        utility -= cfg.cache_shortfall_penalty_weight * cache_multiplier * (1.0 + epsilon) * semantic_gap
         if risk_weight > 1.0 or epsilon >= float(cfg.high_epsilon_cache_threshold):
-            utility -= cfg.high_risk_cache_penalty_weight * risk_weight
+            utility -= cfg.high_risk_cache_penalty_weight * cache_multiplier
+        if str(info.get("freshness_bin", obs.get("freshness_bin", "fresh"))) in {"stale", "expired"}:
+            utility -= cfg.cache_stale_penalty_weight * cache_multiplier * semantic_gap
+        if str(info.get("operational_intent_state", obs.get("operational_intent_state", "accepted"))) in {"nonconforming", "contingent"}:
+            utility -= cfg.cache_utm_penalty_weight * cache_multiplier * semantic_gap
     elif service_level > 0 and semantic_success > 0.0:
         utility += cfg.non_cache_semantic_bonus * risk_weight
     if service_level == 1 and semantic_gap > 0.0:
@@ -839,7 +904,7 @@ def _collect_demonstrations(env: V19LUTResourceEnv, cfg: PPOTrainConfig, seed: i
 
 
 def _demo_action(env: V19LUTResourceEnv, obs: dict[str, Any], policy: str) -> dict[str, Any]:
-    if policy == "greedy_min_sufficient_evidence":
+    if policy in {"greedy_min_sufficient_evidence", "semantic_greedy"}:
         epsilon = float(obs["epsilon_k"])
         for level in env.service_levels:
             if env.candidate_metrics(level, obs)["accuracy"] >= epsilon:
