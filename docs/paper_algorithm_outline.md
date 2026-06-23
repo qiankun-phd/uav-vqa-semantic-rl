@@ -1,6 +1,6 @@
 # Paper Algorithm Outline
 
-Last updated: 2026-06-22 Asia/Shanghai
+Last updated: 2026-06-23 Asia/Shanghai
 
 Working paper narrative:
 
@@ -101,6 +101,72 @@ minimize delay + energy + payload + uncertainty + UTM risk
 
 This makes the method interpretable: queue states explain why the controller escalates evidence, increases resources, or changes UAV assignments.
 
+## 4.1 Two-timescale Mobility-aware Semantic Resource PPO
+
+The current paper method is upgraded from a monolithic service/resource PPO into a two-timescale cognitive controller:
+
+```text
+state
+  -> shared encoder
+  -> slow mobility actor
+  -> fast semantic-resource actor
+  -> centralized critic V(s, a_mobility, a_resource)
+```
+
+The slow actor updates every `K=3` slots by default and controls UAV/network geometry:
+
+```text
+a_mobility = (
+  uav_assignment,
+  mobility_mode,
+  waypoint_delta,
+  altitude_delta
+)
+```
+
+where `mobility_mode` is one of `stay`, `serve_task`, `reposition`, `avoid_conflict`, or `return_base`. The fast actor updates every task/slot and controls semantic evidence and radio/edge resources:
+
+```text
+a_resource = (
+  service_level,
+  bandwidth,
+  power,
+  cpu_share,
+  gpu_share
+)
+```
+
+The critic evaluates the joint action so the policy can trade mobility choices against semantic utility and resource feasibility. Lyapunov queues remain part of the observation and reward shaping:
+
+```text
+Q_sem, Q_ddl, Q_eng, Q_risk/utm
+```
+
+The drift-plus-penalty reward now includes mobility terms:
+
+```text
+semantic LCB / success
+- semantic quality gap
+- deadline, energy, payload, edge queue, UTM conflict costs
+- mobility energy
+- arrival delay
++ coverage gain
+```
+
+Continuous resource decisions are projected after actor sampling. The projection enforces service-dependent resource floors, prevents cache actions from wasting bandwidth/compute, gives semantic-token actions enough communication/inference resources, and keeps image evidence bounded under edge overload. Mobility actions are similarly clipped to waypoint and altitude envelopes and masked by battery/UTM feasibility where the environment exposes the required state.
+
+Paper-facing ablations:
+
+- proposed two-timescale PPO,
+- monolithic PPO,
+- no mobility actor,
+- no Lyapunov queues,
+- no projection,
+- semantic greedy,
+- always cache / token / image.
+
+This framing makes the controller a UAV semantic communication network controller rather than a generic PPO baseline: the slow actor reshapes sensing/coverage/UTM geometry while the fast actor chooses the cheapest evidence and resource allocation that satisfies conservative semantic QoS.
+
 ## 5. Scenario-aware Evaluation
 
 The benchmark uses five named scenarios:
@@ -140,4 +206,3 @@ Required ablations:
 - fixed-service baselines.
 
 The expected claim is that conservative semantic utility plus Lyapunov-style hybrid control can reduce communication load while maintaining reliable VQA task success under UAV mobility, edge load, and UTM constraints.
-

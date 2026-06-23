@@ -741,3 +741,60 @@ outputs/reports/v1_9_snr_eval_report.md
 ```
 
 Never write generic temporary outputs into the root directory.
+
+## Two-timescale Mobility-aware Semantic PPO
+
+Completed 2026-06-23 Asia/Shanghai:
+
+1. Added the first two-timescale mobility-aware Semantic-LCB PPO controller.
+2. Factorized policy structure:
+
+```text
+shared encoder
+slow mobility actor: uav_assignment, mobility_mode, waypoint_delta, altitude_delta
+fast semantic-resource actor: service_level, bandwidth, power, cpu_share, gpu_share
+centralized critic
+Lyapunov virtual queues
+resource/mobility projection
+```
+
+3. Added runner support for:
+
+```text
+proposed_two_timescale_ppo
+monolithic_ppo
+no_mobility_actor
+no_lyapunov_queues
+no_projection
+semantic_greedy
+always_cache / always_semantic_token / always_image
+```
+
+4. Ran five-scenario smoke for `proposed_two_timescale_ppo`:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --benchmark-ppo-variants proposed_two_timescale_ppo \
+  --seeds 0,1,2 \
+  --episodes 1 \
+  --train-episodes 120 \
+  --tasks-per-episode 4 \
+  --output-dir outputs/rl/two_timescale_mobility_ppo_scenario_smoke3
+```
+
+Generated small summary artifacts:
+
+```text
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_all_seed_results.csv
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_summary.csv
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_report.md
+```
+
+Next algorithm steps:
+
+1. Run a 300-episode formal script after tuning mobility arrival-delay and flight-energy weights.
+2. Increase eval episodes beyond smoke; do not use one-episode smoke numbers as paper results.
+3. Compare `proposed_two_timescale_ppo` against `monolithic_ppo`, `no_mobility_actor`, `no_lyapunov_queues`, `no_projection`, `semantic_greedy`, and fixed-service baselines.
+4. Tune resource floors for low-SNR and nominal patrol, where smoke still shows high deadline violation.
+5. Keep `.pt`, rollout CSV, and run logs uncommitted; commit only code, tests, docs, and small root summary/report CSV/MD files.

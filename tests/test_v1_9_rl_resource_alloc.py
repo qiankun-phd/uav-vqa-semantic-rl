@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from vqa_semcom.config import load_config, resolve_path
-from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, train_ppo
+from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, TwoTimescalePPOPolicy, train_ppo, train_two_timescale_ppo
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
 from run_v1_9_resource_alloc import SCENARIO_BENCHMARK_POLICIES, SCENARIO_BENCHMARK_SCENARIOS, choose_baseline_action
@@ -76,6 +76,14 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("subscription_notification_delay_s", info)
         self.assertIn("gpu_memory_ok", info)
         self.assertIn("service_level", info)
+        self.assertIn("mobility_mode", info)
+        self.assertIn("fly_distance_m", info)
+        self.assertIn("coverage_gain", info)
+        self.assertIn("mobility_energy_j", info)
+        self.assertIn("arrival_delay_s", info)
+        self.assertIn("utm_conflict_risk", info)
+        self.assertIn("mobility_mode", info["record"])
+        self.assertIn("mobility_energy_j", info["record"])
         self.assertEqual(info["bandwidth_unit"], "Hz")
         self.assertIsInstance(float(reward), float)
         self.assertFalse(done)
@@ -98,6 +106,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         )
         self.assertTrue(done)
         self.assertEqual(info["service_level"], 0)
+        self.assertEqual(info["mobility_mode"], "stay")
 
     def test_wrapper_passes_formal_scenario_to_canonical_env(self) -> None:
         env = V19LUTResourceEnv(
@@ -132,7 +141,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=6, tasks_per_episode=1)
         obs = env.reset(seed=6)
         for policy in SCENARIO_BENCHMARK_POLICIES:
-            if policy.startswith("ppo_") or policy == "proposed_ppo":
+            if "ppo" in policy or policy in {"monolithic_ppo", "no_mobility_actor"}:
                 continue
             action = choose_baseline_action(policy, env, obs)
             for key in ["service_level", "bandwidth", "power", "cpu_share", "gpu_share", "uav_assignment"]:
@@ -175,6 +184,47 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertLessEqual(float(action["cpu_share"]), 1.0)
         self.assertGreaterEqual(float(action["gpu_share"]), 0.01)
         self.assertLessEqual(float(action["gpu_share"]), 1.0)
+
+    def test_tiny_two_timescale_ppo_training_runs(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=7, tasks_per_episode=4)
+        try:
+            model, trace = train_two_timescale_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=2,
+                    update_epochs=1,
+                    hidden_size=32,
+                    semantic_reward_mode="semantic_utility",
+                    lyapunov_reward=True,
+                    mobility_update_interval=3,
+                ),
+                seed=7,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 2)
+        self.assertEqual(trace[0]["mobility_update_interval"], 3.0)
+        self.assertIn("mean_flight_energy_j", trace[0])
+        self.assertIn("mean_arrival_delay_s", trace[0])
+        self.assertIn("mean_coverage_gain", trace[0])
+        self.assertIn("mobility_reuse_ratio", trace[0])
+
+        obs = env.reset(seed=27)
+        action = TwoTimescalePPOPolicy(env, model, PPOTrainConfig(hidden_size=32, mobility_update_interval=3)).act(obs)
+        for key in [
+            "service_level",
+            "bandwidth",
+            "power",
+            "cpu_share",
+            "gpu_share",
+            "uav_assignment",
+            "mobility_mode",
+            "waypoint_delta",
+            "altitude_delta",
+        ]:
+            self.assertIn(key, action)
+        self.assertIn(action["mobility_mode"], {"stay", "serve_task", "reposition", "avoid_conflict", "return_base"})
+        self.assertEqual(len(action["waypoint_delta"]), 2)
 
     def test_tiny_proposed_semantic_controller_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=3, tasks_per_episode=3)
@@ -219,6 +269,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.cache_stale_penalty_weight, 0.0)
         self.assertGreater(cfg.cache_utm_penalty_weight, 0.0)
         self.assertGreater(cfg.token_projection_bonus, 0.0)
+        self.assertEqual(cfg.mobility_update_interval, 3)
+        self.assertGreater(cfg.coverage_gain_weight, 0.0)
+        self.assertGreater(cfg.flight_energy_cost_weight, 0.0)
         self.assertGreater(cfg.semantic_token_exploration_bonus, 0.0)
 
 

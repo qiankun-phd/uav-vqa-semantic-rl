@@ -30,6 +30,15 @@ class V19StepRecord:
     cpu_share: float
     gpu_share: float
     uav_assignment: int
+    mobility_mode: str
+    waypoint_x: float
+    waypoint_y: float
+    altitude_m: float
+    fly_distance_m: float
+    coverage_gain: float
+    mobility_energy_j: float
+    arrival_delay_s: float
+    utm_conflict_risk: float
     answer_accuracy_est: float
     semantic_accuracy_mean: float
     semantic_accuracy_lcb: float
@@ -191,6 +200,15 @@ class V19LUTResourceEnv:
                 "off_nominal_planning_penalty": record.off_nominal_planning_penalty,
                 "snr_bin": record.snr_bin,
                 "service_level": record.service_level,
+                "mobility_mode": record.mobility_mode,
+                "waypoint_x": record.waypoint_x,
+                "waypoint_y": record.waypoint_y,
+                "altitude_m": record.altitude_m,
+                "fly_distance_m": record.fly_distance_m,
+                "coverage_gain": record.coverage_gain,
+                "mobility_energy_j": record.mobility_energy_j,
+                "arrival_delay_s": record.arrival_delay_s,
+                "utm_conflict_risk": record.utm_conflict_risk,
                 "bandwidth_unit": "Hz",
                 "power_unit": "W",
                 "record": record.to_row(),
@@ -258,6 +276,15 @@ class V19LUTResourceEnv:
             cpu_share=float(info.get("cpu_share", 0.0)),
             gpu_share=float(info.get("gpu_share", 0.0)),
             uav_assignment=int(info.get("uav_assignment", 0)),
+            mobility_mode=str(info.get("mobility_mode", "stay")),
+            waypoint_x=float(info.get("waypoint_x", 0.0)),
+            waypoint_y=float(info.get("waypoint_y", 0.0)),
+            altitude_m=float(info.get("altitude_m", 0.0)),
+            fly_distance_m=float(info.get("fly_distance_m", 0.0)),
+            coverage_gain=float(info.get("coverage_gain", 0.0)),
+            mobility_energy_j=float(info.get("mobility_energy_j", 0.0)),
+            arrival_delay_s=float(info.get("arrival_delay_s", 0.0)),
+            utm_conflict_risk=float(info.get("utm_conflict_risk", 0.0)),
             answer_accuracy_est=float(info.get("answer_accuracy_est", 0.0)),
             semantic_accuracy_mean=float(info.get("semantic_accuracy_mean", info.get("answer_accuracy_est", 0.0))),
             semantic_accuracy_lcb=float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))),
@@ -352,6 +379,15 @@ class V19LUTResourceEnv:
         info.setdefault("subscription_notification_delay_s", 0.0)
         info.setdefault("utm_dss_delay_s", info.get("dss_delay_s", 0.0))
         info.setdefault("utm_notification_delay_s", info.get("subscription_notification_delay_s", 0.0))
+        info.setdefault("mobility_mode", "stay" if int(info.get("service_level", 0)) == 0 else "serve_task")
+        info.setdefault("waypoint_x", 0.0)
+        info.setdefault("waypoint_y", 0.0)
+        info.setdefault("altitude_m", 0.0)
+        info.setdefault("fly_distance_m", 0.0)
+        info.setdefault("coverage_gain", 0.0)
+        info.setdefault("mobility_energy_j", 0.0)
+        info.setdefault("arrival_delay_s", 0.0)
+        info.setdefault("utm_conflict_risk", 0.0)
         state = str(info.get("operational_intent_state", "accepted"))
         info["operational_intent_state"] = state
         info["off_nominal_planning_penalty"] = 1.0 if state in {"nonconforming", "contingent"} else 0.0

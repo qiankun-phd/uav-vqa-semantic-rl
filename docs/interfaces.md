@@ -261,6 +261,66 @@ Mobility-control semantics:
 - `mobility_mode=return_base` moves toward the UAV's initial base/safe point.
 - `service_level=0` cache answer reuse does not by itself create an operational intent or airspace conflict; explicit mobility can still consume flight/hover energy.
 
+## Two-timescale RL Action Contract
+
+The mobility-aware RL controller uses the same environment action schema, but factorizes the policy into slow mobility control and fast semantic-resource control:
+
+```text
+a_t = (a_mobility, a_resource)
+
+a_mobility = {
+  uav_assignment,
+  mobility_mode,
+  waypoint_delta,
+  altitude_delta,
+}
+
+a_resource = {
+  service_level,
+  bandwidth,
+  power,
+  cpu_share,
+  gpu_share,
+}
+```
+
+Default timescale:
+
+```text
+mobility actor update interval K = 3 slots
+semantic-resource actor update interval = every task/slot
+critic = centralized V(s, a_mobility, a_resource)
+```
+
+The observation vector must include semantic-LCB utility fields, resource/network state, mobility/UTM diagnostics, and Lyapunov queues. The current queue fields are:
+
+```text
+Q_quality, Q_deadline, Q_energy, Q_utm
+```
+
+Reward components used by the two-timescale controller:
+
+```text
+semantic_accuracy_lcb / semantic_success
+semantic_quality_gap
+deadline_violation
+energy_j
+payload_kb
+edge_queue delay or edge overload proxy
+utm_conflict_risk / utm_conflict_violation
+mobility_energy_j
+arrival_delay_s
+coverage_gain
+```
+
+Projection requirements:
+
+- cache service (`service_level=0`) should not consume radio/edge resources unless explicit mobility is selected.
+- semantic-token service (`service_level=1`) receives minimum bandwidth/power/cpu/gpu floors for compact evidence transmission and inference.
+- image service (`service_level=2`) receives higher resource floors but remains bounded by edge/load/deadline pressure.
+- mobility deltas are clipped to configured waypoint and altitude ranges.
+- UAV assignment and mobility mode should respect battery and UTM masks when those masks are exposed by the environment.
+
 Suggested scalar reward:
 
 ```text

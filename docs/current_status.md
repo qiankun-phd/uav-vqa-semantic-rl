@@ -933,3 +933,74 @@ Validation:
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
 # Ran 78 tests OK
 ```
+
+## Two-timescale Mobility-aware Semantic Resource PPO 2026-06-23 Asia/Shanghai
+
+Implemented the first Sem-LCB two-timescale PPO controller for the mobility-aware environment interface.
+
+Algorithm structure:
+
+```text
+shared encoder
+slow mobility actor: uav_assignment, mobility_mode, waypoint_delta, altitude_delta
+fast semantic-resource actor: service_level, bandwidth, power, cpu_share, gpu_share
+centralized critic over joint mobility/resource action
+Lyapunov virtual queues in observation and training trace
+post-policy resource and mobility projection
+```
+
+Default mobility timescale is `K=3` slots. The fast actor still updates every task/slot. The reward keeps the Semantic-LCB/Lyapunov mainline and now includes mobility-aware terms:
+
+```text
+semantic LCB/success, quality gap, deadline, energy, payload,
+edge queue, UTM conflict, flight energy, arrival delay, coverage gain
+```
+
+Updated files:
+
+```text
+src/vqa_semcom/rl/v19_ppo.py
+src/vqa_semcom/rl/v19_resource_env.py
+scripts/run_v1_9_resource_alloc.py
+tests/test_v1_9_rl_resource_alloc.py
+docs/paper_algorithm_outline.md
+docs/interfaces.md
+```
+
+Smoke benchmark:
+
+```bash
+/home/qiankun/.conda/envs/uav_semcom/bin/python scripts/run_v1_9_resource_alloc.py \
+  --scenario-benchmark \
+  --benchmark-ppo-variants proposed_two_timescale_ppo \
+  --seeds 0,1,2 \
+  --episodes 1 \
+  --train-episodes 120 \
+  --tasks-per-episode 4 \
+  --output-dir outputs/rl/two_timescale_mobility_ppo_scenario_smoke3
+```
+
+Artifacts kept small at the benchmark root:
+
+```text
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_all_seed_results.csv
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_summary.csv
+outputs/rl/two_timescale_mobility_ppo_scenario_smoke3/scenario_comparison_report.md
+```
+
+Smoke headline for `proposed_two_timescale_ppo`:
+
+| scenario | semantic success | accuracy LCB | quality gap | deadline vio | UTM conflict | cache | token | image |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| nominal_patrol | 0.556 | 0.716 | 0.087 | 0.917 | 0.000 | 0.111 | 0.611 | 0.278 |
+| disaster_hotspot | 0.033 | 0.473 | 0.370 | 0.533 | 0.000 | 0.133 | 0.867 | 0.000 |
+| low_snr_blockage | 0.694 | 0.750 | 0.089 | 0.889 | 0.000 | 0.111 | 0.222 | 0.667 |
+| edge_overload | 0.683 | 0.640 | 0.069 | 0.067 | 0.000 | 0.083 | 0.917 | 0.000 |
+| utm_conflict | 0.267 | 0.554 | 0.274 | 0.600 | 0.000 | 0.100 | 0.633 | 0.267 |
+
+Interpretation:
+
+- The controller no longer collapses to cache in the smoke benchmark; all stress scenarios use token/image evidence as intended.
+- `edge_overload` benefits most from the token-first projection and mobility-aware controller, reaching 0.683 semantic success with low deadline violation in this smoke setting.
+- `low_snr_blockage` and `nominal_patrol` still show high deadline pressure under short training, so the next formal run should tune arrival-delay/flight-energy/resource floors and use longer training before paper claims.
+- `utm_conflict` has non-zero semantic success and zero measured conflict in this smoke run, but deadline pressure remains the binding constraint.

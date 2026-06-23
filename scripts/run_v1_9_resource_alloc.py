@@ -12,7 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from vqa_semcom.config import load_config, resolve_path
-from vqa_semcom.rl.v19_ppo import PPOServicePolicy, PPOTrainConfig, load_ppo_policy, save_ppo_model, train_ppo
+from vqa_semcom.rl.v19_ppo import (
+    PPOServicePolicy,
+    PPOTrainConfig,
+    TwoTimescalePPOPolicy,
+    load_ppo_policy,
+    load_two_timescale_policy,
+    save_ppo_model,
+    save_two_timescale_model,
+    train_ppo,
+    train_two_timescale_ppo,
+)
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv, V19StepRecord
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
 from vqa_semcom.snr import parse_snr_bins
@@ -32,10 +42,13 @@ SCENARIO_BENCHMARK_POLICIES = (
     "always_image",
     "semantic_greedy",
     "lyapunov_greedy",
+    "monolithic_ppo",
+    "no_mobility_actor",
     "ppo_without_lcb",
     "ppo_without_queues",
     "ppo_without_projection",
     "proposed_ppo",
+    "proposed_two_timescale_ppo",
 )
 
 SCENARIO_BENCHMARK_BASELINES = (
@@ -47,10 +60,13 @@ SCENARIO_BENCHMARK_BASELINES = (
 )
 
 SCENARIO_BENCHMARK_PPO_VARIANTS = (
+    "monolithic_ppo",
+    "no_mobility_actor",
     "ppo_without_lcb",
     "ppo_without_queues",
     "ppo_without_projection",
     "proposed_ppo",
+    "proposed_two_timescale_ppo",
 )
 
 BASELINE_POLICIES = (
@@ -93,6 +109,10 @@ class EvalSummary:
     average_q_energy: float
     average_q_risk: float
     average_q_utm: float
+    average_mobility_energy_j: float
+    average_arrival_delay_s: float
+    average_coverage_gain: float
+    average_utm_conflict_risk: float
     payload_reduction_vs_always_image: float
     quality_violation_rate: float
     deadline_violation_rate: float
@@ -211,6 +231,10 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, 
                 average_q_energy=round(_mean(records, "q_energy"), 6),
                 average_q_risk=round(_mean(records, "q_risk"), 6),
                 average_q_utm=round(_mean(records, "q_utm"), 6),
+                average_mobility_energy_j=round(_mean(records, "mobility_energy_j"), 6),
+                average_arrival_delay_s=round(_mean(records, "arrival_delay_s"), 6),
+                average_coverage_gain=round(_mean(records, "coverage_gain"), 6),
+                average_utm_conflict_risk=round(_mean(records, "utm_conflict_risk"), 6),
                 payload_reduction_vs_always_image=round(reduction, 6),
                 quality_violation_rate=round(_rate(records, "quality_violation"), 6),
                 deadline_violation_rate=round(_rate(records, "deadline_violation"), 6),
@@ -282,6 +306,10 @@ def main() -> int:
     parser.add_argument("--train-episodes", type=int, default=120)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
+    parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
+    parser.add_argument("--mobility-update-interval", type=int, default=3, help="Slow mobility actor update interval K in slots.")
+    parser.add_argument("--no-mobility-actor", action="store_true", help="Ablation: disable learned mobility actor and use deterministic mobility defaults.")
+    parser.add_argument("--benchmark-ppo-variants", default=None, help="Optional comma-separated PPO variants for scenario benchmark mode.")
     parser.add_argument("--no-constrained-ppo", action="store_true", help="Disable Lagrangian quality/deadline constraint penalties.")
     parser.add_argument("--risk-aware-constraints", action="store_true", help="Use risk-aware CMDP dual variables for normal/critical tasks.")
     parser.add_argument("--semantic-reward-mode", default="env", choices=["env", "semantic_utility", "no_semantic_utility", "accuracy_only", "uncertainty_aware"])
@@ -370,7 +398,7 @@ def run_experiment(
         selected.append("ppo")
     records_by_policy: dict[str, list[V19StepRecord]] = {}
     train_trace: list[dict[str, float]] = []
-    ppo_policy: PPOServicePolicy | None = None
+    ppo_policy: PPOServicePolicy | TwoTimescalePPOPolicy | None = None
 
     if args.train_ppo or (args.policy == "ppo" and not args.load_ppo_model):
         train_env = make_env(args, cfg, tasks, lut, "ppo_train")
@@ -413,22 +441,39 @@ def run_experiment(
             demo_episodes=args.demo_episodes,
             bc_epochs=args.bc_epochs,
             bc_aux_weight=args.bc_aux_weight,
+            two_timescale=args.two_timescale_ppo,
+            mobility_update_interval=args.mobility_update_interval,
+            no_mobility_actor=args.no_mobility_actor,
         )
-        model, train_trace = train_ppo(train_env, ppo_cfg, seed=args.seed)
-        model_name = "ppo_service_policy.pt" if args.service_only_ppo else "ppo_hybrid_policy.pt"
+        if args.two_timescale_ppo:
+            model, train_trace = train_two_timescale_ppo(train_env, ppo_cfg, seed=args.seed)
+            model_name = "ppo_two_timescale_policy.pt"
+        else:
+            model, train_trace = train_ppo(train_env, ppo_cfg, seed=args.seed)
+            model_name = "ppo_service_policy.pt" if args.service_only_ppo else "ppo_hybrid_policy.pt"
         model_path = Path(args.output_dir) / model_name
-        save_ppo_model(model_path, model, train_env, ppo_cfg)
-        ppo_policy = PPOServicePolicy(train_env, model, ppo_cfg)
+        if args.two_timescale_ppo:
+            save_two_timescale_model(model_path, model, train_env, ppo_cfg)
+            ppo_policy = TwoTimescalePPOPolicy(train_env, model, ppo_cfg)
+        else:
+            save_ppo_model(model_path, model, train_env, ppo_cfg)
+            ppo_policy = PPOServicePolicy(train_env, model, ppo_cfg)
         print(f"wrote {model_path}")
 
     for policy in selected:
         eval_env = make_env(args, cfg, tasks, lut, policy)
         if policy == "ppo":
             if args.load_ppo_model:
-                loaded_policy = load_ppo_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size)
+                if args.two_timescale_ppo:
+                    loaded_policy = load_two_timescale_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size)
+                else:
+                    loaded_policy = load_ppo_policy(Path(args.load_ppo_model), eval_env, hidden_size=args.hidden_size)
                 action_fn = lambda obs, policy=loaded_policy: policy.act(obs, deterministic=True)
             elif ppo_policy is not None:
-                eval_policy = PPOServicePolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
+                if args.two_timescale_ppo:
+                    eval_policy = TwoTimescalePPOPolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
+                else:
+                    eval_policy = PPOServicePolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
                 action_fn = lambda obs, policy=eval_policy: policy.act(obs, deterministic=True)
             else:
                 raise RuntimeError("Use --train-ppo before evaluating policy=ppo.")
@@ -452,7 +497,10 @@ def _run_scenario_benchmark(
     all_rows: list[dict[str, Any]] = []
     scenarios = [item.strip() for item in str(args.benchmark_scenarios).split(",") if item.strip()]
     seeds = _parse_seed_list(str(args.seeds))
-    ppo_variants = ("proposed_ppo",) if bool(args.smoke) else SCENARIO_BENCHMARK_PPO_VARIANTS
+    if args.benchmark_ppo_variants:
+        ppo_variants = tuple(item.strip() for item in str(args.benchmark_ppo_variants).split(",") if item.strip())
+    else:
+        ppo_variants = ("proposed_two_timescale_ppo",) if bool(args.smoke) else SCENARIO_BENCHMARK_PPO_VARIANTS
     for scenario in scenarios:
         for seed in seeds:
             baseline_args = _scenario_args(args, root, scenario, seed, "baselines")
@@ -516,7 +564,15 @@ def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
     args.semantic_lyapunov_control = True
     args.risk_aware_constraints = True
     args.semantic_reward_mode = "semantic_utility"
-    if variant == "ppo_without_lcb":
+    args.two_timescale_ppo = False
+    args.no_mobility_actor = False
+    if variant == "monolithic_ppo":
+        _enable_proposed_semantic_rl_defaults(args)
+    elif variant == "no_mobility_actor":
+        _enable_proposed_semantic_rl_defaults(args)
+        args.two_timescale_ppo = True
+        args.no_mobility_actor = True
+    elif variant == "ppo_without_lcb":
         _enable_proposed_semantic_rl_defaults(args)
         args.no_semantic_lcb = True
     elif variant == "ppo_without_queues":
@@ -528,6 +584,9 @@ def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
         args.no_semantic_projection = True
     elif variant == "proposed_ppo":
         _enable_proposed_semantic_rl_defaults(args)
+    elif variant == "proposed_two_timescale_ppo":
+        _enable_proposed_semantic_rl_defaults(args)
+        args.two_timescale_ppo = True
     else:
         raise ValueError(f"unknown PPO benchmark variant: {variant}")
 
@@ -559,6 +618,10 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "average_q_deadline",
         "average_q_energy",
         "average_q_utm",
+        "average_mobility_energy_j",
+        "average_arrival_delay_s",
+        "average_coverage_gain",
+        "average_utm_conflict_risk",
         "average_delay",
         "average_energy",
         "average_payload_kb",
@@ -777,8 +840,8 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
         f"- trained PPO: {trained_ppo}",
         "- LUT oracle: outputs/lut/v1_9_snr_semantic_quality_lut.csv",
         "",
-        "| policy | semantic success | success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed epsilon mean | failed epsilon range | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM conflict | reward |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| policy | semantic success | success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed epsilon mean | failed epsilon range | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | flight energy | arrival delay | coverage gain | payload KB | payload reduction | quality violation | deadline violation | battery violation | GPU violation | conflict | UTM conflict | reward |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         lines.append(
@@ -786,6 +849,7 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
             f"{row.average_uncertainty:.3f} | {row.average_epsilon_k:.3f} | {row.failed_epsilon_k_mean:.3f} | "
             f"{row.failed_epsilon_k_min:.3f}-{row.failed_epsilon_k_max:.3f} | {row.average_semantic_quality_gap:.3f} | {row.average_q_quality:.3f} | "
             f"{row.average_q_deadline:.3f} | {row.average_q_energy:.3f} | {row.average_q_utm:.3f} | {row.average_delay:.3f} | {row.average_energy:.3f} | "
+            f"{row.average_mobility_energy_j:.3f} | {row.average_arrival_delay_s:.3f} | {row.average_coverage_gain:.3f} | "
             f"{row.average_payload_kb:.3f} | {row.payload_reduction_vs_always_image:.3f} | "
             f"{row.quality_violation_rate:.3f} | {row.deadline_violation_rate:.3f} | {row.battery_violation_rate:.3f} | "
             f"{row.resource_violation_rate:.3f} | {row.airspace_conflict_rate:.3f} | {row.utm_conflict_violation_rate:.3f} | "
@@ -819,8 +883,8 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed eps mean | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | payload KB | deadline vio | UTM conflict | cache | token | image |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed eps mean | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | flight energy | arrival delay | coverage | payload KB | deadline vio | UTM conflict | cache | token | image |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
@@ -831,7 +895,9 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
             f"{_metric(row, 'average_semantic_quality_gap'):.3f} | {_metric(row, 'average_q_quality'):.3f} | "
             f"{_metric(row, 'average_q_deadline'):.3f} | {_metric(row, 'average_q_energy'):.3f} | "
             f"{_metric(row, 'average_q_utm'):.3f} | {_metric(row, 'average_delay'):.3f} | "
-            f"{_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
+            f"{_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_mobility_energy_j'):.3f} | "
+            f"{_metric(row, 'average_arrival_delay_s'):.3f} | {_metric(row, 'average_coverage_gain'):.3f} | "
+            f"{_metric(row, 'average_payload_kb'):.3f} | "
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
             f"{_metric(row, 'service_level_0_ratio'):.3f} | {_metric(row, 'service_level_1_ratio'):.3f} | "
             f"{_metric(row, 'service_level_2_ratio'):.3f} |"
