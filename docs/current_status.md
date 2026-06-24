@@ -1706,3 +1706,42 @@ outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
 ```
 
 Do not commit per-seed `.pt`, rollout CSV, or logs.
+
+## Semantic Path Utility Diagnosis 2026-06-24 Asia/Shanghai
+
+Completed utility-only diagnosis for cache/token/image/cache_update recommendations on `codex/semantic-path-cache-defer`. This diagnosis does not modify original VQA prediction CSVs, semantic LUTs, environment dynamics, or PPO logic.
+
+Artifacts:
+
+```text
+outputs/semantic/semantic_path_utility_diagnosis_20260624/report.md
+outputs/semantic/semantic_path_utility_diagnosis_20260624/summary.csv
+```
+
+Scenarios covered:
+
+```text
+normal_patrol
+disaster_hotspot
+low_snr_soft
+low_snr_blockage
+edge_overload
+utm_conflict
+```
+
+Rule-check results:
+
+- Critical stale/expired cache recommendation violations: 0.
+- Expired cache recommendation violations: 0.
+- Utility-layer `cache_update` recommendation rate: 0 by design, because the semantic utility API does not estimate future reuse value.
+
+Interpretation:
+
+- The utility layer can score the current-task token/image evidence used by `cache_update`, but it cannot decide whether cache update is worth doing without a future reuse model.
+- Edge-overload short runs show nontrivial PPO `cache_update` use, but this must be justified by environment/algorithm-side future cache value, cache pressure, or expected future hit probability, not by the static semantic utility alone.
+- UTM conflict does not show cache_update overuse in the short run. The remaining failure is UTM feasibility and critical-task quality, not cache_update recommendation leakage.
+
+Next interface recommendation:
+
+- Add an explicit environment/algorithm-side field such as `future_reuse_value`, `cache_update_value`, or `expected_future_cache_hits` before treating `cache_update` as actively recommended.
+- Keep the semantic utility layer conservative: `cache_update` remains a candidate path with current-task token utility plus a documented limitation.

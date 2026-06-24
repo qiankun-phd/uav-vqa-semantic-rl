@@ -274,6 +274,7 @@ cache_eligible = cache_recommended
 - `expired` cache is not recommended for critical tasks.
 - Critical tasks can use cache only when `freshness_bin == fresh`, `cache_accuracy_lcb >= epsilon_k`, sample support exists, and uncertainty is acceptable.
 - `candidate_path_metrics` is a compact per-candidate dictionary for environment logging and policy debugging. It includes at least `semantic_path`, candidate `accuracy_lcb`, `semantic_quality_gap`, `payload_kb`, `cache_accuracy_lcb`, `cache_quality_gap`, and `cache_recommended`.
+- The semantic utility layer does not estimate future cache reuse value. Therefore `cache_update` must not be treated as actively recommended solely because the cache is missing or stale. Environment/Algorithm should provide a separate `future_reuse_value`, `cache_update_value`, or `expected_future_cache_hits` signal before preferring cache update over token/image service.
 
 Paper-facing service semantics:
 
