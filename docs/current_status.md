@@ -1467,3 +1467,22 @@ Main conclusions:
 - Edge queue and inference are secondary in this scenario: candidate queue delay is about 0.12 s; inference is about 0.68 s for tokens and 2.74 s for image.
 - Resource caps are internally consistent for a stress scenario: image already uses full scenario bandwidth and 1 W transmit power, so deadline failures are not caused by too-low resource caps.
 - Recommended action: keep the current `low_snr_blockage` default as an image-impossible stress scenario. If a partially image-feasible variant is needed, add a separate `low_snr_blockage_soft` preset instead of weakening the default.
+
+## Low-SNR Semantic Service Tradeoff 2026-06-24 Asia/Shanghai
+
+Completed semantic-utility-side diagnosis for `low_snr_blockage` without modifying the original LUT or VLM prediction data.
+
+Artifact:
+
+```text
+outputs/semantic/low_snr_service_tradeoff_20260624/semantic_tradeoff.md
+```
+
+Main conclusions:
+
+- The calibrated semantic utility table supports service level 1 as the main low-SNR service candidate when `accuracy_lcb >= epsilon_k`: semantic tokens give strong gains for presence and several normal-risk cells while keeping payload near the compact-evidence scale.
+- Image evidence can be semantically strong, but current benchmark summaries show it is deadline-infeasible in the blockage stress scenario because large payload combines with weak A2G links and mobility/arrival delay.
+- Cache is the deadline-safe fallback, not the semantic main service. It should only be allowed when the semantic gap is small and token/image candidates are deadline-infeasible.
+- Critical counting remains a special case: detector-token count errors can make token LCB conservative, so fallback/projection should consider task type and risk level.
+- Recommended Algorithm-side guard: expose `deadline_aware_semantic_fallback_threshold`, with `delta_cache = 0.05` for strict settings and `delta_cache = 0.08` for stress-scenario fallback. The fallback should be conditioned on high deadline pressure or no jointly feasible token/image candidate.
+- Do not weaken the semantic LUT to fix low-SNR task success. The current issue is a control tradeoff: accept a small cache semantic gap in exchange for a large deadline improvement when compact evidence is still too slow.
