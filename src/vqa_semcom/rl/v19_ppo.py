@@ -77,11 +77,8 @@ def _model_obs_dim(model: Any) -> int | None:
 
 def _obs_tensor(obs: dict[str, Any], device: Any, expected_dim: int | None = None) -> Any:
     vector = list(obs.get("vector", []))
-    if expected_dim is not None and expected_dim > 0:
-        if len(vector) < expected_dim:
-            vector = vector + [0.0] * (expected_dim - len(vector))
-        elif len(vector) > expected_dim:
-            vector = vector[:expected_dim]
+    if expected_dim is not None and expected_dim > 0 and len(vector) != expected_dim:
+        raise RuntimeError(f"observation dimension mismatch: got {len(vector)}, expected checkpoint dimension {expected_dim}")
     return torch.as_tensor(vector, dtype=torch.float32, device=device).unsqueeze(0)
 
 

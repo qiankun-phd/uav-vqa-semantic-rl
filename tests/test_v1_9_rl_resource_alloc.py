@@ -172,17 +172,29 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertEqual(obs_v2["state_version"], "v2")
         self.assertGreater(len(obs_v2["vector"]), len(obs_v1["vector"]))
 
-    def test_obs_tensor_aligns_to_checkpoint_dimension(self) -> None:
+    def test_state_v2_uses_fixed_canonical_dimension_across_scenarios(self) -> None:
+        dims = set()
+        for scenario in SCENARIO_BENCHMARK_SCENARIOS:
+            cfg = dict(self.cfg)
+            env_cfg = dict(cfg.get("multi_uav_env", {}))
+            env_cfg["scenario"] = scenario
+            cfg["multi_uav_env"] = env_cfg
+            env = V19LUTResourceEnv(self.tasks, self.lut, cfg, seed=8, tasks_per_episode=2, state_version="v2")
+            obs = env.reset(seed=8)
+            dims.add(len(obs["vector"]))
+        self.assertEqual(len(dims), 1)
+
+    def test_obs_tensor_rejects_checkpoint_dimension_mismatch(self) -> None:
         try:
             device = resolve_torch_device("cpu")
         except ModuleNotFoundError:
             self.skipTest("torch is not installed")
-        padded = _obs_tensor({"vector": [1.0, 2.0, 3.0]}, device, expected_dim=5)
-        truncated = _obs_tensor({"vector": [1.0, 2.0, 3.0, 4.0, 5.0]}, device, expected_dim=3)
-        self.assertEqual(tuple(padded.shape), (1, 5))
-        self.assertEqual(tuple(truncated.shape), (1, 3))
-        self.assertEqual(padded.squeeze(0).detach().cpu().tolist(), [1.0, 2.0, 3.0, 0.0, 0.0])
-        self.assertEqual(truncated.squeeze(0).detach().cpu().tolist(), [1.0, 2.0, 3.0])
+        tensor = _obs_tensor({"vector": [1.0, 2.0, 3.0]}, device, expected_dim=3)
+        self.assertEqual(tuple(tensor.shape), (1, 3))
+        with self.assertRaises(RuntimeError):
+            _obs_tensor({"vector": [1.0, 2.0, 3.0]}, device, expected_dim=5)
+        with self.assertRaises(RuntimeError):
+            _obs_tensor({"vector": [1.0, 2.0, 3.0, 4.0]}, device, expected_dim=3)
 
     def test_hidden_layers_config_builds_custom_encoder(self) -> None:
         layers = normalize_hidden_layers("256,256,128", hidden_size=32)

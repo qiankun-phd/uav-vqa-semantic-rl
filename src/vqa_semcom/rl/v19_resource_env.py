@@ -131,6 +131,15 @@ class V19LUTResourceEnv:
         self._semantic_utility = self._load_semantic_utility_model(cfg)
         env_cfg = self._env_cfg.get("multi_uav_env", {}) if isinstance(self._env_cfg, dict) else {}
         self.energy_budget_j = float(rl_cfg.get("energy_budget_j", env_cfg.get("energy_budget_j", 500.0)))
+        self._state_v2_service_levels = self._canonical_state_v2_service_levels(cfg)
+        self._state_v2_max_uavs = max(
+            int(rl_cfg.get("state_v2_max_uavs", 8)),
+            int(env_cfg.get("num_uavs", 1)),
+            int(self.action_spec().get("num_uavs", 1)),
+        )
+        self._state_v2_mobility_modes = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
+        self._state_v2_delay_norm_s = max(1.0, float(rl_cfg.get("state_v2_delay_norm_s", 60.0)))
+        self._state_v2_energy_norm_j = max(1.0, float(rl_cfg.get("state_v2_energy_norm_j", self.energy_budget_j)))
         self._queue_state = self._empty_queue_state()
 
     @property
@@ -479,17 +488,21 @@ class V19LUTResourceEnv:
     def _state_v2_vector(self, obs: dict[str, Any]) -> list[float]:
         features: list[float] = []
         deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))
-        for level in self.service_levels:
+        epsilon = self._clip01(float(obs.get("epsilon_k", 0.0)))
+        for level in self._state_v2_service_levels:
+            if int(level) not in {int(item) for item in self.service_levels}:
+                features.extend([0.0, 0.0, epsilon, 0.0, 0.0, 0.0, -1.0])
+                continue
             action = self.candidate_action(level, obs)
             info = self.evaluate_action(action, obs)
-            accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
-            uncertainty = float(info.get("semantic_uncertainty", 0.0))
-            gap = max(0.0, float(obs.get("epsilon_k", 0.0)) - accuracy_lcb)
-            estimated_delay = float(info.get("delay_s", info.get("total_delay_s", info.get("estimated_delay_s", 0.0))))
+            accuracy_lcb = self._clip01(float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))))
+            uncertainty = self._clip01(float(info.get("semantic_uncertainty", 0.0)))
+            gap = self._clip01(max(0.0, epsilon - accuracy_lcb))
+            estimated_delay = max(0.0, float(info.get("delay_s", info.get("total_delay_s", info.get("estimated_delay_s", 0.0)))))
             semantic_feasible = float(gap <= 1e-9)
             deadline_feasible = float(estimated_delay <= deadline)
             joint_feasible = float(bool(info.get("success", False)) or (semantic_feasible > 0.0 and deadline_feasible > 0.0))
-            slack_ratio = (deadline - estimated_delay) / deadline
+            slack_ratio = self._clip((deadline - estimated_delay) / deadline, -1.0, 1.0)
             features.extend(
                 [
                     accuracy_lcb,
@@ -498,7 +511,7 @@ class V19LUTResourceEnv:
                     semantic_feasible,
                     deadline_feasible,
                     joint_feasible,
-                    max(-10.0, min(10.0, slack_ratio)),
+                    slack_ratio,
                 ]
             )
         features += self._uav_mobility_feature_vector(obs)
@@ -506,17 +519,15 @@ class V19LUTResourceEnv:
         return features
 
     def _uav_mobility_feature_vector(self, obs: dict[str, Any]) -> list[float]:
-        spec = self.action_spec()
-        max_uavs = int(spec.get("num_uavs", max(1, len(list(obs.get("uav_state", []) or [])))))
         task_xy = self._front_task_xy(obs)
         features: list[float] = []
-        for idx in range(max_uavs):
+        for idx in range(self._state_v2_max_uavs):
             uav = self._uav_by_index_or_id(obs, idx)
             if uav is None:
-                features.extend([0.0, 0.0, 0.0])
+                features.extend([0.0, 0.0, 0.0, 0.0])
                 continue
-            predicted_delay = float(uav.get("predicted_fly_delay_s", uav.get("arrival_delay_s", 0.0)))
-            predicted_energy = float(uav.get("predicted_fly_energy_j", uav.get("mobility_energy_j", 0.0)))
+            predicted_delay = max(0.0, float(uav.get("predicted_fly_delay_s", uav.get("arrival_delay_s", 0.0))))
+            predicted_energy = max(0.0, float(uav.get("predicted_fly_energy_j", uav.get("mobility_energy_j", 0.0))))
             if task_xy is not None and predicted_delay <= 0.0:
                 dx = float(uav.get("x_m", 0.0)) - task_xy[0]
                 dy = float(uav.get("y_m", 0.0)) - task_xy[1]
@@ -524,21 +535,47 @@ class V19LUTResourceEnv:
                 speed = max(1.0, float(uav.get("speed_mps", uav.get("max_speed_mps", 15.0))))
                 predicted_delay = distance / speed
                 predicted_energy = predicted_energy if predicted_energy > 0.0 else distance * 0.5
-            features.extend([1.0, predicted_delay / 60.0, predicted_energy / max(1.0, float(self.energy_budget_j))])
+            battery = max(0.0, float(uav.get("battery_remaining_j", uav.get("battery_j", self.energy_budget_j))))
+            features.extend(
+                [
+                    1.0,
+                    self._clip01(predicted_delay / self._state_v2_delay_norm_s),
+                    self._clip01(predicted_energy / self._state_v2_energy_norm_j),
+                    self._clip01(battery / max(1.0, float(self.energy_budget_j))),
+                ]
+            )
         return features
 
     def _mask_feature_vector(self, obs: dict[str, Any]) -> list[float]:
         mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
         service_allowed = mask.get("service_level_allowed", {}) if isinstance(mask.get("service_level_allowed", {}), dict) else {}
-        service_values = [float(bool(service_allowed.get(level, service_allowed.get(str(level), True)))) for level in self.service_levels]
+        service_values = [
+            float(bool(service_allowed.get(level, service_allowed.get(str(level), int(level) in self.service_levels))))
+            for level in self._state_v2_service_levels
+        ]
         mode_allowed = mask.get("mobility_mode_allowed", {}) if isinstance(mask.get("mobility_mode_allowed", {}), dict) else {}
-        mobility_modes = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
-        mobility_values = [float(bool(mode_allowed.get(mode, True))) for mode in mobility_modes]
-        spec = self.action_spec()
-        max_uavs = int(spec.get("num_uavs", max(1, len(list(obs.get("uav_state", []) or [])))))
+        mobility_values = [float(bool(mode_allowed.get(mode, True))) for mode in self._state_v2_mobility_modes]
         uav_ok = mask.get("uav_battery_ok", {}) if isinstance(mask.get("uav_battery_ok", {}), dict) else {}
-        uav_values = [float(bool(uav_ok.get(uid, uav_ok.get(str(uid), True)))) for uid in range(max_uavs)]
+        uav_values: list[float] = []
+        for uid in range(self._state_v2_max_uavs):
+            active = self._uav_by_index_or_id(obs, uid) is not None
+            uav_values.append(float(active and bool(uav_ok.get(uid, uav_ok.get(str(uid), True)))))
         return service_values + mobility_values + uav_values
+
+    @staticmethod
+    def _clip(value: float, low: float, high: float) -> float:
+        return max(float(low), min(float(high), float(value)))
+
+    @classmethod
+    def _clip01(cls, value: float) -> float:
+        return cls._clip(value, 0.0, 1.0)
+
+    @staticmethod
+    def _canonical_state_v2_service_levels(cfg: dict[str, Any]) -> tuple[int, ...]:
+        bins = cfg.get("bins", {}) if isinstance(cfg, dict) else {}
+        env_cfg = cfg.get("multi_uav_env", {}) if isinstance(cfg, dict) else {}
+        levels = bins.get("service_levels") or env_cfg.get("enabled_service_levels") or [0, 1, 2]
+        return tuple(int(level) for level in levels)
 
     @staticmethod
     def _front_task_xy(obs: dict[str, Any]) -> tuple[float, float] | None:
