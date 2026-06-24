@@ -26,7 +26,7 @@ from vqa_semcom.rl.v19_ppo import (
     train_ppo,
     train_two_timescale_ppo,
 )
-from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
+from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv, V19StepRecord
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
 from run_v1_9_resource_alloc import SCENARIO_BENCHMARK_POLICIES, SCENARIO_BENCHMARK_SCENARIOS, choose_baseline_action
 
@@ -658,3 +658,12 @@ class _ProjectionEnv:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class V19SelectedPathMetricsTest(unittest.TestCase):
+    def test_step_record_exposes_selected_path_feasibility_fields(self):
+        fields = set(V19StepRecord.__dataclass_fields__)
+        self.assertIn("selected_path_joint_feasible", fields)
+        self.assertIn("selected_path_deadline_feasible", fields)
+        self.assertIn("selected_path_utm_feasible", fields)
+        self.assertIn("selected_path_deadline_slack_s", fields)

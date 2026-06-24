@@ -247,7 +247,10 @@ class PPOTrainConfig:
     cache_update_min_future_reuse: int = 1
     cache_update_overuse_penalty_weight: float = 5.0
     utm_violation_strong_penalty_weight: float = 40.0
-    edge_overload_deadline_queue_boost: float = 2.5
+    edge_overload_deadline_queue_boost: float = 3.5
+    edge_cache_quality_gap_prefer_threshold: float = 0.04
+    semantic_path_strict_joint_paths: bool = True
+    utm_risk_avoid_threshold: float = 0.35
     projected_deadline_downgrade: bool = True
 
 
@@ -1377,8 +1380,9 @@ def _project_mobility_action(env: V19LUTResourceEnv, obs: dict[str, Any], action
     mode = str(action.get("mobility_mode", "serve_task"))
     if allowed and not bool(allowed.get(mode, allowed.get(str(mode), True))):
         mode = "serve_task" if bool(allowed.get("serve_task", True)) else "stay"
-    if str(obs.get("operational_intent_state", "accepted")) in {"nonconforming", "contingent"}:
-        mode = "avoid_conflict"
+    risk = float(obs.get("utm_conflict_risk", 0.0) or 0.0)
+    if str(obs.get("operational_intent_state", "accepted")) in {"nonconforming", "contingent"} or risk >= float(cfg.utm_risk_avoid_threshold):
+        mode = "avoid_conflict" if bool(allowed.get("avoid_conflict", True)) else "stay"
     if _prefer_nearest_uav_mobility(obs, cfg):
         if mode in {"reposition", "return_base"}:
             mode = "serve_task" if bool(allowed.get("serve_task", True)) else "stay"
@@ -1422,7 +1426,7 @@ def _apply_mobility_mode_mask(logits: Any, obs: dict[str, Any]) -> Any:
         mask_values = [bool(mask_data.get(mode, True)) for mode in MOBILITY_MODES]
     state = str(obs.get("operational_intent_state", "accepted"))
     risk = float(obs.get("utm_conflict_risk", 0.0) or 0.0)
-    if state in {"nonconforming", "contingent"} or risk >= 0.7:
+    if state in {"nonconforming", "contingent"} or risk >= 0.35:
         for blocked in ("serve_task", "reposition"):
             if blocked in MOBILITY_MODES:
                 mask_values[MOBILITY_MODES.index(blocked)] = False
@@ -1935,7 +1939,11 @@ def _service_mask_tensor(obs: dict[str, Any], service_levels: list[Any] | tuple[
         return torch.ones((1, len(service_levels)), dtype=torch.bool, device=device)
     mask = [_semantic_choice_allowed(obs, choice, cfg) for choice in service_levels]
     if not any(mask):
-        mask = [True for _ in service_levels]
+        if bool(cfg.semantic_path_actions):
+            fallback = [str(choice) in {"cache", "defer"} for choice in service_levels]
+            mask = fallback if any(fallback) else [True for _ in service_levels]
+        else:
+            mask = [True for _ in service_levels]
     return torch.as_tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
 
 
@@ -2027,21 +2035,32 @@ def _cache_update_gate_ok(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
     if not bool(cfg.cache_update_gate_enabled):
         return True
     update_data = _path_metric(obs, "cache_update")
-    if update_data and bool(cfg.semantic_path_joint_feasible_mask) and not bool(update_data.get("joint_feasible", update_data.get("feasible", True))):
-        return False
-    if update_data and not bool(update_data.get("utm_feasible", True)):
-        return False
+    if update_data:
+        if bool(cfg.semantic_path_joint_feasible_mask) and not bool(update_data.get("joint_feasible", update_data.get("feasible", True))):
+            return False
+        for key in ("deadline_feasible", "semantic_feasible", "energy_feasible", "utm_feasible", "resource_feasible"):
+            if not bool(update_data.get(key, True)):
+                return False
     if _path_deadline_slack_s(obs, "cache_update") <= float(cfg.semantic_path_deadline_slack_margin_s):
         return False
     cache_data = _path_metric(obs, "cache")
     cache_eligible = bool(cache_data.get("cache_eligible", obs.get("cache_eligible", False)))
     cache_gap = _path_quality_gap(obs, "cache")
+    future_reuse = int(update_data.get("future_reuse_value", _future_cache_reuse_count(obs))) if update_data else _future_cache_reuse_count(obs)
+    if _is_edge_overload_obs(obs, cfg):
+        if cache_eligible:
+            return False
+        if future_reuse < int(cfg.cache_update_min_future_reuse):
+            return False
+        if _edge_load_pressure(obs) >= float(cfg.cache_update_max_edge_load) or _edge_queue_delay_s(obs) >= float(cfg.cache_update_max_edge_queue_delay_s):
+            return False
+        return cache_gap >= float(cfg.cache_update_min_quality_gap)
     cache_needs_refresh = (not cache_eligible) or cache_gap >= float(cfg.cache_update_min_quality_gap)
     if not cache_needs_refresh:
         return False
     if _edge_load_pressure(obs) > float(cfg.cache_update_max_edge_load) or _edge_queue_delay_s(obs) > float(cfg.cache_update_max_edge_queue_delay_s):
         return False
-    if _future_cache_reuse_count(obs) < int(cfg.cache_update_min_future_reuse):
+    if future_reuse < int(cfg.cache_update_min_future_reuse):
         return False
     return True
 
@@ -2054,30 +2073,38 @@ def _semantic_path_allowed(obs: dict[str, Any], path: str, cfg: PPOTrainConfig) 
     metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
     data = _path_metric(obs, path)
     has_metric = path in metrics and bool(data)
+    edge_overload = _is_edge_overload_obs(obs, cfg)
     if path == "cache":
-        return bool(data.get("cache_eligible", obs.get("cache_eligible", False)))
+        cache_ok = bool(data.get("cache_eligible", obs.get("cache_eligible", False)))
+        if edge_overload and cache_ok:
+            return _path_quality_gap(obs, "cache") <= float(cfg.edge_cache_quality_gap_prefer_threshold)
+        return cache_ok
     if path == "defer":
         if bool(obs.get("expired", False)):
             return False
         remaining = float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 1.0))))
-        if remaining <= 0.5:
-            return False
-        if has_metric and not bool(data.get("deadline_feasible", data.get("feasible", True))):
+        if remaining <= 0.25:
             return False
         return bool(data.get("feasible", True))
     if path in {"token", "image", "cache_update"}:
         level = SEMANTIC_PATH_TO_SERVICE_LEVEL[path]
         if not _service_allowed(obs, level):
             return False
-        if has_metric and not bool(data.get("utm_feasible", True)):
-            return False
-        if has_metric and not bool(data.get("resource_feasible", True)):
-            return False
-        if has_metric and bool(cfg.semantic_path_joint_feasible_mask):
-            joint = bool(data.get("joint_feasible", data.get("feasible", True)))
-            if path in {"image", "cache_update"} and not joint:
+        if has_metric:
+            if not bool(data.get("utm_feasible", True)):
                 return False
-        if _is_edge_overload_obs(obs, cfg) and path in {"token", "cache_update"}:
+            if not bool(data.get("resource_feasible", True)):
+                return False
+            if path in {"image", "cache_update"} and not bool(data.get("joint_feasible", data.get("feasible", True))):
+                return False
+            if path == "token" and edge_overload and not bool(data.get("deadline_feasible", True)):
+                return False
+            if bool(cfg.semantic_path_strict_joint_paths) and path == "token":
+                if not bool(data.get("semantic_feasible", True)):
+                    return False
+                if edge_overload and not bool(data.get("deadline_feasible", True)):
+                    return False
+        if edge_overload and path in {"token", "cache_update"}:
             if _path_deadline_slack_s(obs, path) <= float(cfg.edge_overload_deadline_slack_margin_s):
                 return False
         if path == "cache_update" and not _cache_update_gate_ok(obs, cfg):

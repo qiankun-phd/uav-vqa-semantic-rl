@@ -32,6 +32,10 @@ class V19StepRecord:
     cache_eligible: bool
     cache_quality_lcb: float
     cache_age: float
+    selected_path_joint_feasible: bool
+    selected_path_deadline_feasible: bool
+    selected_path_utm_feasible: bool
+    selected_path_deadline_slack_s: float
     bandwidth_hz: float
     power_w: float
     cpu_share: float
@@ -193,6 +197,7 @@ class V19LUTResourceEnv:
             isinstance(item, dict) and item.get("event") == "deadline_token_cache_fallback" for item in raw_concurrent
         )
         info = self._enrich_semantic_info(dict(info), prev_obs)
+        info = self._attach_selected_path_metrics(info, prev_obs)
         info["deadline_token_cache_fallback"] = bool(fallback_marker or info.get("deadline_token_cache_fallback", False))
         self._update_virtual_queues(info)
         record = self._record_from_info(info, float(reward))
@@ -328,6 +333,10 @@ class V19LUTResourceEnv:
             cache_eligible=bool(info.get("cache_eligible", False)),
             cache_quality_lcb=float(info.get("cache_quality_lcb", 0.0)),
             cache_age=float(info.get("cache_age", 0.0)),
+            selected_path_joint_feasible=bool(info.get("selected_path_joint_feasible", True)),
+            selected_path_deadline_feasible=bool(info.get("selected_path_deadline_feasible", True)),
+            selected_path_utm_feasible=bool(info.get("selected_path_utm_feasible", True)),
+            selected_path_deadline_slack_s=float(info.get("selected_path_deadline_slack_s", 0.0)),
             bandwidth_hz=float(info.get("bandwidth_hz", 0.0)),
             power_w=float(info.get("power_w", 0.0)),
             cpu_share=float(info.get("cpu_share", 0.0)),
@@ -487,6 +496,30 @@ class V19LUTResourceEnv:
             or bool(info.get("utm_constraint_violation", False))
         )
         self._attach_queue_state(info)
+        return info
+
+    def _attach_selected_path_metrics(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:
+        obs = obs or self._last_obs or {}
+        path = str(info.get("semantic_path", "cache" if int(info.get("service_level", 0)) == 0 else "token"))
+        metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
+        data = metrics.get(path, {}) if isinstance(metrics.get(path, {}), dict) else {}
+        if data:
+            info["selected_path_joint_feasible"] = bool(data.get("joint_feasible", data.get("feasible", True)))
+            info["selected_path_deadline_feasible"] = bool(data.get("deadline_feasible", not bool(info.get("deadline_violation", False))))
+            info["selected_path_utm_feasible"] = bool(data.get("utm_feasible", not bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))))
+            info["selected_path_deadline_slack_s"] = float(data.get("deadline_slack_s", float(info.get("deadline_s", 0.0)) - float(info.get("delay_s", 0.0))))
+        else:
+            info["selected_path_joint_feasible"] = not bool(
+                info.get("quality_violation", False)
+                or info.get("deadline_violation", False)
+                or info.get("battery_violation", False)
+                or info.get("resource_violation", False)
+                or info.get("utm_constraint_violation", False)
+                or info.get("utm_conflict_violation", False)
+            )
+            info["selected_path_deadline_feasible"] = not bool(info.get("deadline_violation", False))
+            info["selected_path_utm_feasible"] = not bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))
+            info["selected_path_deadline_slack_s"] = float(info.get("deadline_s", 0.0)) - float(info.get("delay_s", 0.0))
         return info
 
     def _semantic_query(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:

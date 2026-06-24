@@ -921,7 +921,7 @@ Completed short 300-episode semantic-path two-timescale PPO benchmark on branch 
 
 Next algorithm items:
 
-- Add a distinct Environment preset for `low_snr_soft`; currently it aliases to `low_snr_blockage`.
+- `low_snr_soft` is now distinct after Environment fix and runner alias removal; keep it in future benchmarks as an easier low-SNR preset.
 - Fix edge-overload regression: semantic path PPO uses token/cache_update but deadline violation rises to 0.569; projection should account for edge queue/cache-update refresh cost.
 - Fix UTM-conflict feasibility: semantic success remains 0.0 even though payload is low; need conflict-aware mobility/assignment and stricter action mask for risky serve/reposition.
 - Tune cache_update usage: it helps low-SNR/edge freshness but can increase edge queue delay when overload is high.
@@ -949,8 +949,33 @@ Fix1 stabilized semantic-path action feasibility but did not fully recover edge_
    - forbid token/image/cache_update when candidate path is UTM infeasible unless mobility mode is `avoid_conflict` and projected delay remains feasible;
    - add explicit UAV assignment selection among UTM-feasible intents rather than relying on nearest UAV.
 3. Scenario cleanup:
-   - keep noting that `low_snr_soft` is currently an alias of `low_snr_blockage` unless Environment provides a distinct preset.
+   - completed: `low_snr_soft` now uses the distinct Environment preset; future comparisons should report soft and blockage separately.
 4. Experiment hygiene:
    - do not treat `semantic_path_cache_defer_fix1_20260624` as final paper result;
    - commit only root CSV/MD reports, not `.pt`, rollout CSVs, per-seed logs, or large traces.
+
+## RL Semantic Path Fix2 Follow-up 2026-06-24
+
+Completed fix2 benchmark at `outputs/rl/semantic_path_cache_defer_fix2_20260624/`.
+
+Outcome:
+
+- `low_snr_soft` preset is now distinct from `low_snr_blockage` and verified in benchmark output.
+- UTM violation for proposed PPO in `utm_conflict` is reduced to 0.000, but task/semantic success remains 0.000 because safe actions mostly defer or fail semantic QoS.
+- edge-overload cache_update overuse is controlled, but task success remains low and deadline violation remains high.
+
+Next tasks:
+
+1. Edge-overload targeted policy:
+   - train/distill against candidate `joint_feasible` path labels;
+   - add feasible-token preference when token has positive deadline slack;
+   - tune token resource floors/projection under edge queue pressure;
+   - avoid deferring all hard tasks without a recovery/cache-refresh plan.
+2. UTM targeted policy:
+   - separate safe deferral reward from ordinary failure;
+   - add UTM-feasible UAV/intent assignment target for slow actor;
+   - report whether zero success is caused by semantic QoS shortage or UTM feasibility constraints.
+3. Reporting hygiene:
+   - keep `fix2_comparison.md` as diagnostic, not final paper evidence;
+   - commit only root summary/report CSV/MD files, not per-seed `.pt`, rollout CSVs, logs, or traces.
 

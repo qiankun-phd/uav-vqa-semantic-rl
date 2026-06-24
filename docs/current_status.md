@@ -1774,3 +1774,46 @@ Fix1 aggregate results for `semantic_path_two_timescale_ppo`:
 
 Conclusion: fix1 removes cache_update overuse in edge_overload (`0.381 -> 0.022`) and removes normal_patrol deadline regression, but it is not final-paper ready. Edge-overload task success is still below the previous B_state_v2 baseline, and UTM conflict remains unsolved. See `outputs/rl/semantic_path_cache_defer_fix1_20260624/fix1_comparison.md`.
 
+## RL Semantic Path Feasibility Fix2 2026-06-24 Asia/Shanghai
+
+Algorithm thread reran semantic-path/cache-defer two-timescale PPO after Environment commit `6c5a064 fix(env): calibrate semantic path feasibility scenarios`.
+
+Code changes are RL-only:
+
+- `low_snr_soft` is no longer aliased to `low_snr_blockage` in `scripts/run_v1_9_resource_alloc.py`.
+- `V19StepRecord` now persists selected-path feasibility diagnostics: `selected_path_joint_feasible`, `selected_path_deadline_feasible`, `selected_path_utm_feasible`, and `selected_path_deadline_slack_s`.
+- scenario benchmark summaries now report joint-feasible selection ratio, deadline-infeasible selection ratio, and UTM-infeasible selection ratio.
+- PPO path gating now consumes latest `candidate_path_metrics` fields (`deadline_feasible`, `semantic_feasible`, `energy_feasible`, `utm_feasible`, `resource_feasible`, `joint_feasible`, `deadline_slack_s`).
+- edge-overload cache_update gate is stricter; UTM-risk mobility mask/projection now prefers `avoid_conflict` earlier.
+
+Validation/benchmark:
+
+```text
+outputs/rl/semantic_path_cache_defer_fix2_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_fix2_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_fix2_20260624/fix2_comparison.md
+```
+
+Settings: scenarios `normal_patrol`, `disaster_hotspot`, `low_snr_soft`, `low_snr_blockage`, `edge_overload`, `utm_conflict`; seeds `0,1,2`; train episodes `300`; eval episodes `50`; tasks per episode `12`; RA_DI `cuda:0`.
+
+Key proposed PPO aggregate results:
+
+| scenario | semantic success | task success | deadline vio | UTM vio | cache/token/image/defer/cache_update |
+|---|---:|---:|---:|---:|---|
+| normal_patrol | 0.251 | 0.098 | 0.212 | 0.000 | 0.184 / 0.356 / 0.000 / 0.454 / 0.005 |
+| disaster_hotspot | 0.278 | 0.100 | 0.709 | 0.000 | 0.602 / 0.398 / 0.000 / 0.000 / 0.000 |
+| low_snr_soft | 0.287 | 0.217 | 0.092 | 0.000 | 0.175 / 0.290 / 0.000 / 0.535 / 0.000 |
+| low_snr_blockage | 0.825 | 0.276 | 0.609 | 0.000 | 0.429 / 0.571 / 0.000 / 0.000 / 0.000 |
+| edge_overload | 0.499 | 0.081 | 0.657 | 0.000 | 0.208 / 0.773 / 0.000 / 0.000 / 0.019 |
+| utm_conflict | 0.000 | 0.000 | 0.312 | 0.000 | 0.004 / 0.359 / 0.000 / 0.637 / 0.000 |
+
+Interpretation:
+
+- PASS: `low_snr_soft` now differs from `low_snr_blockage`, confirming the latest Environment preset is used.
+- PASS: edge-overload cache_update overuse is suppressed (`fix1 0.022`, `fix2 0.019`; short run was 0.381).
+- PASS: UTM infeasible selection / UTM conflict violation is controlled in proposed PPO (`utm_conflict UTM vio=0.000`).
+- FAIL: edge-overload is still not paper-ready. Task success remains far below B_state_v2_fixed (`0.081` vs `0.649`) and deadline violation remains high (`0.657`).
+- FAIL: normal_patrol deadline is no longer near zero under fix2 because the stricter feasibility/defer logic caused high deadline-infeasible selection ratio.
+
+Next Algorithm focus: targeted edge/UTM policy rather than further broad mask tightening. Use candidate `joint_feasible` as imitation target, add explicit feasible-token preference when token is deadline-feasible, and separate defer from failure in reward so UTM-safe deferral does not erase learning signal.
+

@@ -47,7 +47,6 @@ SEMANTIC_PATH_BENCHMARK_SCENARIOS = (
 )
 SCENARIO_ALIASES = {
     "normal_patrol": "nominal_patrol",
-    "low_snr_soft": "low_snr_blockage",
 }
 
 SCENARIO_BENCHMARK_POLICIES = (
@@ -153,6 +152,10 @@ class EvalSummary:
     semantic_path_defer_ratio: float
     semantic_path_cache_update_ratio: float
     cache_eligible_ratio: float
+    joint_feasible_selection_ratio: float
+    deadline_infeasible_selection_ratio: float
+    utm_infeasible_selection_ratio: float
+    average_selected_path_deadline_slack_s: float
     average_q_defer: float
     average_q_cache_stale: float
     average_reward: float
@@ -284,6 +287,10 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, 
                 semantic_path_defer_ratio=round(_path_ratio(records, "defer"), 6),
                 semantic_path_cache_update_ratio=round(_path_ratio(records, "cache_update"), 6),
                 cache_eligible_ratio=round(_rate(records, "cache_eligible"), 6),
+                joint_feasible_selection_ratio=round(_rate(records, "selected_path_joint_feasible"), 6),
+                deadline_infeasible_selection_ratio=round(_false_rate(records, "selected_path_deadline_feasible"), 6),
+                utm_infeasible_selection_ratio=round(_false_rate(records, "selected_path_utm_feasible"), 6),
+                average_selected_path_deadline_slack_s=round(_mean(records, "selected_path_deadline_slack_s"), 6),
                 average_q_defer=round(_mean(records, "q_defer"), 6),
                 average_q_cache_stale=round(_mean(records, "q_cache_stale"), 6),
                 average_reward=round(_mean(records, "reward"), 6),
@@ -739,6 +746,10 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "semantic_path_defer_ratio",
         "semantic_path_cache_update_ratio",
         "cache_eligible_ratio",
+        "joint_feasible_selection_ratio",
+        "deadline_infeasible_selection_ratio",
+        "utm_infeasible_selection_ratio",
+        "average_selected_path_deadline_slack_s",
         "average_q_defer",
         "average_q_cache_stale",
     ]
@@ -893,6 +904,12 @@ def _rate(records: list[V19StepRecord], field: str) -> float:
     return sum(float(bool(getattr(record, field))) for record in records) / len(records)
 
 
+def _false_rate(records: list[V19StepRecord], field: str) -> float:
+    if not records:
+        return 0.0
+    return sum(float(not bool(getattr(record, field))) for record in records) / len(records)
+
+
 def _failed_epsilons(records: list[V19StepRecord]) -> list[float]:
     return [float(record.epsilon_k) for record in records if not bool(record.semantic_success)]
 
@@ -1004,8 +1021,8 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | path cache | path token | path image | defer | cache update |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | joint feasible sel | deadline infeasible sel | UTM infeasible sel | path cache | path token | path image | defer | cache update |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
@@ -1016,7 +1033,9 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
             f"{_metric(row, 'average_q_defer'):.3f} | {_metric(row, 'average_q_cache_stale'):.3f} | "
             f"{_metric(row, 'average_delay'):.3f} | {_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
-            f"{_metric(row, 'cache_eligible_ratio'):.3f} | {_metric(row, 'semantic_path_cache_ratio'):.3f} | "
+            f"{_metric(row, 'cache_eligible_ratio'):.3f} | {_metric(row, 'joint_feasible_selection_ratio'):.3f} | "
+            f"{_metric(row, 'deadline_infeasible_selection_ratio'):.3f} | {_metric(row, 'utm_infeasible_selection_ratio'):.3f} | "
+            f"{_metric(row, 'semantic_path_cache_ratio'):.3f} | "
             f"{_metric(row, 'semantic_path_token_ratio'):.3f} | {_metric(row, 'semantic_path_image_ratio'):.3f} | "
             f"{_metric(row, 'semantic_path_defer_ratio'):.3f} | {_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"
         )
