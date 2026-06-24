@@ -1448,3 +1448,22 @@ Ran 97 tests in 1.980s
 OK
 ```
 
+## Low-SNR Deadline Diagnosis 2026-06-24 Asia/Shanghai
+
+Completed environment-side diagnosis for the `low_snr_blockage` deadline violations without changing environment dynamics or algorithm code.
+
+Artifacts:
+
+```text
+outputs/env/low_snr_deadline_diagnosis_20260624/env_diagnosis.md
+outputs/env/low_snr_deadline_diagnosis_20260624/candidate_delay_decomposition.csv
+```
+
+Main conclusions:
+
+- The dominant physical bottleneck is the weak A2G link plus image payload: `low_snr_blockage` uses 650 kHz bandwidth, 520 m area spacing, path-loss exponent 2.9, 18 dB extra blockage loss, and 28 dB NLoS loss.
+- Candidate image service has mean delay about 105 s, with mean tx delay about 79 s and mean arrival delay about 22.5 s. Candidate token service has mean delay about 26.9 s, mostly arrival plus smaller tx delay.
+- Existing formal proposed PPO rollout removes arrival delay (`arrival_delay_s ~= 0`) but still has deadline violation 0.939 because it selects image in about 91.7% of attempts under very low SNR.
+- Edge queue and inference are secondary in this scenario: candidate queue delay is about 0.12 s; inference is about 0.68 s for tokens and 2.74 s for image.
+- Resource caps are internally consistent for a stress scenario: image already uses full scenario bandwidth and 1 W transmit power, so deadline failures are not caused by too-low resource caps.
+- Recommended action: keep the current `low_snr_blockage` default as an image-impossible stress scenario. If a partially image-feasible variant is needed, add a separate `low_snr_blockage_soft` preset instead of weakening the default.
