@@ -1035,3 +1035,17 @@ Next tasks:
 3. Add an explicit skip/fail/reject action for hard-infeasible tasks so the controller can avoid manufacturing deadline violations when oracle feasibility is near zero.
 4. Keep hard `edge_overload` and `utm_conflict` as stress-test diagnostics, not paper headline success scenarios unless Environment feasibility improves.
 5. Commit only code/tests/docs and root-level summary/report CSV/MD files; exclude `.pt`, rollout CSVs, traces, `run_config.json`, and logs.
+
+## Environment Soft Scenario + Reject Follow-up 2026-06-24
+
+Completed environment-side interface work:
+
+1. Added calibrated soft presets `edge_overload_soft` and `utm_conflict_soft`; hard `edge_overload` and `utm_conflict` remain unchanged as stress diagnostics.
+2. Added `semantic_path=reject` so controllers can reject oracle-infeasible tasks without consuming UAV/edge/link resources or fabricating deadline/UTM violations.
+3. Candidate metrics now expose reject feasibility and rejection reasons alongside service-path feasibility diagnostics.
+
+Next Algorithm-side use:
+
+1. Include the soft presets in benchmark tables next to the hard stress scenarios.
+2. Treat reject as an admission-control/fail-safe action: not task success, but a lower-cost choice when all service paths are infeasible.
+3. Report reject ratio and reject reason distribution separately from cache/token/image/defer/cache-update ratios.

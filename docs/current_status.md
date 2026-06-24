@@ -1939,3 +1939,18 @@ Interpretation:
 - PASS: no always-cache, always-token, or always-defer collapse in proposed PPO.
 
 Next Algorithm focus: do not add more scalar penalties. Use calibrated soft stress scenarios (`edge_overload_soft`, `utm_conflict_soft`) or add an explicit value-aware skip/fail action for hard infeasible tasks, while keeping fix4 as the infeasibility-aware hard-scenario diagnostic.
+
+## Environment Soft Scenario + Reject Path 2026-06-24 Asia/Shanghai
+
+Environment thread added calibrated soft presets without weakening the hard stress scenarios:
+
+- `edge_overload_soft`: lower but still elevated CPU/GPU queue pressure, larger model-cache capacity, softer semantic thresholds, and longer deadlines so token/cache-update paths have a non-zero feasible region.
+- `utm_conflict_soft`: lower background operational-intent density, smaller spatial/temporal UTM buffers, milder task quality/deadline pressure, and seeded cache support so UTM-safe candidates can exist.
+
+The canonical env now exposes an explicit `semantic_path=reject` for oracle-infeasible tasks. `reject` is not mapped to service levels `0/1/2`; it marks the task `rejected`, produces no tx/fly delay or service success, and reports `reject_feasible`, `reject_reason`, expected saved delay/energy, and avoided deadline/UTM violation fields. This gives Algorithm a clean way to distinguish “recognized infeasible admission” from wasting resources on a doomed token/image route.
+
+Diagnostics are generated under:
+
+```text
+outputs/env/semantic_path_soft_reject_diagnosis_20260624/
+```

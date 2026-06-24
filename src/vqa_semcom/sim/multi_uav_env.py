@@ -96,6 +96,7 @@ class EnvTask:
     task_status: str = "pending"
     defer_count: int = 0
     expired: bool = False
+    rejected: bool = False
     cache_age: int = 0
     last_sensed_snr_db: float = 0.0
     last_sinr_db: float = 0.0
@@ -422,6 +423,41 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "tau_scale": 1.55,
         },
     },
+    "edge_overload_soft": {
+        "description": "Calibrated soft edge-overload preset with a non-zero feasible region while preserving edge pressure.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 22,
+            "episode_steps": 12,
+            "area_spacing_m": 150.0,
+            "area_radius_m": 75.0,
+            "uav_speed_mps": 26.0,
+            "edge_load_range": [0.38, 0.58],
+            "gpu_load_range": [0.34, 0.54],
+            "queue_delay_scale_s": 0.42,
+            "gpu_queue_delay_scale_s": 0.30,
+            "model_load_delay_s": 0.42,
+            "model_cache_hit_delay_s": 0.06,
+            "model_cache_capacity": 2,
+            "gpu_memory_capacity_mb": 6144.0,
+            "gpu_memory_load": 0.34,
+            "semantic_threshold_by_risk": {"normal": 0.50, "critical": 0.60, "high": 0.60},
+            "semantic_threshold_cap_by_risk": {"normal": 0.58, "critical": 0.60, "high": 0.60},
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.10,
+            "risk_cycle": ["normal", "normal", "normal", "critical", "normal"],
+            "freshness_cycle": ["fresh", "fresh", "stale", "fresh"],
+            "view_quality_cycle": ["good", "medium", "good", "good"],
+            "tau_scale": 1.45,
+            "tau_floor_s": 6.5,
+            "epsilon_scale": 0.92,
+            "epsilon_cap_by_risk": {"normal": 0.56, "critical": 0.60, "high": 0.60},
+        },
+    },
     "utm_conflict": {
         "description": "Paper preset: UTM strategic conflict with DSS/subscription delay and observable intent states.",
         "env": {
@@ -460,6 +496,53 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "tau_scale": 0.85,
         },
     },
+    "utm_conflict_soft": {
+        "description": "Calibrated soft UTM preset with lower background conflict density and observable safe service routes.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 20,
+            "episode_steps": 12,
+            "area_spacing_m": 280.0,
+            "area_radius_m": 70.0,
+            "area_altitude_min_m": 45.0,
+            "area_altitude_max_m": 120.0,
+            "reward_conflict": 2.0,
+            "semantic_threshold_by_risk": {"normal": 0.52, "critical": 0.70, "high": 0.70},
+            "semantic_threshold_cap_by_risk": {"normal": 0.58, "critical": 0.70, "high": 0.70},
+            "utm": {
+                "enabled": True,
+                "mode": "flight_intent_validation",
+                "background_operational_intents": True,
+                "background_operational_intent_density": 0.12,
+                "dss_available": True,
+                "dss_delay_s": 0.08,
+                "subscription_notification_delay_s": 0.22,
+                "spatial_buffer_m": 16.0,
+                "altitude_buffer_m": 4.0,
+                "temporal_buffer_steps": 0,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "force_same_area": False,
+            "jitter_ratio": 0.08,
+            "risk_cycle": ["normal", "normal", "critical", "normal"],
+            "freshness_cycle": ["fresh", "fresh", "stale", "fresh"],
+            "view_quality_cycle": ["good", "medium", "good", "medium"],
+            "operational_state_cycle": ["accepted", "activated", "accepted", "activated"],
+            "tau_scale": 1.35,
+            "tau_floor_s": 7.0,
+            "epsilon_scale": 0.90,
+            "epsilon_cap_by_risk": {"normal": 0.56, "critical": 0.70, "high": 0.70},
+        },
+        "semantic_cache_seed": {
+            "enabled": True,
+            "entries_per_area": 1,
+            "cache_age": 0,
+        },
+    },
 }
 
 
@@ -469,7 +552,9 @@ SEMANTIC_SCENARIO_PRESET_NAMES = (
     "low_snr_soft",
     "low_snr_blockage",
     "edge_overload",
+    "edge_overload_soft",
     "utm_conflict",
+    "utm_conflict_soft",
 )
 
 
@@ -512,7 +597,7 @@ SERVICE_LEVELS: dict[int, dict[str, Any]] = {
 
 OPERATIONAL_INTENT_STATES = ("accepted", "activated", "nonconforming", "contingent")
 MOBILITY_MODES = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
-SEMANTIC_PATHS = ("cache", "token", "image", "defer", "cache_update")
+SEMANTIC_PATHS = ("cache", "token", "image", "defer", "cache_update", "reject")
 SEMANTIC_PATH_TO_SERVICE_LEVEL = {"cache": 0, "token": 1, "image": 2, "cache_update": 1}
 SERVICE_LEVEL_TO_SEMANTIC_PATH = {0: "cache", 1: "token", 2: "image", 3: "image"}
 
@@ -998,6 +1083,21 @@ class MultiUAVVQAEnv:
 
         parsed = self.parse_action(action, task)
         info = self.evaluate_action(parsed, task_id=task.task_id, mutate=False)
+        if str(parsed["semantic_path"]) == "reject":
+            task.rejected = True
+            task.task_status = "rejected"
+            self._advance_cache_ages()
+            self.step_count += 1
+            info["task_status"] = "rejected"
+            info["rejected"] = True
+            info["remaining_deadline_s"] = round(float(self._remaining_deadline_s(task)), 6)
+            reward = self._reject_reward(task, info)
+            info["reward"] = round(reward, 6)
+            self.last_info = info
+            done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+                t.completed or t.expired or t.rejected for t in self.tasks
+            )
+            return self._observation(), round(reward, 6), done, info
         if str(parsed["semantic_path"]) == "defer":
             task.defer_count += 1
             task.task_status = "deferred"
@@ -1011,7 +1111,9 @@ class MultiUAVVQAEnv:
             reward = self._reward(task, info)
             info["reward"] = round(reward, 6)
             self.last_info = info
-            done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(t.completed or t.expired for t in self.tasks)
+            done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+                t.completed or t.expired or t.rejected for t in self.tasks
+            )
             return self._observation(), round(reward, 6), done, info
         success = bool(info["success"])
         uav = self.uavs[int(parsed["uav_assignment"]) % len(self.uavs)]
@@ -1042,7 +1144,9 @@ class MultiUAVVQAEnv:
         self.last_info = info
         self.step_count += 1
         self._expire_overdue_tasks()
-        done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(t.completed or t.expired for t in self.tasks)
+        done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+            t.completed or t.expired or t.rejected for t in self.tasks
+        )
         return self._observation(), round(reward, 6), done, info
 
     def parse_action(self, action: dict[str, Any], task: EnvTask | None = None) -> dict[str, Any]:
@@ -1051,9 +1155,13 @@ class MultiUAVVQAEnv:
         service_level = self._service_level(action)
         if semantic_path in SEMANTIC_PATH_TO_SERVICE_LEVEL:
             service_level = self._nearest_service_level(SEMANTIC_PATH_TO_SERVICE_LEVEL[semantic_path])
+        elif semantic_path == "reject":
+            service_level = -1
         sensing_default = "reuse_cache" if service_level == 0 else "observe"
         if semantic_path == "defer":
             sensing_default = "defer"
+        elif semantic_path == "reject":
+            sensing_default = "reject"
         elif semantic_path == "cache_update":
             sensing_default = "observe"
         assignment = action.get("uav_assignment", action.get("assigned_uav", None))
@@ -1138,7 +1246,7 @@ class MultiUAVVQAEnv:
         out: dict[str, dict[str, dict[str, Any]]] = {}
         for path in SEMANTIC_PATHS:
             out[path] = {}
-            if path == "defer":
+            if path in {"defer", "reject"}:
                 continue
             for mode in ("stay", "serve_task", "avoid_conflict", "reposition"):
                 action = self._path_action(path, task)
@@ -1186,6 +1294,48 @@ class MultiUAVVQAEnv:
     def _candidate_path_metric(self, task: EnvTask, semantic_path: str) -> dict[str, Any]:
         action = self._path_action(semantic_path, task)
         info = self.evaluate_action(action, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+        if semantic_path == "reject":
+            reject_feasible = bool(info.get("reject_feasible", False))
+            return {
+                "feasible": reject_feasible,
+                "deadline_feasible": True,
+                "semantic_feasible": False,
+                "energy_feasible": True,
+                "utm_feasible": True,
+                "joint_feasible": reject_feasible,
+                "reject_feasible": reject_feasible,
+                "resource_feasible": True,
+                "accuracy_lcb": 0.0,
+                "accuracy_mean": 0.0,
+                "quality_gap": max(0.0, float(task.epsilon_k)),
+                "payload_kb": 0.0,
+                "delay_s": 0.0,
+                "energy_j": 0.0,
+                "deadline_slack_s": self._remaining_deadline_s(task),
+                "tx_delay_s": 0.0,
+                "queue_delay_s": 0.0,
+                "infer_delay_s": 0.0,
+                "load_delay_s": 0.0,
+                "arrival_delay_s": 0.0,
+                "bottleneck_type": str(info.get("reject_reason", "")),
+                "required_deadline_reduction_s": 0.0,
+                "required_rate_mbps": 0.0,
+                "required_bandwidth_hz": 0.0,
+                "edge_queue_pressure": 0.0,
+                "model_cache_hit": False,
+                "cache_eligible": False,
+                "utm_constraint_violation": False,
+                "utm_conflict_violation": False,
+                "service_level": -1,
+                "semantic_path": "reject",
+                "reject_reason": str(info.get("reject_reason", "")),
+                "expected_saved_energy_j": float(info.get("expected_saved_energy_j", 0.0)),
+                "expected_saved_delay_s": float(info.get("expected_saved_delay_s", 0.0)),
+                "avoided_utm_violation": bool(info.get("avoided_utm_violation", False)),
+                "avoided_deadline_violation": bool(info.get("avoided_deadline_violation", False)),
+                "task_success": False,
+                "semantic_success": False,
+            }
         accuracy_lcb = float(info.get("semantic_accuracy_lcb", 0.0))
         delay_s = float(info.get("delay_s", 0.0))
         remaining = self._remaining_deadline_s(task)
@@ -1261,6 +1411,12 @@ class MultiUAVVQAEnv:
             "utm_conflict_violation": bool(info.get("utm_conflict_violation", False)),
             "service_level": int(info.get("service_level", action.get("service_level", 0))),
             "semantic_path": semantic_path,
+            "reject_reason": "",
+            "expected_saved_energy_j": 0.0,
+            "expected_saved_delay_s": 0.0,
+            "avoided_utm_violation": False,
+            "avoided_deadline_violation": False,
+            "task_success": bool(info.get("success", False)),
         }
 
     @staticmethod
@@ -1321,6 +1477,8 @@ class MultiUAVVQAEnv:
         }
 
     def _path_action(self, semantic_path: str, task: EnvTask) -> dict[str, Any]:
+        if semantic_path == "reject":
+            return {"task_id": task.task_id, "semantic_path": "reject", "service_level": -1, "mobility_mode": "stay"}
         if semantic_path == "defer":
             return {"task_id": task.task_id, "semantic_path": "defer", "service_level": 0, "mobility_mode": "stay"}
         service_level = SEMANTIC_PATH_TO_SERVICE_LEVEL.get(semantic_path, 0)
@@ -1428,6 +1586,8 @@ class MultiUAVVQAEnv:
         if task is None:
             return self._empty_info()
         parsed = self.parse_action(action, task)
+        if str(parsed["semantic_path"]) == "reject":
+            return self._reject_info(task, parsed)
         if str(parsed["semantic_path"]) == "defer":
             return self._defer_info(task, parsed)
         if task.expired or self._remaining_deadline_s(task) <= 0.0:
@@ -1591,6 +1751,105 @@ class MultiUAVVQAEnv:
         if mutate:
             self.last_info = info
         return info
+
+    def _reject_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
+        service_paths = ("cache", "token", "image", "cache_update")
+        if task.expired or self._remaining_deadline_s(task) <= 0.0:
+            service_infos: list[dict[str, Any]] = []
+            reject_feasible = True
+            reject_reason = "expired"
+        else:
+            service_infos = [
+                self.evaluate_action(self._path_action(path, task), task_id=task.task_id, obs={"task_id": task.task_id})
+                for path in service_paths
+            ]
+            feasible_infos = [
+                info
+                for info in service_infos
+                if not bool(info.get("quality_violation", False))
+                and not bool(info.get("deadline_violation", False))
+                and not bool(info.get("battery_violation", False))
+                and not bool(info.get("resource_violation", False))
+                and not bool(info.get("utm_conflict_violation", False))
+            ]
+            reject_feasible = not feasible_infos
+            reject_reason = self._reject_reason(service_infos)
+        expected_saved_delay_s = min((float(info.get("delay_s", 0.0)) for info in service_infos), default=0.0)
+        expected_saved_energy_j = min((float(info.get("energy_j", 0.0)) for info in service_infos), default=0.0)
+        cache_status = self._cache_status(task)
+        info = self._empty_info()
+        info.update(
+            {
+                "episode": self.episode,
+                "episode_step": self.step_count,
+                "scenario": self.scenario_name,
+                "formal_scenario": self.formal_scenario_name,
+                "benchmark_split": self.benchmark_split,
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "question_type": task.task_type,
+                "risk_level": task.risk_level,
+                "view_quality_bin": task.view_quality_bin,
+                "freshness_bin": task.freshness_bin,
+                "deadline_s": round(float(task.tau_k), 6),
+                "remaining_deadline_s": round(float(self._remaining_deadline_s(task)), 6),
+                "epsilon_k": round(float(task.epsilon_k), 6),
+                "priority": round(float(task.priority), 6),
+                "task_status": "rejected",
+                "defer_count": int(task.defer_count),
+                "expired": bool(task.expired),
+                "rejected": True,
+                "semantic_path": "reject",
+                "service_level": -1,
+                "sensing_decision": str(action.get("sensing_decision", "reject")),
+                "answer_accuracy_est": 0.0,
+                "semantic_accuracy_mean": 0.0,
+                "semantic_accuracy_lcb": 0.0,
+                "semantic_success": False,
+                "success": False,
+                "quality_violation": False,
+                "deadline_violation": False,
+                "risk_violation": False,
+                "resource_violation": False,
+                "utm_constraint_violation": False,
+                "utm_conflict_violation": False,
+                "reject_feasible": bool(reject_feasible),
+                "reject_reason": reject_reason,
+                "expected_saved_energy_j": round(expected_saved_energy_j, 6),
+                "expected_saved_delay_s": round(expected_saved_delay_s, 6),
+                "avoided_utm_violation": any(bool(item.get("utm_conflict_violation", False)) for item in service_infos),
+                "avoided_deadline_violation": any(bool(item.get("deadline_violation", False)) for item in service_infos),
+                "reject_penalty": round(abs(self._reject_reward(task, {"reject_feasible": reject_feasible})), 6),
+                "delay_s": 0.0,
+                "energy_j": 0.0,
+                "payload_kb": 0.0,
+                "tx_delay_s": 0.0,
+                "fly_delay_s": 0.0,
+                "arrival_delay_s": 0.0,
+                "semantic_payload_kb": 0.0,
+                "cache_hit_probability": round(self._semantic_cache_hit_probability(task), 6),
+                **cache_status,
+            }
+        )
+        return info
+
+    @staticmethod
+    def _reject_reason(service_infos: list[dict[str, Any]]) -> str:
+        reasons: set[str] = set()
+        for info in service_infos:
+            if bool(info.get("quality_violation", False)):
+                reasons.add("semantic_quality")
+            if bool(info.get("deadline_violation", False)):
+                reasons.add("deadline")
+            if bool(info.get("utm_conflict_violation", False)):
+                reasons.add("utm")
+            if bool(info.get("battery_violation", False)):
+                reasons.add("energy")
+            if bool(info.get("resource_violation", False)):
+                reasons.add("resource")
+        if not reasons:
+            return "mixed"
+        return next(iter(reasons)) if len(reasons) == 1 else "mixed"
 
     def _expired_task_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
         cache_status = self._cache_status(task)
@@ -1995,14 +2254,14 @@ class MultiUAVVQAEnv:
         return [
             task
             for task in self.tasks
-            if not task.completed and not task.expired and task.generation_time <= self.step_count
+            if not task.completed and not task.expired and not task.rejected and task.generation_time <= self.step_count
         ]
 
     def _front_task(self) -> EnvTask | None:
         active = self._active_tasks()
         if active:
             return min(active, key=lambda task: (-(task.priority / max(0.1, task.tau_k)), task.generation_time))
-        pending = [task for task in self.tasks if not task.completed and not task.expired]
+        pending = [task for task in self.tasks if not task.completed and not task.expired and not task.rejected]
         return min(pending, key=lambda task: task.generation_time) if pending else None
 
     def _select_task(self, action: dict[str, Any]) -> EnvTask | None:
@@ -2613,6 +2872,11 @@ class MultiUAVVQAEnv:
             - float(self.env_cfg["reward_conflict"]) * float(bool(info["airspace_conflict"]))
         )
 
+    def _reject_reward(self, task: EnvTask, info: dict[str, Any]) -> float:
+        feasible = bool(info.get("reject_feasible", False))
+        base = 0.25 if feasible else 2.0 * float(self.env_cfg["reward_violation"])
+        return -base * float(task.priority)
+
     def _observation(self) -> dict[str, Any]:
         task = self._front_task()
         if task is None:
@@ -2632,6 +2896,9 @@ class MultiUAVVQAEnv:
                 "remaining_deadline_s": 0.0,
                 "defer_count": 0,
                 "expired": False,
+                "rejected": False,
+                "reject_feasible": False,
+                "reject_reason": "",
                 "operational_intent_id": "",
                 "operational_intent_state": "",
                 "sensed_snr_db": 0.0,
@@ -2688,6 +2955,7 @@ class MultiUAVVQAEnv:
             "remaining_deadline_s": round(float(self._remaining_deadline_s(task)), 6),
             "defer_count": int(task.defer_count),
             "expired": bool(task.expired),
+            "rejected": bool(task.rejected),
             "operational_intent_id": task.operational_intent_id,
             "operational_intent_state": task.operational_intent_state,
             "sensed_snr_db": round(float(link["snr_db"]), 6),
@@ -2705,10 +2973,13 @@ class MultiUAVVQAEnv:
             "candidate_path_metrics": self.candidate_path_metrics(task),
             "candidate_mobility_metrics": self.candidate_mobility_metrics(task),
             "task_queue": [self._task_obs(item) for item in self._active_tasks()],
-            "pending_tasks": sum(1 for item in self.tasks if not item.completed and not item.expired),
+            "pending_tasks": sum(1 for item in self.tasks if not item.completed and not item.expired and not item.rejected),
             "feasible_uavs": [uav.uav_id for uav in self.uavs if uav.battery_j > float(self.env_cfg["return_energy_reserve_j"])],
             "action_mask": self.action_mask(),
         }
+        reject_metric = obs["candidate_path_metrics"].get("reject", {})
+        obs["reject_feasible"] = bool(reject_metric.get("reject_feasible", reject_metric.get("joint_feasible", False)))
+        obs["reject_reason"] = str(reject_metric.get("reject_reason", ""))
         obs.update(self._mobility_observation(task))
         obs["vector"] = self._observation_vector(obs)
         obs["graph"] = self.graph_observation()
@@ -2849,6 +3120,7 @@ class MultiUAVVQAEnv:
         data["remaining_deadline_s"] = round(float(self._remaining_deadline_s(task)), 6)
         data["defer_count"] = int(task.defer_count)
         data["expired"] = bool(task.expired)
+        data["rejected"] = bool(task.rejected)
         return data
 
     def _cache_state(self, task: EnvTask | None) -> dict[str, Any]:
@@ -2989,6 +3261,14 @@ class MultiUAVVQAEnv:
             "remaining_deadline_s": 0.0,
             "defer_count": 0,
             "expired": False,
+            "rejected": False,
+            "reject_feasible": False,
+            "reject_reason": "",
+            "expected_saved_energy_j": 0.0,
+            "expected_saved_delay_s": 0.0,
+            "avoided_utm_violation": False,
+            "avoided_deadline_violation": False,
+            "reject_penalty": 0.0,
             "deadline_s": 0.0,
             "epsilon_k": 0.0,
             "priority": 0.0,

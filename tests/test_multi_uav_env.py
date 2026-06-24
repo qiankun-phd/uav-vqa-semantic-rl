@@ -501,7 +501,7 @@ class MultiUAVEnvTest(unittest.TestCase):
         env = self._env()
         obs = env.reset(seed=5)
         metrics = obs["candidate_path_metrics"]
-        self.assertEqual(set(metrics), {"cache", "token", "image", "defer", "cache_update"})
+        self.assertEqual(set(metrics), {"cache", "token", "image", "defer", "cache_update", "reject"})
         for path, data in metrics.items():
             self.assertIn("feasible", data)
             self.assertIn("accuracy_lcb", data)
@@ -529,8 +529,18 @@ class MultiUAVEnvTest(unittest.TestCase):
             self.assertIn("required_bandwidth_hz", data)
             self.assertIn("edge_queue_pressure", data)
             self.assertIn("model_cache_hit", data)
+            self.assertIn("reject_reason", data)
+            self.assertIn("expected_saved_energy_j", data)
+            self.assertIn("expected_saved_delay_s", data)
+            self.assertIn("avoided_utm_violation", data)
+            self.assertIn("avoided_deadline_violation", data)
+            self.assertIn("task_success", data)
             self.assertEqual(data["feasible"], data["joint_feasible"])
             self.assertEqual(data["semantic_path"], path)
+            if path == "reject":
+                self.assertIn("reject_feasible", data)
+        self.assertIn("reject_feasible", obs)
+        self.assertIn("reject_reason", obs)
 
     def test_candidate_mobility_metrics_contains_path_mode_diagnostics(self) -> None:
         env = self._env()
@@ -621,7 +631,9 @@ class MultiUAVEnvTest(unittest.TestCase):
             "low_snr_soft",
             "low_snr_blockage",
             "edge_overload",
+            "edge_overload_soft",
             "utm_conflict",
+            "utm_conflict_soft",
         }
         self.assertEqual(set(semantic_scenario_preset_names()), expected)
         self.assertTrue(expected.issubset(set(available_scenarios())))
@@ -664,6 +676,85 @@ class MultiUAVEnvTest(unittest.TestCase):
         self.assertGreater(soft_cfg["bandwidth_hz"], hard_cfg["bandwidth_hz"])
         self.assertLess(soft_cfg["a2g"]["excess_loss_db"], hard_cfg["a2g"]["excess_loss_db"])
         self.assertLess(soft_cfg["a2g"]["nlos_excess_loss_db"], hard_cfg["a2g"]["nlos_excess_loss_db"])
+
+    def test_soft_edge_and_utm_presets_are_distinct_from_hard_versions(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "edge_overload"})
+        hard_edge = dict(env.env_cfg)
+        env.reset(seed=5, options={"scenario": "edge_overload_soft"})
+        soft_edge = dict(env.env_cfg)
+        self.assertLess(soft_edge["edge_load_range"][0], hard_edge["edge_load_range"][0])
+        self.assertLess(soft_edge["gpu_load_range"][0], hard_edge["gpu_load_range"][0])
+        self.assertGreater(soft_edge["model_cache_capacity"], hard_edge["model_cache_capacity"])
+        self.assertLess(soft_edge["queue_delay_scale_s"], hard_edge["queue_delay_scale_s"])
+
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        hard_utm = dict(env.env_cfg)
+        hard_tau = float(env.scenario_cfg["task_layout"]["tau_scale"])
+        env.reset(seed=5, options={"scenario": "utm_conflict_soft"})
+        soft_utm = dict(env.env_cfg)
+        soft_tau = float(env.scenario_cfg["task_layout"]["tau_scale"])
+        self.assertLess(
+            soft_utm["utm"]["background_operational_intent_density"],
+            hard_utm["utm"]["background_operational_intent_density"],
+        )
+        self.assertLess(soft_utm["utm"]["spatial_buffer_m"], hard_utm["utm"]["spatial_buffer_m"])
+        self.assertGreater(soft_tau, hard_tau)
+
+    def test_reject_is_feasible_when_all_service_paths_are_infeasible(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.epsilon_k = 1.5
+        metrics = env.candidate_path_metrics(task)
+        self.assertTrue(metrics["reject"]["joint_feasible"])
+        self.assertEqual(metrics["reject"]["reject_reason"], "semantic_quality")
+        self.assertTrue(env._observation()["reject_feasible"])
+
+    def test_reject_is_not_recommended_when_service_is_feasible(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        env.semantic_cache_entries.append(
+            SemanticCacheEntry(
+                task_id="good_cache",
+                task_type=task.task_type,
+                risk_level=task.risk_level,
+                priority=task.priority,
+                x_m=task.x_m,
+                y_m=task.y_m,
+                cache_age=0,
+                updated_step=0,
+                area_id=task.area_id,
+                question_type=task.task_type,
+                quality_lcb=task.epsilon_k + 0.2,
+                uncertainty=0.02,
+            )
+        )
+        metrics = env.candidate_path_metrics(task)
+        self.assertTrue(metrics["cache"]["joint_feasible"])
+        self.assertFalse(metrics["reject"]["joint_feasible"])
+
+    def test_reject_action_has_no_tx_or_fly_delay_and_is_not_success(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.epsilon_k = 1.5
+        _obs, reward, _done, info = env.step({"task_id": task.task_id, "semantic_path": "reject"})
+        self.assertEqual(info["semantic_path"], "reject")
+        self.assertEqual(info["task_status"], "rejected")
+        self.assertTrue(task.rejected)
+        self.assertFalse(info["success"])
+        self.assertFalse(info["semantic_success"])
+        self.assertEqual(info["tx_delay_s"], 0.0)
+        self.assertEqual(info["fly_delay_s"], 0.0)
+        self.assertEqual(info["arrival_delay_s"], 0.0)
+        self.assertEqual(info["delay_s"], 0.0)
+        self.assertEqual(info["energy_j"], 0.0)
+        self.assertLess(reward, 0.0)
 
     def test_normal_patrol_alias_maps_to_nominal_patrol(self) -> None:
         env = self._env()
