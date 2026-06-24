@@ -45,7 +45,9 @@ SEMANTIC_PATH_BENCHMARK_SCENARIOS = (
     "low_snr_soft",
     "low_snr_blockage",
     "edge_overload",
+    "edge_overload_soft",
     "utm_conflict",
+    "utm_conflict_soft",
 )
 SCENARIO_ALIASES = {
     "normal_patrol": "nominal_patrol",
@@ -153,6 +155,16 @@ class EvalSummary:
     semantic_path_image_ratio: float
     semantic_path_defer_ratio: float
     semantic_path_cache_update_ratio: float
+    semantic_path_reject_ratio: float
+    admission_success_rate: float
+    admitted_task_success_rate: float
+    reject_ratio: float
+    correct_reject_ratio: float
+    wrong_reject_ratio: float
+    reject_feasible_ratio: float
+    average_expected_saved_energy_j: float
+    average_expected_saved_delay_s: float
+    infeasibility_aware_utility: float
     cache_eligible_ratio: float
     joint_feasible_selection_ratio: float
     deadline_infeasible_selection_ratio: float
@@ -377,6 +389,16 @@ def summarize(
                 semantic_path_image_ratio=round(_path_ratio(records, "image"), 6),
                 semantic_path_defer_ratio=round(_path_ratio(records, "defer"), 6),
                 semantic_path_cache_update_ratio=round(_path_ratio(records, "cache_update"), 6),
+                semantic_path_reject_ratio=round(_path_ratio(records, "reject"), 6),
+                admission_success_rate=round(_admission_success_rate(records), 6),
+                admitted_task_success_rate=round(_admitted_task_success_rate(records), 6),
+                reject_ratio=round(_rate(records, "rejected"), 6),
+                correct_reject_ratio=round(_rate(records, "correct_reject"), 6),
+                wrong_reject_ratio=round(_rate(records, "wrong_reject"), 6),
+                reject_feasible_ratio=round(_rate(records, "reject_feasible"), 6),
+                average_expected_saved_energy_j=round(_mean(records, "expected_saved_energy_j"), 6),
+                average_expected_saved_delay_s=round(_mean(records, "expected_saved_delay_s"), 6),
+                infeasibility_aware_utility=round(_infeasibility_aware_utility(records), 6),
                 cache_eligible_ratio=round(_rate(records, "cache_eligible"), 6),
                 joint_feasible_selection_ratio=round(_rate(records, "selected_path_joint_feasible"), 6),
                 deadline_infeasible_selection_ratio=round(_false_rate(records, "selected_path_deadline_feasible"), 6),
@@ -864,6 +886,16 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "semantic_path_image_ratio",
         "semantic_path_defer_ratio",
         "semantic_path_cache_update_ratio",
+        "semantic_path_reject_ratio",
+        "admission_success_rate",
+        "admitted_task_success_rate",
+        "reject_ratio",
+        "correct_reject_ratio",
+        "wrong_reject_ratio",
+        "reject_feasible_ratio",
+        "average_expected_saved_energy_j",
+        "average_expected_saved_delay_s",
+        "infeasibility_aware_utility",
         "cache_eligible_ratio",
         "joint_feasible_selection_ratio",
         "deadline_infeasible_selection_ratio",
@@ -926,9 +958,10 @@ def _print_summary_row(row: EvalSummary) -> None:
         f"gap={row.average_semantic_quality_gap:.3f} q_quality={row.average_q_quality:.3f} q_deadline={row.average_q_deadline:.3f} "
         f"q_energy={row.average_q_energy:.3f} q_utm={row.average_q_utm:.3f} delay={row.average_delay:.3f} "
         f"energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
-        f"utm_conflict={row.utm_conflict_violation_rate:.3f} path_mix=({row.semantic_path_cache_ratio:.2f}/"
+        f"utm_conflict={row.utm_conflict_violation_rate:.3f} admission={row.admission_success_rate:.3f} "
+        f"reject={row.reject_ratio:.3f}/{row.correct_reject_ratio:.3f}/{row.wrong_reject_ratio:.3f} path_mix=({row.semantic_path_cache_ratio:.2f}/"
         f"{row.semantic_path_token_ratio:.2f}/{row.semantic_path_image_ratio:.2f}/{row.semantic_path_defer_ratio:.2f}/"
-        f"{row.semantic_path_cache_update_ratio:.2f}) expert_agree={row.expert_path_agreement_rate:.2f} defer_count={row.average_defer_count:.2f}"
+        f"{row.semantic_path_cache_update_ratio:.2f}/{row.semantic_path_reject_ratio:.2f}) expert_agree={row.expert_path_agreement_rate:.2f} defer_count={row.average_defer_count:.2f}"
     )
 
 
@@ -1099,6 +1132,32 @@ def _path_ratio(records: list[V19StepRecord], path_name: str) -> float:
     return sum(float(str(record.semantic_path) == str(path_name)) for record in records) / len(records)
 
 
+def _admission_success_rate(records: list[V19StepRecord]) -> float:
+    if not records:
+        return 0.0
+    return sum(float(bool(record.success) or bool(getattr(record, "correct_reject", False))) for record in records) / len(records)
+
+
+def _admitted_task_success_rate(records: list[V19StepRecord]) -> float:
+    admitted = [record for record in records if not bool(getattr(record, "rejected", False))]
+    if not admitted:
+        return 0.0
+    return sum(float(bool(record.success)) for record in admitted) / len(admitted)
+
+
+def _infeasibility_aware_utility(records: list[V19StepRecord]) -> float:
+    if not records:
+        return 0.0
+    return (
+        _rate(records, "success")
+        + _rate(records, "correct_reject")
+        - _rate(records, "wrong_reject")
+        - _rate(records, "deadline_violation")
+        - _rate(records, "utm_conflict_violation")
+        - _rate(records, "utm_constraint_violation")
+    )
+
+
 def _expert_path_ratio(records: list[V19StepRecord], path_name: str) -> float:
     if not records:
         return 0.0
@@ -1177,8 +1236,8 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
             "",
             "## Service Level Selection Ratio",
             "",
-            "| policy | cache s=0 | semantic tokens s=1 | image s=2 | roi s=3 | path cache | path token | path image | defer | cache update | cache eligible |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| policy | cache s=0 | semantic tokens s=1 | image s=2 | roi s=3 | path cache | path token | path image | defer | cache update | reject | cache eligible |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in summaries:
@@ -1186,7 +1245,23 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
             f"| {row.policy} | {row.service_level_0_ratio:.3f} | {row.service_level_1_ratio:.3f} | "
             f"{row.service_level_2_ratio:.3f} | {row.service_level_3_ratio:.3f} | {row.semantic_path_cache_ratio:.3f} | "
             f"{row.semantic_path_token_ratio:.3f} | {row.semantic_path_image_ratio:.3f} | {row.semantic_path_defer_ratio:.3f} | "
-            f"{row.semantic_path_cache_update_ratio:.3f} | {row.cache_eligible_ratio:.3f} |"
+            f"{row.semantic_path_cache_update_ratio:.3f} | {row.semantic_path_reject_ratio:.3f} | {row.cache_eligible_ratio:.3f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Admission Control",
+            "",
+            "| policy | admission success | admitted task success | reject | correct reject | wrong reject | reject feasible | saved energy J | saved delay s | infeasibility utility |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in summaries:
+        lines.append(
+            f"| {row.policy} | {row.admission_success_rate:.3f} | {row.admitted_task_success_rate:.3f} | "
+            f"{row.reject_ratio:.3f} | {row.correct_reject_ratio:.3f} | {row.wrong_reject_ratio:.3f} | "
+            f"{row.reject_feasible_ratio:.3f} | {row.average_expected_saved_energy_j:.3f} | "
+            f"{row.average_expected_saved_delay_s:.3f} | {row.infeasibility_aware_utility:.3f} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -1202,17 +1277,19 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | delay | energy | payload KB | deadline vio | UTM conflict | oracle infeasible | UTM-safe service | mobility avoid | mobility stay | bottleneck semantic | bottleneck queue | bottleneck tx | bottleneck mobility | joint feasible sel | deadline infeasible sel | UTM infeasible sel | expert path agree | expert mobility agree | path cache/token/image/defer/update |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| scenario | policy | semantic success | task success | admission success | admitted task success | reject | correct reject | wrong reject | accuracy LCB | quality gap | delay | energy | payload KB | deadline vio | UTM conflict | oracle infeasible | infeasibility utility | UTM-safe service | mobility avoid | mobility stay | bottleneck semantic | bottleneck queue | bottleneck tx | bottleneck mobility | joint feasible sel | deadline infeasible sel | UTM infeasible sel | expert path agree | expert mobility agree | path cache/token/image/defer/update/reject |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
             f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
             f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'task_success_rate'):.3f} | "
+            f"{_metric(row, 'admission_success_rate'):.3f} | {_metric(row, 'admitted_task_success_rate'):.3f} | "
+            f"{_metric(row, 'reject_ratio'):.3f} | {_metric(row, 'correct_reject_ratio'):.3f} | {_metric(row, 'wrong_reject_ratio'):.3f} | "
             f"{_metric(row, 'average_accuracy'):.3f} | {_metric(row, 'average_semantic_quality_gap'):.3f} | "
             f"{_metric(row, 'average_delay'):.3f} | {_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
-            f"{_metric(row, 'infeasible_oracle_ratio'):.3f} | {_metric(row, 'utm_safe_service_ratio'):.3f} | "
+            f"{_metric(row, 'infeasible_oracle_ratio'):.3f} | {_metric(row, 'infeasibility_aware_utility'):.3f} | {_metric(row, 'utm_safe_service_ratio'):.3f} | "
             f"{_metric(row, 'mobility_avoid_conflict_ratio'):.3f} | {_metric(row, 'mobility_stay_ratio'):.3f} | "
             f"{_metric(row, 'bottleneck_semantic_quality_ratio'):.3f} | {_metric(row, 'bottleneck_queue_delay_ratio'):.3f} | "
             f"{_metric(row, 'bottleneck_tx_delay_ratio'):.3f} | {_metric(row, 'bottleneck_mobility_ratio'):.3f} | "
@@ -1221,7 +1298,7 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
             f"{_metric(row, 'expert_path_agreement_rate'):.3f} | {_metric(row, 'expert_mobility_agreement_rate'):.3f} | "
             f"{_metric(row, 'semantic_path_cache_ratio'):.3f}/{_metric(row, 'semantic_path_token_ratio'):.3f}/"
             f"{_metric(row, 'semantic_path_image_ratio'):.3f}/{_metric(row, 'semantic_path_defer_ratio'):.3f}/"
-            f"{_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"
+            f"{_metric(row, 'semantic_path_cache_update_ratio'):.3f}/{_metric(row, 'semantic_path_reject_ratio'):.3f} |"
         )
     lines.extend(
         [

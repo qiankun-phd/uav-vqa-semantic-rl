@@ -68,6 +68,16 @@ class V19StepRecord:
     semantic_payload_kb: float
     semantic_quality_gap: float
     semantic_success: bool
+    rejected: bool
+    reject_feasible: bool
+    reject_reason: str
+    expected_saved_energy_j: float
+    expected_saved_delay_s: float
+    avoided_utm_violation: bool
+    avoided_deadline_violation: bool
+    reject_penalty: float
+    correct_reject: bool
+    wrong_reject: bool
     q_quality: float
     q_deadline: float
     q_energy: float
@@ -379,6 +389,16 @@ class V19LUTResourceEnv:
             semantic_payload_kb=float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))),
             semantic_quality_gap=float(info.get("semantic_quality_gap", 0.0)),
             semantic_success=bool(info.get("semantic_success", False)),
+            rejected=bool(info.get("rejected", False)),
+            reject_feasible=bool(info.get("reject_feasible", False)),
+            reject_reason=str(info.get("reject_reason", "")),
+            expected_saved_energy_j=float(info.get("expected_saved_energy_j", 0.0)),
+            expected_saved_delay_s=float(info.get("expected_saved_delay_s", 0.0)),
+            avoided_utm_violation=bool(info.get("avoided_utm_violation", False)),
+            avoided_deadline_violation=bool(info.get("avoided_deadline_violation", False)),
+            reject_penalty=float(info.get("reject_penalty", 0.0)),
+            correct_reject=bool(info.get("rejected", False)) and bool(info.get("reject_feasible", False)),
+            wrong_reject=bool(info.get("rejected", False)) and not bool(info.get("reject_feasible", False)),
             q_quality=float(info.get("q_quality", 0.0)),
             q_deadline=float(info.get("q_deadline", 0.0)),
             q_energy=float(info.get("q_energy", 0.0)),

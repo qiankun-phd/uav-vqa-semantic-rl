@@ -347,7 +347,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
             model,
             PPOTrainConfig(hidden_size=32, semantic_path_actions=True, mobility_update_interval=3),
         ).act(obs)
-        self.assertIn(action["semantic_path"], {"cache", "token", "image", "defer", "cache_update"})
+        self.assertIn(action["semantic_path"], {"cache", "token", "image", "defer", "cache_update", "reject"})
         self.assertIn("service_level", action)
 
     def test_tiny_proposed_semantic_controller_runs(self) -> None:
@@ -671,6 +671,10 @@ class V19SelectedPathMetricsTest(unittest.TestCase):
         self.assertIn("selected_path_deadline_slack_s", fields)
         self.assertIn("selected_path_bottleneck_type", fields)
         self.assertIn("oracle_mobility_joint_feasible", fields)
+        self.assertIn("rejected", fields)
+        self.assertIn("reject_feasible", fields)
+        self.assertIn("correct_reject", fields)
+        self.assertIn("wrong_reject", fields)
 
 
 class V19SemanticPathExpertTest(unittest.TestCase):
@@ -689,6 +693,7 @@ class V19SemanticPathExpertTest(unittest.TestCase):
                     "image": True,
                     "defer": True,
                     "cache_update": True,
+                    "reject": False,
                 },
             },
             "candidate_path_metrics": {
@@ -697,6 +702,7 @@ class V19SemanticPathExpertTest(unittest.TestCase):
                 "image": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
                 "cache_update": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "future_reuse_value": 1, "deadline_slack_s": 1.0, "bottleneck_type": "none"},
                 "defer": {"deadline_feasible": True, "joint_feasible": True, "feasible": True, "bottleneck_type": "none"},
+                "reject": {"feasible": False, "reject_feasible": False, "joint_feasible": False, "bottleneck_type": "none"},
             },
             "candidate_mobility_metrics": {
                 "token": {
@@ -724,6 +730,29 @@ class V19SemanticPathExpertTest(unittest.TestCase):
         obs["candidate_path_metrics"]["cache"]["cache_eligible"] = False
         cfg = PPOTrainConfig(semantic_path_actions=True)
         self.assertEqual(expert_semantic_path(obs, cfg), "defer")
+
+    def test_expert_rejects_when_all_service_paths_infeasible(self):
+        obs = self._obs(cache_eligible=False, scenario="edge_overload")
+        obs["action_mask"]["semantic_path_allowed"]["reject"] = True
+        obs["candidate_mobility_metrics"] = {}
+        for path in ["cache", "token", "image", "cache_update"]:
+            obs["candidate_path_metrics"][path].update(
+                joint_feasible=False,
+                deadline_feasible=False,
+                semantic_feasible=False,
+                resource_feasible=False,
+            )
+        obs["candidate_path_metrics"]["cache"]["cache_eligible"] = False
+        obs["candidate_path_metrics"]["reject"].update(feasible=True, reject_feasible=True, joint_feasible=True)
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "reject")
+
+    def test_expert_does_not_reject_joint_feasible_service(self):
+        obs = self._obs()
+        obs["action_mask"]["semantic_path_allowed"]["reject"] = True
+        obs["candidate_path_metrics"]["reject"].update(feasible=True, reject_feasible=True, joint_feasible=True)
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "token")
 
     def test_utm_infeasible_token_is_not_selected(self):
         obs = self._obs(scenario="utm_conflict")

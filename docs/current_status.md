@@ -1954,3 +1954,48 @@ Diagnostics are generated under:
 ```text
 outputs/env/semantic_path_soft_reject_diagnosis_20260624/
 ```
+
+## RL Semantic Path Reject Fix5 2026-06-25 Asia/Shanghai
+
+Algorithm thread integrated Environment's explicit `semantic_path=reject` as infeasibility-aware semantic admission control. This was done without modifying Environment or Semantic Utility.
+
+Implementation changes:
+
+- Added `reject` to the semantic path action head and expert/BC target.
+- Added reject-aware action construction with zero bandwidth/power/cpu/gpu and `stay` mobility.
+- Added admission-aware expert routing: service paths are preferred when a semantic/deadline/UTM-feasible service exists; `reject` is selected for hard/soft edge or UTM tasks when no successful service path is feasible.
+- Added reward shaping for correct reject, wrong reject, and unsafe service under reject-feasible infeasibility.
+- Added rollout/report metrics for reject ratio, correct reject ratio, wrong reject ratio, admitted task success, admission success, saved delay/energy, and infeasibility-aware utility.
+
+Validation/benchmark:
+
+```text
+outputs/rl/semantic_path_cache_defer_reject_fix5_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_reject_fix5_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_reject_fix5_20260624/fix5_comparison.md
+```
+
+Settings: scenarios `normal_patrol`, `disaster_hotspot`, `low_snr_soft`, `low_snr_blockage`, `edge_overload`, `edge_overload_soft`, `utm_conflict`, `utm_conflict_soft`; seeds `0,1,2`; train episodes `300`; eval episodes `50`; tasks per episode `12`; RA_DI `cuda:0`.
+
+Fix5 proposed PPO aggregate highlights:
+
+| scenario | semantic success | task success | admission success | reject | correct reject | wrong reject | deadline vio | UTM vio |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| normal_patrol | 0.283 | 0.283 | 0.283 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| disaster_hotspot | 0.282 | 0.204 | 0.204 | 0.000 | 0.000 | 0.000 | 0.244 | 0.000 |
+| low_snr_soft | 0.372 | 0.318 | 0.318 | 0.000 | 0.000 | 0.000 | 0.145 | 0.000 |
+| low_snr_blockage | 0.833 | 0.496 | 0.496 | 0.000 | 0.000 | 0.000 | 0.399 | 0.000 |
+| edge_overload | 0.056 | 0.028 | 0.846 | 0.818 | 0.818 | 0.000 | 0.034 | 0.000 |
+| edge_overload_soft | 0.261 | 0.152 | 0.713 | 0.561 | 0.561 | 0.000 | 0.121 | 0.000 |
+| utm_conflict | 0.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 0.000 |
+| utm_conflict_soft | 0.196 | 0.196 | 0.769 | 0.573 | 0.573 | 0.000 | 0.000 | 0.000 |
+
+Interpretation:
+
+- PASS: `reject` does not leak into nominal or low-SNR scenes.
+- PASS: hard `utm_conflict` is handled as correct admission rejection with zero deadline/UTM violation.
+- PASS: `utm_conflict_soft` recovers nonzero service success while keeping UTM/deadline violations at 0.
+- PASS: `edge_overload_soft` improves task success over hard edge overload and keeps wrong reject at 0.
+- MIXED: hard `edge_overload` sacrifices service success for safe rejection; this is now an infeasibility diagnostic rather than unsafe deadline-violation behavior.
+
+Next Algorithm focus: use fix5 as the admission-control baseline. For paper headline performance, emphasize soft calibrated stress scenarios and admitted-task success; keep hard `edge_overload`/`utm_conflict` as infeasibility-aware safety diagnostics.

@@ -1049,3 +1049,26 @@ Next Algorithm-side use:
 1. Include the soft presets in benchmark tables next to the hard stress scenarios.
 2. Treat reject as an admission-control/fail-safe action: not task success, but a lower-cost choice when all service paths are infeasible.
 3. Report reject ratio and reject reason distribution separately from cache/token/image/defer/cache-update ratios.
+
+## RL Semantic Path Reject Fix5 Follow-up 2026-06-25
+
+Completed Algorithm-side reject integration at:
+
+```text
+outputs/rl/semantic_path_cache_defer_reject_fix5_20260624/
+```
+
+Outcome:
+
+1. `reject` is now a first-class semantic path in two-timescale PPO and behavior-cloning warm start.
+2. `normal_patrol`, `low_snr_soft`, and `low_snr_blockage` have reject ratio `0.000`, so admission control does not collapse into always-reject on ordinary or low-SNR tasks.
+3. hard `utm_conflict` uses correct reject for all evaluated tasks (`correct_reject=1.000`, `wrong_reject=0.000`) and eliminates UTM/deadline violation.
+4. `utm_conflict_soft` recovers nonzero service (`task_success=0.196`, admitted-task success `0.458`) while keeping UTM/deadline violation at 0.
+5. hard `edge_overload` is now treated as mostly infeasible admission (`reject=0.818`) with low deadline violation (`0.034`), while `edge_overload_soft` recovers more service (`task_success=0.152`) with no wrong reject.
+
+Next tasks:
+
+1. For paper tables, report both task success and admission success/admitted-task success. Hard infeasible scenarios should be interpreted as safety/admission diagnostics, not pure service-throughput benchmarks.
+2. Add reject reason distribution to the root report if Environment exposes stable reason bins beyond `mixed`.
+3. For final paper-scale runs, keep fix5 reject logic and run longer seeds only on calibrated soft stress scenarios plus nominal/disaster/low-SNR.
+4. Do not commit `.pt`, rollout CSVs, per-seed traces, `run_config.json`, or logs; keep only root-level CSV/MD summaries.
