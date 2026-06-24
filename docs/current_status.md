@@ -1486,3 +1486,78 @@ Main conclusions:
 - Critical counting remains a special case: detector-token count errors can make token LCB conservative, so fallback/projection should consider task type and risk level.
 - Recommended Algorithm-side guard: expose `deadline_aware_semantic_fallback_threshold`, with `delta_cache = 0.05` for strict settings and `delta_cache = 0.08` for stress-scenario fallback. The fallback should be conditioned on high deadline pressure or no jointly feasible token/image candidate.
 - Do not weaken the semantic LUT to fix low-SNR task success. The current issue is a control tradeoff: accept a small cache semantic gap in exchange for a large deadline improvement when compact evidence is still too slow.
+
+## Low-SNR Deadline Tuning 2026-06-24 Asia/Shanghai
+
+Diagnosed and tuned the `low_snr_blockage` deadline-violation blocker for the recommended `B_state_v2_fixed_128x128` controller.
+
+Implementation / experiment commit:
+
+```text
+e811264 feat(rl): tune low-snr deadline control
+```
+
+Output directory:
+
+```text
+outputs/rl/low_snr_deadline_tuning_20260624/
+```
+
+Diagnosis:
+
+- Baseline replay rows: 1800 tasks across seeds 0,1,2.
+- Baseline low-SNR deadline violation: 0.854.
+- Baseline semantic success: 0.948.
+- Image ratio: 0.000, so image evidence is already suppressed.
+- Deadline failures are dominated by token transmission delay: `tx_delay_s` primary share 1.000 among deadline-violating tasks.
+- Mobility is not the blocker in this replay: mean arrival/total delay ratio on violating tasks is 0.000.
+- Token service has deadline violation rate 0.944; cache service has 0.000 but lower semantic robustness.
+
+Tuning variants:
+
+```text
+T1_deadline_slack: deadline slack reward/penalty
+T2_token_fast: low-SNR token-fast bandwidth/power/CPU/GPU floors
+T3_cache_fallback: deadline-aware token-to-cache fallback when cache semantic gap is small
+T1_T2_slack_token_fast: combined T1 + T2
+```
+
+Completion:
+
+```text
+baseline eval-only replay: 3/3 seeds
+tuning train/eval runs: 12/12
+failed or missing runs: 0
+```
+
+Headline results:
+
+- Baseline B: semantic success 0.948, task success 0.128, deadline violation 0.854, avg delay 21.135 s, reward -4.750.
+- T1: no measurable change from baseline in this 500-episode run.
+- T2: semantic success 0.948, task success 0.126, deadline violation 0.846, avg delay 20.836 s, reward -4.688.
+- T3: semantic success 0.948, task success 0.128, deadline violation 0.851, fallback rate 0.098, reward -4.681.
+- T1+T2 matches T2 in this run.
+- No variant shows cache collapse; cache ratios stay around 0.094-0.098.
+
+Decision:
+
+- Recommended next 1000-episode low-SNR/final candidate variant: `T2_token_fast`.
+- The improvement is modest because the bottleneck is poor-link token transmission delay, not CPU/GPU inference or UAV arrival. Further large gains likely require link/routing adaptation, token payload compression, or deadline-aware acceptance of cache for selected low-risk tasks.
+
+Artifacts:
+
+```text
+outputs/rl/low_snr_deadline_tuning_20260624/diagnosis.md
+outputs/rl/low_snr_deadline_tuning_20260624/summary.md
+outputs/rl/low_snr_deadline_tuning_20260624/tuning_summary.csv
+outputs/rl/low_snr_deadline_tuning_20260624/tuning_all_seed_results.csv
+```
+
+Validation:
+
+```text
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+Ran 100 tests in 2.005s
+OK
+```
+
