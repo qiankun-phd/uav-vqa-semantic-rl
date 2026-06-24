@@ -518,8 +518,43 @@ class MultiUAVEnvTest(unittest.TestCase):
             self.assertIn("energy_feasible", data)
             self.assertIn("utm_feasible", data)
             self.assertIn("joint_feasible", data)
+            self.assertIn("tx_delay_s", data)
+            self.assertIn("queue_delay_s", data)
+            self.assertIn("infer_delay_s", data)
+            self.assertIn("load_delay_s", data)
+            self.assertIn("arrival_delay_s", data)
+            self.assertIn("bottleneck_type", data)
+            self.assertIn("required_deadline_reduction_s", data)
+            self.assertIn("required_rate_mbps", data)
+            self.assertIn("required_bandwidth_hz", data)
+            self.assertIn("edge_queue_pressure", data)
+            self.assertIn("model_cache_hit", data)
             self.assertEqual(data["feasible"], data["joint_feasible"])
             self.assertEqual(data["semantic_path"], path)
+
+    def test_candidate_mobility_metrics_contains_path_mode_diagnostics(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5, options={"scenario": "utm_conflict"})
+        metrics = obs["candidate_mobility_metrics"]
+        self.assertIn("token", metrics)
+        for mode in ("stay", "serve_task", "avoid_conflict", "reposition"):
+            self.assertIn(mode, metrics["token"])
+            data = metrics["token"][mode]
+            for field in [
+                "utm_feasible",
+                "arrival_delay_s",
+                "tx_delay_s",
+                "total_delay_s",
+                "deadline_slack_s",
+                "semantic_feasible",
+                "joint_feasible",
+                "utm_conflict_risk",
+            ]:
+                self.assertIn(field, data)
+        self.assertLessEqual(
+            metrics["token"]["avoid_conflict"]["utm_conflict_risk"],
+            metrics["token"]["serve_task"]["utm_conflict_risk"] + 1e-9,
+        )
 
     def test_expired_task_paths_are_not_feasible_or_served(self) -> None:
         env = self._env()

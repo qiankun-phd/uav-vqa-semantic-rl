@@ -1646,6 +1646,39 @@ cache_hit_probability
 
 Observations now expose `candidate_path_metrics` for `cache/token/image/defer/cache_update`, with feasibility, accuracy LCB/mean, semantic quality gap, payload, delay, energy, deadline slack, cache eligibility, and UTM constraint violation. `defer` keeps the task in the queue and consumes deadline; `cache_update` maps to token evidence and writes or refreshes semantic cache after successful service.
 
+## Semantic Path Bottleneck Diagnostics 2026-06-24 Asia/Shanghai
+
+Environment-only diagnostic update on `codex/semantic-path-cache-defer`; PPO training logic and Semantic Utility LUT are unchanged.
+
+Added candidate diagnostics in `src/vqa_semcom/sim/multi_uav_env.py`:
+
+```text
+candidate_path_metrics[path].tx_delay_s
+candidate_path_metrics[path].queue_delay_s
+candidate_path_metrics[path].infer_delay_s
+candidate_path_metrics[path].load_delay_s
+candidate_path_metrics[path].arrival_delay_s
+candidate_path_metrics[path].bottleneck_type
+candidate_path_metrics[path].required_deadline_reduction_s
+candidate_path_metrics[path].required_rate_mbps
+candidate_path_metrics[path].required_bandwidth_hz
+candidate_path_metrics[path].edge_queue_pressure
+candidate_path_metrics[path].model_cache_hit
+candidate_mobility_metrics[path][mobility_mode]
+```
+
+New env diagnostic script:
+
+```text
+scripts/diagnose_semantic_path_feasibility.py
+```
+
+It writes scenario/path bottleneck summaries to:
+
+```text
+outputs/env/semantic_path_bottleneck_diagnosis_20260624/
+```
+
 ## Semantic Path Cache/Defer PPO 2026-06-24 Asia/Shanghai
 
 Implemented and smoke/short-benchmarked the semantic-path branch controller on `codex/semantic-path-cache-defer`.

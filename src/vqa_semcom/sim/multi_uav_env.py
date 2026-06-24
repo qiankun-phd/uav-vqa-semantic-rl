@@ -1131,6 +1131,58 @@ class MultiUAVVQAEnv:
             out[path] = self._candidate_path_metric(task, path)
         return out
 
+    def candidate_mobility_metrics(self, task: EnvTask | None = None) -> dict[str, dict[str, dict[str, Any]]]:
+        task = task or self._front_task()
+        if task is None:
+            return {}
+        out: dict[str, dict[str, dict[str, Any]]] = {}
+        for path in SEMANTIC_PATHS:
+            out[path] = {}
+            if path == "defer":
+                continue
+            for mode in ("stay", "serve_task", "avoid_conflict", "reposition"):
+                action = self._path_action(path, task)
+                action["mobility_mode"] = mode
+                if mode == "reposition":
+                    nearest = self._nearest_uav(task)
+                    dx = task.x_m - nearest.x_m
+                    dy = task.y_m - nearest.y_m
+                    norm = max(1.0, math.hypot(dx, dy))
+                    step = min(norm, nearest.speed_mps * float(self.env_cfg["slot_s"]))
+                    action["waypoint_delta"] = [dx / norm * step, dy / norm * step]
+                info = self.evaluate_action(action, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+                accuracy_lcb = float(info.get("semantic_accuracy_lcb", 0.0))
+                semantic_feasible = bool(info.get("semantic_success", False)) and not bool(info.get("quality_violation", False))
+                if path == "cache":
+                    semantic_feasible = bool(info.get("cache_eligible", False)) and semantic_feasible
+                deadline_feasible = not bool(info.get("deadline_violation", False))
+                energy_feasible = not bool(info.get("battery_violation", False))
+                utm_feasible = not bool(info.get("utm_conflict_violation", info.get("utm_constraint_violation", False)))
+                resource_feasible = not bool(info.get("resource_violation", False))
+                out[path][mode] = {
+                    "utm_feasible": bool(utm_feasible),
+                    "arrival_delay_s": float(info.get("arrival_delay_s", 0.0)),
+                    "tx_delay_s": float(info.get("tx_delay_s", 0.0)),
+                    "total_delay_s": float(info.get("delay_s", 0.0)),
+                    "deadline_slack_s": float(info.get("remaining_deadline_s", self._remaining_deadline_s(task)))
+                    - float(info.get("delay_s", 0.0)),
+                    "semantic_feasible": bool(semantic_feasible),
+                    "deadline_feasible": bool(deadline_feasible),
+                    "energy_feasible": bool(energy_feasible),
+                    "resource_feasible": bool(resource_feasible),
+                    "joint_feasible": bool(
+                        not task.expired
+                        and semantic_feasible
+                        and deadline_feasible
+                        and energy_feasible
+                        and utm_feasible
+                        and resource_feasible
+                    ),
+                    "semantic_accuracy_lcb": accuracy_lcb,
+                    "utm_conflict_risk": float(info.get("utm_conflict_risk", 0.0)),
+                }
+        return out
+
     def _candidate_path_metric(self, task: EnvTask, semantic_path: str) -> dict[str, Any]:
         action = self._path_action(semantic_path, task)
         info = self.evaluate_action(action, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
@@ -1157,6 +1209,15 @@ class MultiUAVVQAEnv:
             and utm_feasible
             and resource_feasible
         )
+        tx_delay_s = float(info.get("tx_delay_s", 0.0))
+        queue_delay_s = float(info.get("queue_delay_s", 0.0))
+        infer_delay_s = float(info.get("infer_delay_s", 0.0))
+        load_delay_s = float(info.get("load_delay_s", 0.0))
+        arrival_delay_s = float(info.get("arrival_delay_s", info.get("fly_delay_s", 0.0)))
+        required = self._required_link_for_deadline(info, task)
+        edge_id = int(info.get("edge_id", action.get("edge_id", 0))) % max(1, len(self.edges))
+        edge = self.edges[edge_id]
+        model_cache_hit = load_delay_s <= float(self.env_cfg.get("model_cache_hit_delay_s", 0.0)) + 1e-9
         return {
             "feasible": joint_feasible,
             "deadline_feasible": bool(deadline_feasible),
@@ -1172,11 +1233,91 @@ class MultiUAVVQAEnv:
             "delay_s": delay_s,
             "energy_j": float(info.get("energy_j", 0.0)),
             "deadline_slack_s": remaining - delay_s,
+            "tx_delay_s": tx_delay_s,
+            "queue_delay_s": queue_delay_s,
+            "infer_delay_s": infer_delay_s,
+            "load_delay_s": load_delay_s,
+            "arrival_delay_s": arrival_delay_s,
+            "bottleneck_type": self._candidate_bottleneck_type(
+                expired=expired,
+                semantic_feasible=semantic_feasible,
+                deadline_feasible=deadline_feasible,
+                energy_feasible=energy_feasible,
+                utm_feasible=utm_feasible,
+                resource_feasible=resource_feasible,
+                tx_delay_s=tx_delay_s,
+                queue_delay_s=queue_delay_s,
+                infer_delay_s=infer_delay_s,
+                load_delay_s=load_delay_s,
+                arrival_delay_s=arrival_delay_s,
+            ),
+            "required_deadline_reduction_s": max(0.0, delay_s - remaining),
+            "required_rate_mbps": required["required_rate_mbps"],
+            "required_bandwidth_hz": required["required_bandwidth_hz"],
+            "edge_queue_pressure": min(1.0, 0.5 * float(edge.load) + 0.5 * float(edge.gpu_load)),
+            "model_cache_hit": bool(model_cache_hit),
             "cache_eligible": bool(info.get("cache_eligible", False)),
             "utm_constraint_violation": bool(info.get("utm_constraint_violation", False)),
             "utm_conflict_violation": bool(info.get("utm_conflict_violation", False)),
             "service_level": int(info.get("service_level", action.get("service_level", 0))),
             "semantic_path": semantic_path,
+        }
+
+    @staticmethod
+    def _candidate_bottleneck_type(
+        *,
+        expired: bool,
+        semantic_feasible: bool,
+        deadline_feasible: bool,
+        energy_feasible: bool,
+        utm_feasible: bool,
+        resource_feasible: bool,
+        tx_delay_s: float,
+        queue_delay_s: float,
+        infer_delay_s: float,
+        load_delay_s: float,
+        arrival_delay_s: float,
+    ) -> str:
+        if expired:
+            return "expired"
+        if not semantic_feasible:
+            return "semantic_quality"
+        if not utm_feasible:
+            return "utm"
+        if not energy_feasible:
+            return "energy"
+        if not resource_feasible:
+            return "resource"
+        if not deadline_feasible:
+            parts = {
+                "tx_delay": tx_delay_s,
+                "queue_delay": queue_delay_s,
+                "mobility": arrival_delay_s,
+                "resource": infer_delay_s + load_delay_s,
+            }
+            return max(parts, key=parts.get)
+        return "none"
+
+    def _required_link_for_deadline(self, info: dict[str, Any], task: EnvTask) -> dict[str, float]:
+        remaining = float(info.get("remaining_deadline_s", self._remaining_deadline_s(task)))
+        payload_kb = float(info.get("payload_kb", 0.0))
+        tx_delay_s = float(info.get("tx_delay_s", 0.0))
+        delay_s = float(info.get("delay_s", 0.0))
+        current_rate_mbps = max(1e-9, float(info.get("rate_mbps", 0.0)))
+        current_bandwidth_hz = max(1.0, float(info.get("bandwidth_hz", self.env_cfg["bandwidth_hz"])))
+        non_tx_delay_s = max(0.0, delay_s - tx_delay_s)
+        tx_budget_s = max(1e-9, remaining - non_tx_delay_s)
+        required_rate_mbps = (payload_kb * 8.0 / 1000.0) / tx_budget_s if payload_kb > 0.0 else 0.0
+        spectral_efficiency_mbps_per_hz = current_rate_mbps / current_bandwidth_hz
+        if required_rate_mbps <= current_rate_mbps:
+            required_bandwidth_hz = current_bandwidth_hz
+        elif spectral_efficiency_mbps_per_hz > 0.0:
+            required_bandwidth_hz = required_rate_mbps / spectral_efficiency_mbps_per_hz
+        else:
+            required_bandwidth_hz = float("inf")
+        return {
+            "required_rate_mbps": required_rate_mbps,
+            "required_bandwidth_hz": required_bandwidth_hz,
         }
 
     def _path_action(self, semantic_path: str, task: EnvTask) -> dict[str, Any]:
@@ -2499,6 +2640,7 @@ class MultiUAVVQAEnv:
                 "edge_load": [edge.load for edge in self.edges],
                 "cache_state": self._cache_state(None),
                 "candidate_path_metrics": {},
+                "candidate_mobility_metrics": {},
                 "task_queue": [],
                 "pending_tasks": 0,
                 "feasible_uavs": [],
@@ -2561,6 +2703,7 @@ class MultiUAVVQAEnv:
             "edge_load": [edge.load for edge in self.edges],
             "cache_state": self._cache_state(task),
             "candidate_path_metrics": self.candidate_path_metrics(task),
+            "candidate_mobility_metrics": self.candidate_mobility_metrics(task),
             "task_queue": [self._task_obs(item) for item in self._active_tasks()],
             "pending_tasks": sum(1 for item in self.tasks if not item.completed and not item.expired),
             "feasible_uavs": [uav.uav_id for uav in self.uavs if uav.battery_j > float(self.env_cfg["return_energy_reserve_j"])],

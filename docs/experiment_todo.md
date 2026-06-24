@@ -935,6 +935,13 @@ outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_report.m
 outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
 ```
 
+## Environment Bottleneck Diagnostics Follow-Up 2026-06-24
+
+- Use `scripts/diagnose_semantic_path_feasibility.py` before changing PPO when a scenario has low task success.
+- For `edge_overload`, inspect `candidate_path_metrics[token/cache_update].bottleneck_type`, queue/load delays, and required bandwidth/rate before adding algorithm-side projection rules.
+- For `utm_conflict`, inspect `candidate_mobility_metrics[token][avoid_conflict]` versus `serve_task` to distinguish UTM-risk reduction from semantic/deadline infeasibility.
+- If oracle/path-candidate feasible ratios are near zero, keep the hard scenario as stress and introduce a separate soft preset instead of silently relaxing constraints.
+
 ## RL Semantic Path Fix2 TODO 2026-06-24
 
 Fix1 stabilized semantic-path action feasibility but did not fully recover edge_overload or utm_conflict. Next Algorithm tasks:
