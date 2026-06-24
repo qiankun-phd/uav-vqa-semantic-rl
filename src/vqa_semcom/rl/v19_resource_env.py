@@ -36,8 +36,16 @@ class V19StepRecord:
     selected_path_deadline_feasible: bool
     selected_path_utm_feasible: bool
     selected_path_deadline_slack_s: float
+    selected_path_bottleneck_type: str
     expert_semantic_path: str
     expert_path_agreement: bool
+    expert_mobility_mode: str
+    expert_mobility_agreement: bool
+    oracle_path_joint_feasible: bool
+    oracle_mobility_joint_feasible: bool
+    selected_mobility_joint_feasible: bool
+    selected_mobility_deadline_feasible: bool
+    selected_mobility_utm_feasible: bool
     bandwidth_hz: float
     power_w: float
     cpu_share: float
@@ -339,8 +347,16 @@ class V19LUTResourceEnv:
             selected_path_deadline_feasible=bool(info.get("selected_path_deadline_feasible", True)),
             selected_path_utm_feasible=bool(info.get("selected_path_utm_feasible", True)),
             selected_path_deadline_slack_s=float(info.get("selected_path_deadline_slack_s", 0.0)),
+            selected_path_bottleneck_type=str(info.get("selected_path_bottleneck_type", "unknown")),
             expert_semantic_path=str(info.get("expert_semantic_path", "")),
             expert_path_agreement=bool(info.get("expert_path_agreement", False)),
+            expert_mobility_mode=str(info.get("expert_mobility_mode", "")),
+            expert_mobility_agreement=bool(info.get("expert_mobility_agreement", False)),
+            oracle_path_joint_feasible=bool(info.get("oracle_path_joint_feasible", False)),
+            oracle_mobility_joint_feasible=bool(info.get("oracle_mobility_joint_feasible", False)),
+            selected_mobility_joint_feasible=bool(info.get("selected_mobility_joint_feasible", info.get("selected_path_joint_feasible", True))),
+            selected_mobility_deadline_feasible=bool(info.get("selected_mobility_deadline_feasible", info.get("selected_path_deadline_feasible", True))),
+            selected_mobility_utm_feasible=bool(info.get("selected_mobility_utm_feasible", info.get("selected_path_utm_feasible", True))),
             bandwidth_hz=float(info.get("bandwidth_hz", 0.0)),
             power_w=float(info.get("power_w", 0.0)),
             cpu_share=float(info.get("cpu_share", 0.0)),
@@ -512,6 +528,7 @@ class V19LUTResourceEnv:
             info["selected_path_deadline_feasible"] = bool(data.get("deadline_feasible", not bool(info.get("deadline_violation", False))))
             info["selected_path_utm_feasible"] = bool(data.get("utm_feasible", not bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))))
             info["selected_path_deadline_slack_s"] = float(data.get("deadline_slack_s", float(info.get("deadline_s", 0.0)) - float(info.get("delay_s", 0.0))))
+            info["selected_path_bottleneck_type"] = str(data.get("bottleneck_type", data.get("bottleneck", "unknown")))
         else:
             info["selected_path_joint_feasible"] = not bool(
                 info.get("quality_violation", False)
@@ -524,6 +541,7 @@ class V19LUTResourceEnv:
             info["selected_path_deadline_feasible"] = not bool(info.get("deadline_violation", False))
             info["selected_path_utm_feasible"] = not bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))
             info["selected_path_deadline_slack_s"] = float(info.get("deadline_s", 0.0)) - float(info.get("delay_s", 0.0))
+            info["selected_path_bottleneck_type"] = "unknown"
         return info
 
     def _semantic_query(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:

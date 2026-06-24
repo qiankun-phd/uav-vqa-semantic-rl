@@ -263,6 +263,12 @@ class PPOTrainConfig:
     task_success_reward_weight: float = 10.0
     service_completion_bonus_weight: float = 3.0
     defer_no_improvement_penalty_weight: float = 5.0
+    bottleneck_aware_control: bool = True
+    bottleneck_deadline_penalty_weight: float = 8.0
+    bottleneck_correct_fallback_bonus: float = 1.25
+    utm_safe_service_bonus_weight: float = 2.0
+    bottleneck_resource_floor: float = 0.95
+    service_oracle_defer_relief: float = 0.45
 
 
 @dataclass
@@ -1007,6 +1013,11 @@ def _collect_two_timescale_episode(
         log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1) + mobility_log_prob
         semantic_choice = action_labels[int(action_idx.item())]
         action = _build_two_timescale_action(env, obs, semantic_choice, resource_values, mobility_action, cfg)
+        projected_mode = str(action.get("mobility_mode", MOBILITY_MODES[mode_idx]))
+        if projected_mode in MOBILITY_MODES and projected_mode != MOBILITY_MODES[mode_idx]:
+            mode_idx = MOBILITY_MODES.index(projected_mode)
+            mobility_log_prob = _mobility_log_prob(uav_logits, mode_logits, mobility_mean, mobility_log_std, uav_idx, mode_idx, raw_mobility)
+            log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1) + mobility_log_prob
         next_obs, raw_reward, done, info = env.step(action)
         semantic_reward = _semantic_controller_reward(obs, info, raw_reward, cfg)
         mobility_reward = _mobility_reward_adjustment(info, cfg)
@@ -1353,7 +1364,53 @@ def _build_two_timescale_action(
     )
     if str(action.get("semantic_path", "")) in {"cache", "defer"} and action["mobility_mode"] == "serve_task":
         action["mobility_mode"] = "stay"
+    if bool(cfg.bottleneck_aware_control):
+        action = _project_path_mobility_action(env, obs, action, cfg)
     return env.parse_action(action)
+
+
+def _project_path_mobility_action(
+    env: V19LUTResourceEnv,
+    obs: dict[str, Any],
+    action: dict[str, Any],
+    cfg: PPOTrainConfig,
+) -> dict[str, Any]:
+    path = str(action.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(action.get("service_level", 0)), "token")))
+    mode = str(action.get("mobility_mode", "stay"))
+    scenario = str(obs.get("formal_scenario", obs.get("scenario", ""))).lower()
+    mode_data = _selected_mobility_metrics(obs, path, mode)
+    if path in {"token", "image", "cache_update"}:
+        if not bool(mode_data.get("utm_feasible", _path_metric(obs, path).get("utm_feasible", True))):
+            action["mobility_mode"] = expert_mobility_mode(obs, path, cfg)
+            action["waypoint_delta"] = [0.0, 0.0]
+            action["altitude_delta"] = 0.0
+            mode = str(action["mobility_mode"])
+            mode_data = _selected_mobility_metrics(obs, path, mode)
+        deadline_bad = not bool(mode_data.get("deadline_feasible", _path_metric(obs, path).get("deadline_feasible", True)))
+        if deadline_bad and (_is_edge_overload_obs(obs, cfg) or "utm_conflict" in scenario):
+            for fallback in ("token", "cache", "defer"):
+                if fallback == path:
+                    continue
+                if fallback == "cache" and (not _cache_eligible_for_obs(obs) or _path_quality_gap(obs, "cache") > float(cfg.expert_cache_gap_threshold)):
+                    continue
+                if fallback == "defer" and not _defer_last_resort_open(obs, cfg):
+                    continue
+                if fallback == "token":
+                    data = _path_metric(obs, "token")
+                    if _hard_path_forbidden(obs, "token", cfg) or not bool(data.get("deadline_feasible", False)):
+                        continue
+                if fallback != "defer" and _hard_path_forbidden(obs, fallback, cfg):
+                    continue
+                projected = _resource_floor_candidate(env, obs, fallback, cfg)
+                projected["uav_assignment"] = int(action.get("uav_assignment", _select_uav_assignment(obs, cfg)))
+                projected["mobility_mode"] = expert_mobility_mode(obs, fallback, cfg)
+                projected["waypoint_delta"] = [0.0, 0.0]
+                projected["altitude_delta"] = 0.0
+                return env.parse_action(projected)
+    if str(action.get("mobility_mode", "")) in {"avoid_conflict", "stay"}:
+        action["waypoint_delta"] = [0.0, 0.0]
+        action["altitude_delta"] = 0.0
+    return action
 
 def _sample_mobility_action(
     env: V19LUTResourceEnv,
@@ -1492,6 +1549,12 @@ def _apply_mobility_mode_mask(logits: Any, obs: dict[str, Any]) -> Any:
                 mask_values[MOBILITY_MODES.index(blocked)] = False
         if "avoid_conflict" in MOBILITY_MODES:
             mask_values[MOBILITY_MODES.index("avoid_conflict")] = True
+    if str(obs.get("formal_scenario", obs.get("scenario", ""))).lower() == "utm_conflict":
+        for idx, mode in enumerate(MOBILITY_MODES):
+            for path in ("token", "image", "cache_update"):
+                data = _mobility_metric(obs, path, mode)
+                if data and not bool(data.get("utm_feasible", True)) and mode in {"serve_task", "reposition"}:
+                    mask_values[idx] = False
     if not any(mask_values):
         return logits
     mask = torch.as_tensor(mask_values, dtype=torch.bool, device=logits.device).unsqueeze(0)
@@ -2048,6 +2111,57 @@ def _path_quality_gap(obs: dict[str, Any], path: str) -> float:
     return max(0.0, epsilon - float(data.get("accuracy_lcb", 0.0)))
 
 
+def _path_bottleneck(obs: dict[str, Any], path: str) -> str:
+    data = _path_metric(obs, path)
+    return str(data.get("bottleneck_type", data.get("bottleneck", "unknown")) or "unknown")
+
+
+def _candidate_mobility_metrics(obs: dict[str, Any], path: str | None = None) -> dict[str, Any]:
+    metrics = obs.get("candidate_mobility_metrics", {})
+    if not isinstance(metrics, dict):
+        return {}
+    if path is None:
+        return metrics
+    data = metrics.get(path, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _mobility_metric(obs: dict[str, Any], path: str, mode: str) -> dict[str, Any]:
+    data = _candidate_mobility_metrics(obs, path).get(mode, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _mobility_bool_metric(obs: dict[str, Any], path: str, mode: str, key: str, default: bool = True) -> bool:
+    data = _mobility_metric(obs, path, mode)
+    if key in data:
+        return bool(data.get(key))
+    return bool(default)
+
+
+def _any_service_path_joint_feasible(obs: dict[str, Any]) -> bool:
+    return any(bool(_path_metric(obs, path).get("joint_feasible", False)) for path in ("cache", "token", "cache_update", "image"))
+
+
+def _any_service_mobility_joint_feasible(obs: dict[str, Any]) -> bool:
+    for path in ("cache", "token", "cache_update", "image"):
+        for mode, data in _candidate_mobility_metrics(obs, path).items():
+            if isinstance(data, dict) and bool(data.get("joint_feasible", False)):
+                return True
+    return False
+
+
+def _selected_mobility_metrics(obs: dict[str, Any], path: str, mode: str) -> dict[str, Any]:
+    data = _mobility_metric(obs, path, mode)
+    if data:
+        return data
+    path_data = _path_metric(obs, path)
+    return {
+        "joint_feasible": bool(path_data.get("joint_feasible", path_data.get("feasible", True))),
+        "deadline_feasible": bool(path_data.get("deadline_feasible", True)),
+        "utm_feasible": bool(path_data.get("utm_feasible", True)),
+    }
+
+
 def _is_expired_task(obs: dict[str, Any]) -> bool:
     return bool(obs.get("expired", False)) or str(obs.get("task_status", "")).lower() == "expired"
 
@@ -2111,6 +2225,60 @@ def expert_semantic_path(obs: dict[str, Any], cfg: PPOTrainConfig | None = None)
     cfg = cfg or PPOTrainConfig(semantic_path_actions=True)
     if _is_expired_task(obs):
         return "cache"
+    if bool(cfg.bottleneck_aware_control):
+        # Prefer feasible service, but let the environment's bottleneck diagnosis
+        # decide when cache/defer is the correct fallback.
+        for path in ("token", "cache", "cache_update", "image"):
+            if _hard_path_forbidden(obs, path, cfg):
+                continue
+            if bool(_path_metric(obs, path).get("joint_feasible", _path_metric(obs, path).get("feasible", False))):
+                return path
+        scenario = str(obs.get("formal_scenario", obs.get("scenario", ""))).lower()
+        token_bottleneck = _path_bottleneck(obs, "token")
+        cache_gap = _path_quality_gap(obs, "cache")
+        cache_ok = _cache_eligible_for_obs(obs) and cache_gap <= float(cfg.expert_cache_gap_threshold)
+        if token_bottleneck in {"queue_delay", "infer_delay", "resource", "mobility"}:
+            if cache_ok:
+                return "cache"
+            if _defer_last_resort_open(obs, cfg):
+                return "defer"
+        if token_bottleneck == "tx_delay":
+            if not _hard_path_forbidden(obs, "token", cfg) and bool(_path_metric(obs, "token").get("deadline_feasible", False)):
+                return "token"
+            if cache_ok:
+                return "cache"
+            if _defer_last_resort_open(obs, cfg):
+                return "defer"
+        if token_bottleneck == "utm" or "utm_conflict" in scenario:
+            for path in ("token", "cache_update", "image"):
+                if _hard_path_forbidden(obs, path, cfg):
+                    continue
+                mode = expert_mobility_mode(obs, path, cfg)
+                mode_data = _mobility_metric(obs, path, mode)
+                if bool(mode_data.get("utm_feasible", _path_metric(obs, path).get("utm_feasible", False))) and bool(
+                    mode_data.get("deadline_feasible", _path_metric(obs, path).get("deadline_feasible", False))
+                ):
+                    return path
+            if cache_ok:
+                return "cache"
+            if _defer_last_resort_open(obs, cfg):
+                return "defer"
+        if token_bottleneck == "semantic_quality":
+            for path in ("token", "cache_update", "image"):
+                if _hard_path_forbidden(obs, path, cfg):
+                    continue
+                data = _path_metric(obs, path)
+                if bool(data.get("semantic_feasible", False)) and bool(data.get("deadline_feasible", False)):
+                    return path
+            if cache_ok:
+                return "cache"
+        if _is_edge_overload_obs(obs, cfg):
+            if not _hard_path_forbidden(obs, "token", cfg) and bool(_path_metric(obs, "token").get("deadline_feasible", False)):
+                return "token"
+            if _cache_eligible_for_obs(obs) and cache_gap <= max(float(cfg.expert_cache_gap_threshold), float(cfg.edge_cache_quality_gap_prefer_threshold)):
+                return "cache"
+            if _defer_last_resort_open(obs, cfg):
+                return "defer"
     for path in ("token", "cache", "cache_update", "image", "defer"):
         if path == "defer":
             if _defer_last_resort_open(obs, cfg) and bool(_path_metric(obs, "defer").get("joint_feasible", True)):
@@ -2146,6 +2314,33 @@ def expert_semantic_path(obs: dict[str, Any], cfg: PPOTrainConfig | None = None)
     return "cache"
 
 
+def expert_mobility_mode(obs: dict[str, Any], path: str | None = None, cfg: PPOTrainConfig | None = None) -> str:
+    cfg = cfg or PPOTrainConfig(semantic_path_actions=True)
+    path = str(path or expert_semantic_path(obs, cfg))
+    if path in {"cache", "defer"} or _is_expired_task(obs):
+        return "stay"
+    scenario = str(obs.get("formal_scenario", obs.get("scenario", ""))).lower()
+    bottleneck = _path_bottleneck(obs, path)
+    if "utm_conflict" in scenario or bottleneck == "utm":
+        priorities = ("avoid_conflict", "stay", "reposition", "serve_task", "return_base")
+    elif _is_edge_overload_obs(obs, cfg) or bottleneck in {"queue_delay", "infer_delay", "resource", "mobility"}:
+        priorities = ("stay", "avoid_conflict", "reposition", "serve_task", "return_base")
+    else:
+        priorities = ("serve_task", "stay", "reposition", "avoid_conflict", "return_base")
+
+    metrics = _candidate_mobility_metrics(obs, path)
+    for key in ("joint_feasible", "utm_deadline", "utm_only"):
+        for mode in priorities:
+            data = metrics.get(mode, {}) if isinstance(metrics.get(mode, {}), dict) else {}
+            if key == "joint_feasible" and bool(data.get("joint_feasible", False)):
+                return mode
+            if key == "utm_deadline" and bool(data.get("utm_feasible", True)) and bool(data.get("deadline_feasible", False)):
+                return mode
+            if key == "utm_only" and bool(data.get("utm_feasible", True)):
+                return mode
+    return "avoid_conflict" if ("utm_conflict" in scenario and "avoid_conflict" in MOBILITY_MODES) else "stay"
+
+
 def _semantic_path_logit_biases(obs: dict[str, Any], action_labels: list[Any] | tuple[Any, ...], cfg: PPOTrainConfig) -> list[float]:
     if not bool(cfg.semantic_path_actions):
         return [0.0 for _ in action_labels]
@@ -2168,6 +2363,18 @@ def _semantic_path_logit_biases(obs: dict[str, Any], action_labels: list[Any] | 
                 bias += 2.5
             if path == "cache_update":
                 bias -= float(cfg.cache_update_overuse_penalty_weight)
+        if bool(cfg.bottleneck_aware_control):
+            bottleneck = _path_bottleneck(obs, path)
+            if path in {"token", "cache_update"} and bottleneck in {"queue_delay", "infer_delay"} and not bool(data.get("deadline_feasible", True)):
+                bias -= float(cfg.deadline_infeasible_logit_penalty)
+            if path == "image" and bottleneck in {"tx_delay", "queue_delay", "infer_delay", "resource"}:
+                bias -= float(cfg.deadline_infeasible_logit_penalty)
+            if path in {"token", "image", "cache_update"}:
+                mode = expert_mobility_mode(obs, path, cfg)
+                if bool(_mobility_metric(obs, path, mode).get("joint_feasible", False)):
+                    bias += 1.0
+                if not bool(_mobility_metric(obs, path, mode).get("utm_feasible", data.get("utm_feasible", True))):
+                    bias -= 1.0e6
         biases.append(float(bias))
     return biases
 
@@ -2371,7 +2578,9 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     if semantic_path == "defer":
         defer_count = float(info.get("defer_count", obs.get("defer_count", 0)))
         expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else "defer"
-        utility -= cfg.defer_penalty_weight * risk_weight * (1.0 + defer_count)
+        oracle_feasible = _any_service_mobility_joint_feasible(obs) or _any_service_path_joint_feasible(obs)
+        defer_scale = float(cfg.service_oracle_defer_relief) if (not oracle_feasible and _path_bottleneck(obs, "token") in {"queue_delay", "tx_delay", "mobility", "resource"}) else 1.0
+        utility -= cfg.defer_penalty_weight * risk_weight * defer_scale * (1.0 + defer_count)
         if expert_path != "defer":
             utility -= cfg.defer_no_improvement_penalty_weight * risk_weight * (1.0 + semantic_gap + defer_count)
     if semantic_path == "cache_update":
@@ -2393,6 +2602,18 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         utility += cfg.non_cache_semantic_bonus * risk_weight
     if semantic_path in {"cache", "token"} and task_success > 0.0:
         utility += cfg.service_completion_bonus_weight * risk_weight
+    if bool(cfg.bottleneck_aware_control):
+        path_data = _path_metric(obs, semantic_path)
+        path_deadline_bad = path_data and not bool(path_data.get("deadline_feasible", True))
+        if path_deadline_bad and semantic_path in {"token", "image", "cache_update"}:
+            utility -= cfg.bottleneck_deadline_penalty_weight * risk_weight * (1.0 + max(0.0, delay_norm - 1.0))
+        if semantic_path in {"token", "image", "cache_update"} and bool(path_data.get("utm_feasible", True)) and task_success > 0.0:
+            utility += cfg.utm_safe_service_bonus_weight * risk_weight
+        bottleneck = _path_bottleneck(obs, "token")
+        if semantic_path == "cache" and bottleneck in {"queue_delay", "infer_delay", "resource", "tx_delay"} and _path_quality_gap(obs, "cache") <= float(cfg.expert_cache_gap_threshold):
+            utility += cfg.bottleneck_correct_fallback_bonus * risk_weight
+        if semantic_path == "defer" and bottleneck in {"queue_delay", "tx_delay", "mobility", "resource"} and not (_any_service_mobility_joint_feasible(obs) or _any_service_path_joint_feasible(obs)):
+            utility += cfg.bottleneck_correct_fallback_bonus * risk_weight
     if service_level == 1 and semantic_gap > 0.0:
         utility += cfg.semantic_token_exploration_bonus * risk_weight
     if cfg.semantic_reward_mode == "uncertainty_aware":
@@ -2469,6 +2690,10 @@ def _expert_demo_action(env: V19LUTResourceEnv, obs: dict[str, Any], cfg: PPOTra
     path = expert_semantic_path(obs, cfg)
     action = _resource_floor_candidate(env, obs, path, cfg)
     action["uav_assignment"] = _select_uav_assignment(obs, cfg)
+    action["mobility_mode"] = expert_mobility_mode(obs, path, cfg)
+    if action["mobility_mode"] in {"stay", "avoid_conflict"}:
+        action["waypoint_delta"] = [0.0, 0.0]
+        action["altitude_delta"] = 0.0
     if path == "defer":
         action["sensing_decision"] = "expert_defer"
     return env.parse_action(action)
@@ -2517,6 +2742,8 @@ def _demo_sample(env: V19LUTResourceEnv, obs: dict[str, Any], action: dict[str, 
         "service_action": service_idx,
         "service_mask": _plain_service_mask(obs, labels, cfg),
         "resource_target": resource_target,
+        "uav_action": int(action.get("uav_assignment", _select_uav_assignment(obs, cfg))),
+        "mobility_mode_action": MOBILITY_MODES.index(str(action.get("mobility_mode", expert_mobility_mode(obs, str(semantic_path), cfg)))) if str(action.get("mobility_mode", expert_mobility_mode(obs, str(semantic_path), cfg))) in MOBILITY_MODES else 0,
         "expert_semantic_path": str(semantic_path) if isinstance(semantic_path, str) else SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(level), "image"),
     }
 
@@ -2605,12 +2832,10 @@ def _bc_loss_two_timescale(
     if cfg.hybrid_actions:
         loss = loss + cfg.bc_weight * nn.functional.mse_loss(torch.sigmoid(resource_mean), resource_targets)
     if not cfg.no_mobility_actor:
-        target_uav = torch.zeros((len(batch),), dtype=torch.int64, device=device)
-        target_mode = torch.as_tensor(
-            [0 if int(item["service_action"]) == 0 else 1 for item in batch],
-            dtype=torch.int64,
-            device=device,
-        )
+        target_uav = torch.as_tensor([int(item.get("uav_action", 0)) for item in batch], dtype=torch.int64, device=device)
+        target_uav = torch.clamp(target_uav, 0, uav_logits.shape[-1] - 1)
+        target_mode = torch.as_tensor([int(item.get("mobility_mode_action", 0)) for item in batch], dtype=torch.int64, device=device)
+        target_mode = torch.clamp(target_mode, 0, mode_logits.shape[-1] - 1)
         loss = loss + 0.1 * nn.functional.cross_entropy(uav_logits, target_uav)
         loss = loss + 0.1 * nn.functional.cross_entropy(mode_logits, target_mode)
     return loss
@@ -2678,6 +2903,12 @@ def _is_deadline_tight(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
 
 def _resource_floor_for_obs(cfg: PPOTrainConfig, service_level: int, key: str, obs: dict[str, Any]) -> float:
     base = _resource_floor(cfg, service_level, key)
+    if bool(cfg.bottleneck_aware_control) and int(service_level) == 1:
+        bottleneck = _path_bottleneck(obs, "token")
+        if bottleneck == "tx_delay" and key in {"bandwidth", "power"}:
+            return max(base, min(1.0, float(cfg.bottleneck_resource_floor)))
+        if bottleneck in {"queue_delay", "infer_delay", "resource"} and key in {"cpu_share", "gpu_share"}:
+            return max(base, min(1.0, float(cfg.bottleneck_resource_floor)))
     if not bool(cfg.token_fast_resource_projection) or int(service_level) != 1:
         return base
     if not (_is_low_snr(obs, cfg) or _is_deadline_tight(obs, cfg)):

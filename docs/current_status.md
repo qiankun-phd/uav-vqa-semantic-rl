@@ -1895,3 +1895,47 @@ Interpretation:
 - `utm_conflict` keeps UTM violation at 0 but task/semantic success stays 0, suggesting the scenario remains semantic-QoS infeasible under UTM-safe service candidates.
 
 Next Algorithm focus: edge-overload feasible-token/resource floor tuning and UTM semantic feasibility analysis. Do not add more generic defer penalties; the remaining issue is feasible service construction, not defer collapse.
+
+## RL Semantic Path Fix4 2026-06-24 Asia/Shanghai
+
+Algorithm thread implemented fix4 on branch `codex/semantic-path-cache-defer` using Environment bottleneck diagnostics from `448813c analysis(env): diagnose semantic path bottlenecks`. Environment and Semantic Utility were not modified.
+
+Code changes are RL-only:
+
+- Added bottleneck-aware expert routing over `candidate_path_metrics[path].bottleneck_type`.
+- Added mobility-aware expert target using `candidate_mobility_metrics[path][mobility_mode]` for UTM-safe `avoid_conflict`/`stay` selection.
+- Behavior cloning now targets both semantic path and mobility mode.
+- Two-timescale action projection rechecks selected path/mobility feasibility and downgrades deadline-infeasible service paths when possible.
+- Reward now penalizes deadline-infeasible service selection, rewards UTM-safe successful service, and gives small credit to bottleneck-correct fallback under oracle-infeasible tasks.
+- Rollout/summary now report bottleneck distribution, mobility-mode distribution, UTM-safe service ratio, oracle infeasible ratio, and selected mobility feasibility.
+
+Validation/benchmark:
+
+```text
+outputs/rl/semantic_path_cache_defer_fix4_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_fix4_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_fix4_20260624/fix4_comparison.md
+```
+
+Settings: scenarios `normal_patrol`, `disaster_hotspot`, `low_snr_soft`, `low_snr_blockage`, `edge_overload`, `utm_conflict`; seeds `0,1,2`; train episodes `300`; eval episodes `50`; tasks per episode `12`; RA_DI `cuda:0` (`NVIDIA GeForce RTX 4060`).
+
+Fix4 proposed PPO aggregate results:
+
+| scenario | semantic success | task success | deadline vio | UTM vio | oracle infeasible | cache/token/image/defer/cache_update |
+|---|---:|---:|---:|---:|---:|---|
+| normal_patrol | 0.275 | 0.275 | 0.000 | 0.000 | 0.675 | 0.389 / 0.611 / 0.000 / 0.000 / 0.000 |
+| disaster_hotspot | 0.282 | 0.102 | 0.700 | 0.000 | 0.551 | 0.582 / 0.418 / 0.000 / 0.000 / 0.000 |
+| low_snr_soft | 0.372 | 0.318 | 0.145 | 0.000 | 0.507 | 0.347 / 0.651 / 0.000 / 0.002 / 0.000 |
+| low_snr_blockage | 0.822 | 0.276 | 0.610 | 0.000 | 0.604 | 0.427 / 0.573 / 0.000 / 0.000 / 0.000 |
+| edge_overload | 0.440 | 0.103 | 0.517 | 0.000 | 0.439 | 0.344 / 0.656 / 0.000 / 0.000 / 0.000 |
+| utm_conflict | 0.000 | 0.000 | 0.285 | 0.000 | 0.751 | 0.667 / 0.333 / 0.000 / 0.000 / 0.000 |
+
+Interpretation:
+
+- PASS: `normal_patrol` remains stable and no longer falls below fix3; deadline violation stays 0.
+- PASS: `low_snr_soft` remains distinct from and easier than `low_snr_blockage`.
+- PASS: `utm_conflict` keeps UTM violation at 0.000; zero task success is consistent with high oracle infeasible ratio and Environment diagnosis that UTM-safe service candidates are semantically/deadline infeasible.
+- MIXED: `edge_overload` improves task success over fix3 but deadline violation rises. The new bottleneck/oracle diagnostics show this hard preset is near-infeasible rather than a cache_update-overuse failure.
+- PASS: no always-cache, always-token, or always-defer collapse in proposed PPO.
+
+Next Algorithm focus: do not add more scalar penalties. Use calibrated soft stress scenarios (`edge_overload_soft`, `utm_conflict_soft`) or add an explicit value-aware skip/fail action for hard infeasible tasks, while keeping fix4 as the infeasibility-aware hard-scenario diagnostic.

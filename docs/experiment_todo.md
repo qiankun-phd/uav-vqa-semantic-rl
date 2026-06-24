@@ -1015,3 +1015,23 @@ Next tasks:
 4. Experiment hygiene:
    - commit only root summary/report CSV/MD and code/tests/docs;
    - do not commit `.pt`, per-scenario rollout CSV, `run_config.json`, logs, or full traces.
+
+## RL Semantic Path Fix4 Follow-up 2026-06-24
+
+Completed fix4 benchmark at `outputs/rl/semantic_path_cache_defer_fix4_20260624/`.
+
+Outcome:
+
+1. `normal_patrol` is stable again: task success `0.275`, deadline violation `0.000`, no cache/defer collapse.
+2. `low_snr_soft` remains meaningfully easier than `low_snr_blockage`: task success `0.318` vs `0.276`, deadline violation `0.145` vs `0.610`.
+3. `utm_conflict` is safe but infeasible: UTM violation `0.000`, task success `0.000`, oracle infeasible ratio `0.751`.
+4. `edge_overload` is still the main blocker: task success improves to `0.103`, but deadline violation rises to `0.517`; bottleneck/oracle diagnostics indicate hard scenario infeasibility rather than cache_update overuse.
+5. New reports include bottleneck distribution, mobility mode distribution, UTM-safe service ratio, oracle infeasible ratio, and selected mobility feasibility.
+
+Next tasks:
+
+1. Do not keep tightening generic PPO penalties for hard infeasible scenarios.
+2. Add or request calibrated soft presets: `edge_overload_soft` and `utm_conflict_soft`, then run the same fix4 controller there.
+3. Add an explicit skip/fail/reject action for hard-infeasible tasks so the controller can avoid manufacturing deadline violations when oracle feasibility is near zero.
+4. Keep hard `edge_overload` and `utm_conflict` as stress-test diagnostics, not paper headline success scenarios unless Environment feasibility improves.
+5. Commit only code/tests/docs and root-level summary/report CSV/MD files; exclude `.pt`, rollout CSVs, traces, `run_config.json`, and logs.

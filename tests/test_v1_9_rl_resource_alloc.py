@@ -21,6 +21,7 @@ from vqa_semcom.rl.v19_ppo import (
     _resource_floor_for_obs,
     _semantic_controller_reward,
     _semantic_path_allowed,
+    expert_mobility_mode,
     expert_semantic_path,
     normalize_hidden_layers,
     resolve_torch_device,
@@ -668,6 +669,8 @@ class V19SelectedPathMetricsTest(unittest.TestCase):
         self.assertIn("selected_path_deadline_feasible", fields)
         self.assertIn("selected_path_utm_feasible", fields)
         self.assertIn("selected_path_deadline_slack_s", fields)
+        self.assertIn("selected_path_bottleneck_type", fields)
+        self.assertIn("oracle_mobility_joint_feasible", fields)
 
 
 class V19SemanticPathExpertTest(unittest.TestCase):
@@ -689,11 +692,20 @@ class V19SemanticPathExpertTest(unittest.TestCase):
                 },
             },
             "candidate_path_metrics": {
-                "cache": {"cache_eligible": True, "quality_gap": 0.02, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
-                "token": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
-                "image": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
-                "cache_update": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "future_reuse_value": 1, "deadline_slack_s": 1.0},
-                "defer": {"deadline_feasible": True, "joint_feasible": True, "feasible": True},
+                "cache": {"cache_eligible": True, "quality_gap": 0.02, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "token": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "image": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "cache_update": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "future_reuse_value": 1, "deadline_slack_s": 1.0, "bottleneck_type": "none"},
+                "defer": {"deadline_feasible": True, "joint_feasible": True, "feasible": True, "bottleneck_type": "none"},
+            },
+            "candidate_mobility_metrics": {
+                "token": {
+                    "serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+                    "avoid_conflict": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+                    "stay": {"joint_feasible": False, "deadline_feasible": True, "utm_feasible": True},
+                },
+                "image": {"serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True}},
+                "cache_update": {"serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True}},
             },
         }
         obs.update(overrides)
@@ -718,3 +730,27 @@ class V19SemanticPathExpertTest(unittest.TestCase):
         obs["candidate_path_metrics"]["token"]["utm_feasible"] = False
         cfg = PPOTrainConfig(semantic_path_actions=True)
         self.assertNotEqual(expert_semantic_path(obs, cfg), "token")
+
+    def test_bottleneck_queue_prefers_cache_or_defer_over_token(self):
+        obs = self._obs()
+        obs["candidate_path_metrics"]["cache"]["joint_feasible"] = False
+        obs["candidate_path_metrics"]["token"].update(
+            joint_feasible=False,
+            deadline_feasible=False,
+            semantic_feasible=True,
+            bottleneck_type="queue_delay",
+        )
+        obs["candidate_path_metrics"]["cache_update"].update(joint_feasible=False, deadline_feasible=False)
+        obs["candidate_path_metrics"]["image"].update(joint_feasible=False, deadline_feasible=False)
+        cfg = PPOTrainConfig(semantic_path_actions=True, bottleneck_aware_control=True)
+        self.assertIn(expert_semantic_path(obs, cfg), {"cache", "defer"})
+
+    def test_expert_mobility_prefers_avoid_conflict_when_utm_safe(self):
+        obs = self._obs(scenario="utm_conflict")
+        obs["candidate_mobility_metrics"]["token"] = {
+            "serve_task": {"joint_feasible": False, "deadline_feasible": True, "utm_feasible": False},
+            "avoid_conflict": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+            "stay": {"joint_feasible": False, "deadline_feasible": False, "utm_feasible": True},
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True, bottleneck_aware_control=True)
+        self.assertEqual(expert_mobility_mode(obs, "token", cfg), "avoid_conflict")

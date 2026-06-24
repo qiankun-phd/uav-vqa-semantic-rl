@@ -25,6 +25,7 @@ from vqa_semcom.rl.v19_ppo import (
     train_ppo,
     train_two_timescale_ppo,
     expert_semantic_path,
+    expert_mobility_mode,
 )
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv, V19StepRecord
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
@@ -165,6 +166,26 @@ class EvalSummary:
     expert_path_image_ratio: float
     expert_path_defer_ratio: float
     expert_path_cache_update_ratio: float
+    expert_mobility_agreement_rate: float
+    mobility_stay_ratio: float
+    mobility_serve_task_ratio: float
+    mobility_reposition_ratio: float
+    mobility_avoid_conflict_ratio: float
+    mobility_return_base_ratio: float
+    utm_safe_service_ratio: float
+    oracle_path_feasible_ratio: float
+    oracle_mobility_feasible_ratio: float
+    infeasible_oracle_ratio: float
+    selected_mobility_deadline_infeasible_ratio: float
+    selected_mobility_utm_infeasible_ratio: float
+    bottleneck_none_ratio: float
+    bottleneck_semantic_quality_ratio: float
+    bottleneck_queue_delay_ratio: float
+    bottleneck_tx_delay_ratio: float
+    bottleneck_resource_ratio: float
+    bottleneck_mobility_ratio: float
+    bottleneck_utm_ratio: float
+    bottleneck_expired_ratio: float
     average_defer_count: float
     bc_loss: float
     average_reward: float
@@ -242,10 +263,59 @@ def evaluate_policy(
             obs, _reward, done, info = env.step(action)
             record = dict(info["record"])
             expert_path = expert_semantic_path(current_obs)
+            expert_mode = expert_mobility_mode(current_obs, expert_path)
+            selected_path = str(record.get("semantic_path", "cache"))
+            selected_mode = str(record.get("mobility_mode", "stay"))
+            mobility_data = _obs_mobility_metric(current_obs, selected_path, selected_mode)
             record["expert_semantic_path"] = expert_path
             record["expert_path_agreement"] = str(record.get("semantic_path", "")) == expert_path
+            record["expert_mobility_mode"] = expert_mode
+            record["expert_mobility_agreement"] = selected_mode == expert_mode
+            record["oracle_path_joint_feasible"] = _obs_any_path_joint_feasible(current_obs)
+            record["oracle_mobility_joint_feasible"] = _obs_any_mobility_joint_feasible(current_obs)
+            record["selected_mobility_joint_feasible"] = bool(mobility_data.get("joint_feasible", record.get("selected_path_joint_feasible", True)))
+            record["selected_mobility_deadline_feasible"] = bool(mobility_data.get("deadline_feasible", record.get("selected_path_deadline_feasible", True)))
+            record["selected_mobility_utm_feasible"] = bool(mobility_data.get("utm_feasible", record.get("selected_path_utm_feasible", True)))
             records.append(V19StepRecord(**record))
     return records
+
+
+def _obs_path_metrics(obs: dict[str, Any]) -> dict[str, Any]:
+    data = obs.get("candidate_path_metrics", {})
+    return data if isinstance(data, dict) else {}
+
+
+def _obs_mobility_metrics(obs: dict[str, Any]) -> dict[str, Any]:
+    data = obs.get("candidate_mobility_metrics", {})
+    return data if isinstance(data, dict) else {}
+
+
+def _obs_mobility_metric(obs: dict[str, Any], path: str, mode: str) -> dict[str, Any]:
+    path_metrics = _obs_mobility_metrics(obs).get(path, {})
+    if not isinstance(path_metrics, dict):
+        return {}
+    data = path_metrics.get(mode, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _obs_any_path_joint_feasible(obs: dict[str, Any]) -> bool:
+    metrics = _obs_path_metrics(obs)
+    for path in ("cache", "token", "cache_update", "image"):
+        data = metrics.get(path, {})
+        if isinstance(data, dict) and bool(data.get("joint_feasible", data.get("feasible", False))):
+            return True
+    return False
+
+
+def _obs_any_mobility_joint_feasible(obs: dict[str, Any]) -> bool:
+    for path in ("cache", "token", "cache_update", "image"):
+        path_metrics = _obs_mobility_metrics(obs).get(path, {})
+        if not isinstance(path_metrics, dict):
+            continue
+        for data in path_metrics.values():
+            if isinstance(data, dict) and bool(data.get("joint_feasible", False)):
+                return True
+    return False
 
 
 def summarize(
@@ -320,6 +390,26 @@ def summarize(
                 expert_path_image_ratio=round(_expert_path_ratio(records, "image"), 6),
                 expert_path_defer_ratio=round(_expert_path_ratio(records, "defer"), 6),
                 expert_path_cache_update_ratio=round(_expert_path_ratio(records, "cache_update"), 6),
+                expert_mobility_agreement_rate=round(_rate(records, "expert_mobility_agreement"), 6),
+                mobility_stay_ratio=round(_mobility_ratio(records, "stay"), 6),
+                mobility_serve_task_ratio=round(_mobility_ratio(records, "serve_task"), 6),
+                mobility_reposition_ratio=round(_mobility_ratio(records, "reposition"), 6),
+                mobility_avoid_conflict_ratio=round(_mobility_ratio(records, "avoid_conflict"), 6),
+                mobility_return_base_ratio=round(_mobility_ratio(records, "return_base"), 6),
+                utm_safe_service_ratio=round(_utm_safe_service_ratio(records), 6),
+                oracle_path_feasible_ratio=round(_rate(records, "oracle_path_joint_feasible"), 6),
+                oracle_mobility_feasible_ratio=round(_rate(records, "oracle_mobility_joint_feasible"), 6),
+                infeasible_oracle_ratio=round(_false_rate(records, "oracle_mobility_joint_feasible"), 6),
+                selected_mobility_deadline_infeasible_ratio=round(_false_rate(records, "selected_mobility_deadline_feasible"), 6),
+                selected_mobility_utm_infeasible_ratio=round(_false_rate(records, "selected_mobility_utm_feasible"), 6),
+                bottleneck_none_ratio=round(_bottleneck_ratio(records, "none"), 6),
+                bottleneck_semantic_quality_ratio=round(_bottleneck_ratio(records, "semantic_quality"), 6),
+                bottleneck_queue_delay_ratio=round(_bottleneck_ratio(records, "queue_delay"), 6),
+                bottleneck_tx_delay_ratio=round(_bottleneck_ratio(records, "tx_delay"), 6),
+                bottleneck_resource_ratio=round(_bottleneck_ratio(records, "resource"), 6),
+                bottleneck_mobility_ratio=round(_bottleneck_ratio(records, "mobility"), 6),
+                bottleneck_utm_ratio=round(_bottleneck_ratio(records, "utm"), 6),
+                bottleneck_expired_ratio=round(_bottleneck_ratio(records, "expired"), 6),
                 average_defer_count=round(_mean(records, "defer_count"), 6),
                 bc_loss=round(float(bc_loss), 6),
                 average_reward=round(_mean(records, "reward"), 6),
@@ -787,6 +877,26 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "expert_path_image_ratio",
         "expert_path_defer_ratio",
         "expert_path_cache_update_ratio",
+        "expert_mobility_agreement_rate",
+        "mobility_stay_ratio",
+        "mobility_serve_task_ratio",
+        "mobility_reposition_ratio",
+        "mobility_avoid_conflict_ratio",
+        "mobility_return_base_ratio",
+        "utm_safe_service_ratio",
+        "oracle_path_feasible_ratio",
+        "oracle_mobility_feasible_ratio",
+        "infeasible_oracle_ratio",
+        "selected_mobility_deadline_infeasible_ratio",
+        "selected_mobility_utm_infeasible_ratio",
+        "bottleneck_none_ratio",
+        "bottleneck_semantic_quality_ratio",
+        "bottleneck_queue_delay_ratio",
+        "bottleneck_tx_delay_ratio",
+        "bottleneck_resource_ratio",
+        "bottleneck_mobility_ratio",
+        "bottleneck_utm_ratio",
+        "bottleneck_expired_ratio",
         "average_defer_count",
         "bc_loss",
     ]
@@ -995,6 +1105,25 @@ def _expert_path_ratio(records: list[V19StepRecord], path_name: str) -> float:
     return sum(float(str(record.expert_semantic_path) == str(path_name)) for record in records) / len(records)
 
 
+def _mobility_ratio(records: list[V19StepRecord], mode_name: str) -> float:
+    if not records:
+        return 0.0
+    return sum(float(str(record.mobility_mode) == str(mode_name)) for record in records) / len(records)
+
+
+def _bottleneck_ratio(records: list[V19StepRecord], bottleneck_name: str) -> float:
+    if not records:
+        return 0.0
+    return sum(float(str(getattr(record, "selected_path_bottleneck_type", "")) == str(bottleneck_name)) for record in records) / len(records)
+
+
+def _utm_safe_service_ratio(records: list[V19StepRecord]) -> float:
+    service_records = [record for record in records if str(record.semantic_path) in {"token", "image", "cache_update"}]
+    if not service_records:
+        return 0.0
+    return sum(float(bool(record.selected_mobility_utm_feasible)) for record in service_records) / len(service_records)
+
+
 def _final_trace_metric(trace: list[dict[str, float]] | None, key: str) -> float:
     if not trace:
         return 0.0
@@ -1073,24 +1202,26 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | joint feasible sel | deadline infeasible sel | UTM infeasible sel | expert agreement | bc loss | defer count | path cache | path token | path image | defer | cache update |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | delay | energy | payload KB | deadline vio | UTM conflict | oracle infeasible | UTM-safe service | mobility avoid | mobility stay | bottleneck semantic | bottleneck queue | bottleneck tx | bottleneck mobility | joint feasible sel | deadline infeasible sel | UTM infeasible sel | expert path agree | expert mobility agree | path cache/token/image/defer/update |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
             f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
             f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'task_success_rate'):.3f} | "
             f"{_metric(row, 'average_accuracy'):.3f} | {_metric(row, 'average_semantic_quality_gap'):.3f} | "
-            f"{_metric(row, 'average_q_quality'):.3f} | {_metric(row, 'average_q_deadline'):.3f} | "
-            f"{_metric(row, 'average_q_defer'):.3f} | {_metric(row, 'average_q_cache_stale'):.3f} | "
             f"{_metric(row, 'average_delay'):.3f} | {_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
-            f"{_metric(row, 'cache_eligible_ratio'):.3f} | {_metric(row, 'joint_feasible_selection_ratio'):.3f} | "
+            f"{_metric(row, 'infeasible_oracle_ratio'):.3f} | {_metric(row, 'utm_safe_service_ratio'):.3f} | "
+            f"{_metric(row, 'mobility_avoid_conflict_ratio'):.3f} | {_metric(row, 'mobility_stay_ratio'):.3f} | "
+            f"{_metric(row, 'bottleneck_semantic_quality_ratio'):.3f} | {_metric(row, 'bottleneck_queue_delay_ratio'):.3f} | "
+            f"{_metric(row, 'bottleneck_tx_delay_ratio'):.3f} | {_metric(row, 'bottleneck_mobility_ratio'):.3f} | "
+            f"{_metric(row, 'joint_feasible_selection_ratio'):.3f} | "
             f"{_metric(row, 'deadline_infeasible_selection_ratio'):.3f} | {_metric(row, 'utm_infeasible_selection_ratio'):.3f} | "
-            f"{_metric(row, 'expert_path_agreement_rate'):.3f} | {_metric(row, 'bc_loss'):.3f} | {_metric(row, 'average_defer_count'):.3f} | "
-            f"{_metric(row, 'semantic_path_cache_ratio'):.3f} | "
-            f"{_metric(row, 'semantic_path_token_ratio'):.3f} | {_metric(row, 'semantic_path_image_ratio'):.3f} | "
-            f"{_metric(row, 'semantic_path_defer_ratio'):.3f} | {_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"
+            f"{_metric(row, 'expert_path_agreement_rate'):.3f} | {_metric(row, 'expert_mobility_agreement_rate'):.3f} | "
+            f"{_metric(row, 'semantic_path_cache_ratio'):.3f}/{_metric(row, 'semantic_path_token_ratio'):.3f}/"
+            f"{_metric(row, 'semantic_path_image_ratio'):.3f}/{_metric(row, 'semantic_path_defer_ratio'):.3f}/"
+            f"{_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"
         )
     lines.extend(
         [
