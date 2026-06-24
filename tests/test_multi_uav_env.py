@@ -513,7 +513,54 @@ class MultiUAVEnvTest(unittest.TestCase):
             self.assertIn("deadline_slack_s", data)
             self.assertIn("cache_eligible", data)
             self.assertIn("utm_constraint_violation", data)
+            self.assertIn("deadline_feasible", data)
+            self.assertIn("semantic_feasible", data)
+            self.assertIn("energy_feasible", data)
+            self.assertIn("utm_feasible", data)
+            self.assertIn("joint_feasible", data)
+            self.assertEqual(data["feasible"], data["joint_feasible"])
             self.assertEqual(data["semantic_path"], path)
+
+    def test_expired_task_paths_are_not_feasible_or_served(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.expired = True
+        task.task_status = "expired"
+        metrics = env.candidate_path_metrics(task)
+        for path in ("cache", "token", "image", "cache_update"):
+            self.assertFalse(metrics[path]["joint_feasible"])
+        info = env.evaluate_action({"task_id": task.task_id, "semantic_path": "token"}, task_id=task.task_id)
+        self.assertFalse(info["success"])
+        self.assertTrue(info["expired"])
+        self.assertEqual(info["task_status"], "expired")
+
+    def test_defer_is_infeasible_when_deadline_would_expire(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.tau_k = 0.5 * float(env.env_cfg["slot_s"])
+        metrics = env.candidate_path_metrics(task)
+        self.assertFalse(metrics["defer"]["deadline_feasible"])
+        self.assertFalse(metrics["defer"]["joint_feasible"])
+
+    def test_utm_conflict_paths_report_not_joint_feasible(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        task = next(
+            item
+            for item in env._active_tasks()
+            if env.evaluate_action({"task_id": item.task_id, "semantic_path": "token"}, task_id=item.task_id)[
+                "utm_conflict_violation"
+            ]
+        )
+        metrics = env.candidate_path_metrics(task)
+        self.assertFalse(metrics["token"]["utm_feasible"])
+        self.assertFalse(metrics["token"]["joint_feasible"])
+        self.assertFalse(metrics["cache_update"]["utm_feasible"])
+        self.assertFalse(metrics["cache_update"]["joint_feasible"])
 
     def test_action_contract_keeps_service_three_disabled_by_default(self) -> None:
         env = self._env()
@@ -536,6 +583,7 @@ class MultiUAVEnvTest(unittest.TestCase):
         expected = {
             "nominal_patrol",
             "disaster_hotspot",
+            "low_snr_soft",
             "low_snr_blockage",
             "edge_overload",
             "utm_conflict",
@@ -569,6 +617,23 @@ class MultiUAVEnvTest(unittest.TestCase):
                 places=6,
             )
             self.assertNotIn(3, env.service_levels())
+
+    def test_low_snr_soft_is_distinct_from_hard_blockage(self) -> None:
+        env = self._env()
+        soft = env.reset(seed=5, options={"scenario": "low_snr_soft"})
+        soft_cfg = dict(env.env_cfg)
+        hard = env.reset(seed=5, options={"scenario": "low_snr_blockage"})
+        hard_cfg = dict(env.env_cfg)
+        self.assertEqual(soft["scenario"], "low_snr_soft")
+        self.assertNotEqual(soft_cfg["area_spacing_m"], hard_cfg["area_spacing_m"])
+        self.assertGreater(soft_cfg["bandwidth_hz"], hard_cfg["bandwidth_hz"])
+        self.assertLess(soft_cfg["a2g"]["excess_loss_db"], hard_cfg["a2g"]["excess_loss_db"])
+        self.assertLess(soft_cfg["a2g"]["nlos_excess_loss_db"], hard_cfg["a2g"]["nlos_excess_loss_db"])
+
+    def test_normal_patrol_alias_maps_to_nominal_patrol(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5, options={"scenario": "normal_patrol"})
+        self.assertEqual(obs["scenario"], "nominal_patrol")
 
     def test_paper_scenario_presets_have_distinct_stress_knobs(self) -> None:
         disaster = self._env()
