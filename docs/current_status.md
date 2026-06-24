@@ -1297,3 +1297,78 @@ Notes:
 - GPU use was confirmed during training through logs and `nvidia-smi`.
 - Empty rollout/result CSVs produced by the runner are not used for analysis and should remain uncommitted.
 - Model checkpoints and per-run training traces are left uncommitted; only the root training summary is committed.
+
+## State Vector / MLP Rollout Evaluation 2026-06-24 Asia/Shanghai
+
+Evaluated the two 128x128 candidates from the train-only ablation without retraining:
+
+```text
+A: state_v1 + hidden_layers=128,128
+B: state_v2 + hidden_layers=128,128
+```
+
+Implementation / evaluation commit:
+
+```text
+e73fbbe exp(rl): evaluate state vector mlp checkpoints
+```
+
+Output directory:
+
+```text
+outputs/rl/state_mlp_ablation_eval_20260624/
+```
+
+Evaluation settings:
+
+```text
+scenarios: nominal_patrol, disaster_hotspot, low_snr_blockage, edge_overload, utm_conflict
+seeds: 0,1,2,3,4
+episodes: 50
+tasks per episode: 12
+device: cuda:0
+training: disabled, checkpoint loaded via --load-ppo-model
+```
+
+Checkpoint mapping note:
+
+- Matching scenario checkpoints are used for `disaster_hotspot`, `low_snr_blockage`, and `edge_overload`.
+- `nominal_patrol` and `utm_conflict` use the same candidate/seed `edge_overload` checkpoint as unseen-scenario transfer tests.
+- Eval seeds 3 and 4 reuse checkpoint seeds 0 and 1 because train-only ablation produced seed 0,1,2 checkpoints.
+
+Completion:
+
+```text
+completed eval runs: 50/50
+failed or missing runs: 0
+```
+
+Artifacts:
+
+```text
+outputs/rl/state_mlp_ablation_eval_20260624/eval_summary.md
+outputs/rl/state_mlp_ablation_eval_20260624/eval_summary_by_scenario.csv
+outputs/rl/state_mlp_ablation_eval_20260624/eval_all_seed_results.csv
+```
+
+Headline rollout results:
+
+- Overall A: semantic success 0.383, task success 0.155, semantic gap 0.184, delay 13.101 s, deadline violation 0.535, payload 2.377 KB.
+- Overall B: semantic success 0.385, task success 0.188, semantic gap 0.180, delay 13.543 s, deadline violation 0.540, payload 1.222 KB.
+- `edge_overload` is the strongest V2 case: task success improves from 0.543 to 0.721 and deadline violation drops from 0.207 to 0.000.
+- `nominal_patrol` and `utm_conflict` transfer remain weaker for V2, suggesting the V2 feature schema needs fixed canonical normalization/layout before becoming the paper default.
+
+Validation:
+
+```text
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9*.py'
+Ran 21 tests OK
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+Ran 96 tests OK
+```
+
+Notes:
+
+- A small inference fix pads/truncates observation vectors to the checkpoint encoder input dimension when loading a PPO model. This is needed because state_v2 currently has scenario-dependent mask/mobility metadata length.
+- No model checkpoint, rollout CSV, stdout/stderr log, or large trace file should be committed for this evaluation.
+
