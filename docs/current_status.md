@@ -1600,3 +1600,48 @@ Validation target:
 ```text
 /home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
 ```
+
+## Semantic Path Cache/Defer Env Interface 2026-06-24 Asia/Shanghai
+
+Environment-thread update on branch `codex/semantic-path-cache-defer` upgrades the canonical multi-UAV environment interface from service-level-only decisions to a semantic path queue model. PPO training logic is intentionally unchanged.
+
+Canonical implementation:
+
+```text
+src/vqa_semcom/sim/multi_uav_env.py
+```
+
+New control-facing path schema:
+
+```text
+semantic_path in {cache, token, image, defer, cache_update}
+cache -> service_level 0
+token -> service_level 1
+image -> service_level 2
+cache_update -> service_level 1 token-evidence cache refresh
+```
+
+Task queue state is now explicit:
+
+```text
+task_status in {pending, served, deferred, expired}
+remaining_deadline_s
+defer_count
+expired
+```
+
+Semantic cache eligibility is now explicit rather than only a probability proxy:
+
+```text
+cache_exact_match
+cache_nearby_match
+cache_eligible
+cache_quality_lcb
+cache_age
+cache_freshness_bin
+cache_hit_probability
+```
+
+`cache_eligible=True` requires an exact or nearby same-type semantic cache entry, non-expired freshness, and `cache_quality_lcb >= epsilon_k`. Expired or low-quality cache entries can still appear in diagnostics, but they cannot satisfy cache-route semantic QoS.
+
+Observations now expose `candidate_path_metrics` for `cache/token/image/defer/cache_update`, with feasibility, accuracy LCB/mean, semantic quality gap, payload, delay, energy, deadline slack, cache eligibility, and UTM constraint violation. `defer` keeps the task in the queue and consumes deadline; `cache_update` maps to token evidence and writes or refreshes semantic cache after successful service.
