@@ -232,7 +232,7 @@ class PPOTrainConfig:
     token_cache_fallback_overrun_ratio: float = 1.25
     semantic_path_actions: bool = False
     cache_collapse_window_penalty_weight: float = 8.0
-    defer_penalty_weight: float = 1.5
+    defer_penalty_weight: float = 3.0
     defer_queue_weight: float = 0.8
     cache_stale_queue_weight: float = 1.2
     cache_update_success_bonus: float = 1.0
@@ -249,9 +249,20 @@ class PPOTrainConfig:
     utm_violation_strong_penalty_weight: float = 40.0
     edge_overload_deadline_queue_boost: float = 3.5
     edge_cache_quality_gap_prefer_threshold: float = 0.04
-    semantic_path_strict_joint_paths: bool = True
+    semantic_path_strict_joint_paths: bool = False
     utm_risk_avoid_threshold: float = 0.35
     projected_deadline_downgrade: bool = True
+    expert_bc_steps: int = 1000
+    expert_cache_gap_threshold: float = 0.05
+    expert_defer_min_remaining_deadline_s: float = 0.50
+    expert_defer_max_count: int = 1
+    expert_logit_bonus: float = 5.0
+    joint_feasible_logit_bonus: float = 2.0
+    deadline_infeasible_logit_penalty: float = 5.0
+    defer_logit_penalty: float = 4.0
+    task_success_reward_weight: float = 10.0
+    service_completion_bonus_weight: float = 3.0
+    defer_no_improvement_penalty_weight: float = 5.0
 
 
 @dataclass
@@ -424,6 +435,7 @@ class TwoTimescalePPOPolicy:
             action_labels = _semantic_action_labels(self.env, self.cfg)
             mask = _service_mask_tensor(obs, action_labels, service_logits.device, self.cfg)
             service_logits = _apply_service_mask(service_logits, mask)
+            service_logits = _apply_semantic_path_bias(service_logits, obs, action_labels, self.cfg)
             if deterministic:
                 service_idx = int(torch.argmax(service_logits, dim=-1).item())
                 raw_resources = resource_mean.squeeze(0)
@@ -460,6 +472,7 @@ class PPOServicePolicy:
             action_labels = _semantic_action_labels(self.env, self.cfg)
             mask = _service_mask_tensor(obs, action_labels, logits.device, self.cfg)
             logits = _apply_service_mask(logits, mask)
+            logits = _apply_semantic_path_bias(logits, obs, action_labels, self.cfg)
             if deterministic:
                 action_index = int(torch.argmax(logits, dim=-1).item())
                 raw_resources = resource_mean.squeeze(0)
@@ -532,6 +545,13 @@ def train_ppo(
             "path_image_ratio": float(_mean(rollout["path_image_actions"])),
             "path_defer_ratio": float(_mean(rollout["path_defer_actions"])),
             "path_cache_update_ratio": float(_mean(rollout["path_cache_update_actions"])),
+            "expert_agreement": float(_mean(rollout["expert_path_agreements"])),
+            "expert_path_cache_ratio": float(_mean(rollout["expert_path_cache_actions"])),
+            "expert_path_token_ratio": float(_mean(rollout["expert_path_token_actions"])),
+            "expert_path_image_ratio": float(_mean(rollout["expert_path_image_actions"])),
+            "expert_path_defer_ratio": float(_mean(rollout["expert_path_defer_actions"])),
+            "expert_path_cache_update_ratio": float(_mean(rollout["expert_path_cache_update_actions"])),
+            "mean_defer_count": float(_mean(rollout["defer_counts"])),
             "max_q_quality": float(max(rollout["q_quality"] or [0.0])),
             "max_q_deadline": float(max(rollout["q_deadline"] or [0.0])),
             "max_q_energy": float(max(rollout["q_energy"] or [0.0])),
@@ -793,6 +813,13 @@ def _collect_episode(
         "path_image_actions": [],
         "path_defer_actions": [],
         "path_cache_update_actions": [],
+        "expert_path_agreements": [],
+        "expert_path_cache_actions": [],
+        "expert_path_token_actions": [],
+        "expert_path_image_actions": [],
+        "expert_path_defer_actions": [],
+        "expert_path_cache_update_actions": [],
+        "defer_counts": [],
         "non_cache_actions": [],
         "bandwidth_shares": [],
         "power_w": [],
@@ -807,6 +834,7 @@ def _collect_episode(
         logits, resource_mean, resource_log_std, value = model(obs_tensor)
         mask = _service_mask_tensor(obs, action_labels, logits.device, cfg)
         masked_logits = _apply_service_mask(logits, mask)
+        masked_logits = _apply_semantic_path_bias(masked_logits, obs, action_labels, cfg)
         service_dist = Categorical(logits=masked_logits)
         action_idx = service_dist.sample()
         resource_dist = Normal(resource_mean, resource_log_std.exp())
@@ -868,6 +896,14 @@ def _collect_episode(
         rollout["path_image_actions"].append(float(semantic_path == "image"))
         rollout["path_defer_actions"].append(float(semantic_path == "defer"))
         rollout["path_cache_update_actions"].append(float(semantic_path == "cache_update"))
+        expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else semantic_path
+        rollout["expert_path_agreements"].append(float(semantic_path == expert_path))
+        rollout["expert_path_cache_actions"].append(float(expert_path == "cache"))
+        rollout["expert_path_token_actions"].append(float(expert_path == "token"))
+        rollout["expert_path_image_actions"].append(float(expert_path == "image"))
+        rollout["expert_path_defer_actions"].append(float(expert_path == "defer"))
+        rollout["expert_path_cache_update_actions"].append(float(expert_path == "cache_update"))
+        rollout["defer_counts"].append(float(info.get("defer_count", obs.get("defer_count", 0))))
         rollout["non_cache_actions"].append(float(semantic_path != "cache"))
         rollout["bandwidth_shares"].append(float(action["bandwidth"]) if float(action["bandwidth"]) <= 1.0 else float(action["bandwidth"]) / max(1.0, env.base_bandwidth_hz))
         rollout["power_w"].append(float(action["power"]))
@@ -961,6 +997,7 @@ def _collect_two_timescale_episode(
 
         mask = _service_mask_tensor(obs, action_labels, service_logits.device, cfg)
         masked_logits = _apply_service_mask(service_logits, mask)
+        masked_logits = _apply_semantic_path_bias(masked_logits, obs, action_labels, cfg)
         service_dist = Categorical(logits=masked_logits)
         action_idx = service_dist.sample()
         resource_dist = Normal(resource_mean, resource_log_std.exp())
@@ -976,7 +1013,7 @@ def _collect_two_timescale_episode(
         shaped_reward = semantic_reward + mobility_reward
         shaped_reward = shaped_reward - dual.penalty(info) if cfg.constrained else shaped_reward
 
-        _append_common_rollout(rollout, obs, action_idx, mask, raw_resource, log_prob, value, shaped_reward, semantic_reward, raw_reward, done, info, action)
+        _append_common_rollout(rollout, obs, action_idx, mask, raw_resource, log_prob, value, shaped_reward, semantic_reward, raw_reward, done, info, action, cfg)
         rollout["uav_actions"].append(int(uav_idx))
         rollout["mobility_mode_actions"].append(int(mode_idx))
         rollout["mobility_raw_actions"].append(raw_mobility.squeeze(0).detach().cpu().tolist())
@@ -1039,6 +1076,13 @@ def _empty_rollout() -> dict[str, list[Any]]:
         "path_image_actions": [],
         "path_defer_actions": [],
         "path_cache_update_actions": [],
+        "expert_path_agreements": [],
+        "expert_path_cache_actions": [],
+        "expert_path_token_actions": [],
+        "expert_path_image_actions": [],
+        "expert_path_defer_actions": [],
+        "expert_path_cache_update_actions": [],
+        "defer_counts": [],
         "non_cache_actions": [],
         "bandwidth_shares": [],
         "power_w": [],
@@ -1061,6 +1105,7 @@ def _append_common_rollout(
     done: bool,
     info: dict[str, Any],
     action: dict[str, Any],
+    cfg: PPOTrainConfig,
 ) -> None:
     risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
     quality_cost = float(bool(info.get("quality_violation", False)))
@@ -1102,6 +1147,14 @@ def _append_common_rollout(
     rollout["path_image_actions"].append(float(semantic_path == "image"))
     rollout["path_defer_actions"].append(float(semantic_path == "defer"))
     rollout["path_cache_update_actions"].append(float(semantic_path == "cache_update"))
+    expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else semantic_path
+    rollout["expert_path_agreements"].append(float(semantic_path == expert_path))
+    rollout["expert_path_cache_actions"].append(float(expert_path == "cache"))
+    rollout["expert_path_token_actions"].append(float(expert_path == "token"))
+    rollout["expert_path_image_actions"].append(float(expert_path == "image"))
+    rollout["expert_path_defer_actions"].append(float(expert_path == "defer"))
+    rollout["expert_path_cache_update_actions"].append(float(expert_path == "cache_update"))
+    rollout["defer_counts"].append(float(info.get("defer_count", obs.get("defer_count", 0))))
     rollout["non_cache_actions"].append(float(semantic_path != "cache"))
     rollout["bandwidth_shares"].append(float(action["bandwidth"]) if float(action["bandwidth"]) <= 1.0 else float(action["bandwidth"]) / max(1.0, float(info.get("bandwidth_hz", 1.0))))
     rollout["power_w"].append(float(action["power"]))
@@ -1143,6 +1196,13 @@ def _trace_row_from_rollout(
         "path_image_ratio": float(_mean(rollout["path_image_actions"])),
         "path_defer_ratio": float(_mean(rollout["path_defer_actions"])),
         "path_cache_update_ratio": float(_mean(rollout["path_cache_update_actions"])),
+        "expert_agreement": float(_mean(rollout["expert_path_agreements"])),
+        "expert_path_cache_ratio": float(_mean(rollout["expert_path_cache_actions"])),
+        "expert_path_token_ratio": float(_mean(rollout["expert_path_token_actions"])),
+        "expert_path_image_ratio": float(_mean(rollout["expert_path_image_actions"])),
+        "expert_path_defer_ratio": float(_mean(rollout["expert_path_defer_actions"])),
+        "expert_path_cache_update_ratio": float(_mean(rollout["expert_path_cache_update_actions"])),
+        "mean_defer_count": float(_mean(rollout["defer_counts"])),
         "max_q_quality": float(max(rollout["q_quality"] or [0.0])),
         "max_q_deadline": float(max(rollout["q_deadline"] or [0.0])),
         "max_q_energy": float(max(rollout["q_energy"] or [0.0])),
@@ -1849,7 +1909,10 @@ def _projected_deadline_downgrade_action(
         "defer": (),
     }.get(current_path, ("token", "cache", "defer"))
     current_gap = _semantic_gap(info, obs)
+    expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else ""
     for path in downgrade_order:
+        if path == "defer" and expert_path != "defer":
+            continue
         if not _semantic_path_allowed(obs, path, cfg):
             continue
         candidate = _resource_floor_candidate(env, obs, path, cfg)
@@ -1985,6 +2048,139 @@ def _path_quality_gap(obs: dict[str, Any], path: str) -> float:
     return max(0.0, epsilon - float(data.get("accuracy_lcb", 0.0)))
 
 
+def _is_expired_task(obs: dict[str, Any]) -> bool:
+    return bool(obs.get("expired", False)) or str(obs.get("task_status", "")).lower() == "expired"
+
+
+def _cache_eligible_for_obs(obs: dict[str, Any]) -> bool:
+    data = _path_metric(obs, "cache")
+    return bool(data.get("cache_eligible", obs.get("cache_eligible", False)))
+
+
+def _hard_path_forbidden(obs: dict[str, Any], path: str, cfg: PPOTrainConfig) -> bool:
+    mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
+    allowed = mask.get("semantic_path_allowed", {}) if isinstance(mask.get("semantic_path_allowed", {}), dict) else {}
+    if not bool(allowed.get(path, True)):
+        return True
+    if _is_expired_task(obs):
+        return path != "cache"
+    data = _path_metric(obs, path)
+    has_metric = bool(data)
+    if path == "cache":
+        return not _cache_eligible_for_obs(obs)
+    if path == "defer":
+        return False
+    if path not in {"token", "image", "cache_update"}:
+        return False
+    if not _service_allowed(obs, int(SEMANTIC_PATH_TO_SERVICE_LEVEL.get(path, 0))):
+        return True
+    if has_metric:
+        if not bool(data.get("utm_feasible", True)):
+            return True
+        if not bool(data.get("resource_feasible", True)):
+            return True
+        if not bool(data.get("energy_feasible", True)) and str(obs.get("formal_scenario", obs.get("scenario", ""))) == "utm_conflict":
+            return True
+    if path == "cache_update" and not _cache_update_gate_ok(obs, cfg):
+        return True
+    return False
+
+
+def _defer_last_resort_open(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    if _is_expired_task(obs):
+        return False
+    data = _path_metric(obs, "defer")
+    remaining = float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 0.0))))
+    if remaining < float(cfg.expert_defer_min_remaining_deadline_s):
+        return False
+    if int(obs.get("defer_count", 0)) >= int(cfg.expert_defer_max_count):
+        return False
+    if not bool(data.get("feasible", data.get("defer_feasible", data.get("deadline_feasible", True)))):
+        return False
+    saw_service = False
+    for path in ("cache", "token", "cache_update", "image"):
+        if _hard_path_forbidden(obs, path, cfg):
+            continue
+        saw_service = True
+        if bool(_path_metric(obs, path).get("deadline_feasible", True)):
+            return False
+    return saw_service
+
+
+def expert_semantic_path(obs: dict[str, Any], cfg: PPOTrainConfig | None = None) -> str:
+    cfg = cfg or PPOTrainConfig(semantic_path_actions=True)
+    if _is_expired_task(obs):
+        return "cache"
+    for path in ("token", "cache", "cache_update", "image", "defer"):
+        if path == "defer":
+            if _defer_last_resort_open(obs, cfg) and bool(_path_metric(obs, "defer").get("joint_feasible", True)):
+                return "defer"
+            continue
+        if _hard_path_forbidden(obs, path, cfg):
+            continue
+        if bool(_path_metric(obs, path).get("joint_feasible", _path_metric(obs, path).get("feasible", False))):
+            return path
+    for path in ("cache", "token", "cache_update", "image"):
+        if _hard_path_forbidden(obs, path, cfg):
+            continue
+        data = _path_metric(obs, path)
+        if bool(data.get("deadline_feasible", True)) and bool(data.get("semantic_feasible", True)):
+            return path
+    if _cache_eligible_for_obs(obs) and _path_quality_gap(obs, "cache") <= float(cfg.expert_cache_gap_threshold):
+        return "cache"
+    if _is_edge_overload_obs(obs, cfg):
+        if not _hard_path_forbidden(obs, "token", cfg) and bool(_path_metric(obs, "token").get("deadline_feasible", False)):
+            return "token"
+        if _cache_eligible_for_obs(obs) and _path_quality_gap(obs, "cache") <= max(float(cfg.expert_cache_gap_threshold), float(cfg.edge_cache_quality_gap_prefer_threshold)):
+            return "cache"
+    if str(obs.get("formal_scenario", obs.get("scenario", ""))).lower() == "utm_conflict":
+        if not _hard_path_forbidden(obs, "token", cfg) and bool(_path_metric(obs, "token").get("utm_feasible", False)) and bool(_path_metric(obs, "token").get("deadline_feasible", False)):
+            return "token"
+        if _cache_eligible_for_obs(obs) and _path_quality_gap(obs, "cache") <= float(cfg.expert_cache_gap_threshold):
+            return "cache"
+    if _defer_last_resort_open(obs, cfg):
+        return "defer"
+    for path in ("token", "cache", "cache_update", "image"):
+        if not _hard_path_forbidden(obs, path, cfg):
+            return path
+    return "cache"
+
+
+def _semantic_path_logit_biases(obs: dict[str, Any], action_labels: list[Any] | tuple[Any, ...], cfg: PPOTrainConfig) -> list[float]:
+    if not bool(cfg.semantic_path_actions):
+        return [0.0 for _ in action_labels]
+    expert_path = expert_semantic_path(obs, cfg)
+    biases: list[float] = []
+    for choice in action_labels:
+        path, _level = _semantic_choice_to_path_level(choice)
+        data = _path_metric(obs, path)
+        bias = 0.0
+        if path == expert_path:
+            bias += float(cfg.expert_logit_bonus)
+        if bool(data.get("joint_feasible", data.get("feasible", False))):
+            bias += float(cfg.joint_feasible_logit_bonus)
+        if data and not bool(data.get("deadline_feasible", True)):
+            bias -= float(cfg.deadline_infeasible_logit_penalty)
+        if path == "defer" and expert_path != "defer":
+            bias -= float(cfg.defer_logit_penalty)
+        if _is_edge_overload_obs(obs, cfg):
+            if path == "token" and bool(data.get("deadline_feasible", False)):
+                bias += 2.5
+            if path == "cache_update":
+                bias -= float(cfg.cache_update_overuse_penalty_weight)
+        biases.append(float(bias))
+    return biases
+
+
+def _apply_semantic_path_bias(logits: Any, obs: dict[str, Any], action_labels: list[Any] | tuple[Any, ...], cfg: PPOTrainConfig) -> Any:
+    if not bool(cfg.semantic_path_actions):
+        return logits
+    bias = torch.as_tensor(_semantic_path_logit_biases(obs, action_labels, cfg), dtype=logits.dtype, device=logits.device).unsqueeze(0)
+    if logits.shape[0] != 1:
+        bias = bias.expand_as(logits)
+    return logits + bias
+
+
 def _edge_load_pressure(obs: dict[str, Any]) -> float:
     loads = obs.get("edge_load", [])
     if isinstance(loads, (list, tuple)) and loads:
@@ -2066,51 +2262,33 @@ def _cache_update_gate_ok(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
 
 
 def _semantic_path_allowed(obs: dict[str, Any], path: str, cfg: PPOTrainConfig) -> bool:
-    mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
-    allowed = mask.get("semantic_path_allowed", {}) if isinstance(mask.get("semantic_path_allowed", {}), dict) else {}
-    if not bool(allowed.get(path, True)):
+    if _hard_path_forbidden(obs, path, cfg):
         return False
-    metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
-    data = _path_metric(obs, path)
-    has_metric = path in metrics and bool(data)
-    edge_overload = _is_edge_overload_obs(obs, cfg)
-    if path == "cache":
-        cache_ok = bool(data.get("cache_eligible", obs.get("cache_eligible", False)))
-        if edge_overload and cache_ok:
-            return _path_quality_gap(obs, "cache") <= float(cfg.edge_cache_quality_gap_prefer_threshold)
-        return cache_ok
     if path == "defer":
-        if bool(obs.get("expired", False)):
+        return _defer_last_resort_open(obs, cfg)
+    if path == "cache":
+        if _is_edge_overload_obs(obs, cfg):
+            return _path_quality_gap(obs, "cache") <= max(float(cfg.expert_cache_gap_threshold), float(cfg.edge_cache_quality_gap_prefer_threshold))
+        return _cache_eligible_for_obs(obs)
+    data = _path_metric(obs, path)
+    edge_overload = _is_edge_overload_obs(obs, cfg)
+    if path == "token":
+        if edge_overload and data and not bool(data.get("deadline_feasible", True)):
             return False
-        remaining = float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 1.0))))
-        if remaining <= 0.25:
+        return True
+    if path == "image":
+        if data and not bool(data.get("joint_feasible", data.get("feasible", False))):
             return False
-        return bool(data.get("feasible", True))
-    if path in {"token", "image", "cache_update"}:
-        level = SEMANTIC_PATH_TO_SERVICE_LEVEL[path]
-        if not _service_allowed(obs, level):
+        return True
+    if path == "cache_update":
+        if not _cache_update_gate_ok(obs, cfg):
             return False
-        if has_metric:
-            if not bool(data.get("utm_feasible", True)):
-                return False
-            if not bool(data.get("resource_feasible", True)):
-                return False
-            if path in {"image", "cache_update"} and not bool(data.get("joint_feasible", data.get("feasible", True))):
-                return False
-            if path == "token" and edge_overload and not bool(data.get("deadline_feasible", True)):
-                return False
-            if bool(cfg.semantic_path_strict_joint_paths) and path == "token":
-                if not bool(data.get("semantic_feasible", True)):
-                    return False
-                if edge_overload and not bool(data.get("deadline_feasible", True)):
-                    return False
-        if edge_overload and path in {"token", "cache_update"}:
+        if edge_overload:
             if _path_deadline_slack_s(obs, path) <= float(cfg.edge_overload_deadline_slack_margin_s):
                 return False
-        if path == "cache_update" and not _cache_update_gate_ok(obs, cfg):
             return False
+        return bool(data.get("joint_feasible", data.get("feasible", True)))
     return True
-
 
 def _service_allowed(obs: dict[str, Any], level: int) -> bool:
     mask_data = obs.get("action_mask", {}).get("service_level_allowed", {})
@@ -2186,12 +2364,16 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         + cfg.semantic_accuracy_weight * risk_weight * accuracy
         + cfg.semantic_margin_weight * risk_weight * max(0.0, margin)
         - cfg.semantic_gap_weight * risk_weight * semantic_gap
-        + 0.5 * cfg.semantic_success_weight * risk_weight * task_success
+        + cfg.task_success_reward_weight * risk_weight * task_success
         - resource_cost
         + deadline_slack_bonus
     )
     if semantic_path == "defer":
-        utility -= cfg.defer_penalty_weight * risk_weight * (1.0 + float(info.get("defer_count", obs.get("defer_count", 0))))
+        defer_count = float(info.get("defer_count", obs.get("defer_count", 0)))
+        expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else "defer"
+        utility -= cfg.defer_penalty_weight * risk_weight * (1.0 + defer_count)
+        if expert_path != "defer":
+            utility -= cfg.defer_no_improvement_penalty_weight * risk_weight * (1.0 + semantic_gap + defer_count)
     if semantic_path == "cache_update":
         gate_ok = _cache_update_gate_ok(obs, cfg)
         if semantic_success > 0.0 and gate_ok:
@@ -2209,6 +2391,8 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
             utility -= cfg.cache_utm_penalty_weight * cache_multiplier * semantic_gap
     elif service_level > 0 and semantic_success > 0.0:
         utility += cfg.non_cache_semantic_bonus * risk_weight
+    if semantic_path in {"cache", "token"} and task_success > 0.0:
+        utility += cfg.service_completion_bonus_weight * risk_weight
     if service_level == 1 and semantic_gap > 0.0:
         utility += cfg.semantic_token_exploration_bonus * risk_weight
     if cfg.semantic_reward_mode == "uncertainty_aware":
@@ -2274,11 +2458,20 @@ def _collect_demonstrations(env: V19LUTResourceEnv, cfg: PPOTrainConfig, seed: i
         obs = env.reset(seed=seed + 10_000 + episode, options={"policy_name": f"demo_{cfg.demo_policy}"})
         done = False
         while not done:
-            action = _demo_action(env, obs, cfg.demo_policy)
+            action = _expert_demo_action(env, obs, cfg) if bool(cfg.semantic_path_actions) else _demo_action(env, obs, cfg.demo_policy)
             parsed = env.parse_action(action)
             demos.append(_demo_sample(env, obs, parsed, cfg))
             obs, _reward, done, _info = env.step(parsed)
     return demos
+
+
+def _expert_demo_action(env: V19LUTResourceEnv, obs: dict[str, Any], cfg: PPOTrainConfig) -> dict[str, Any]:
+    path = expert_semantic_path(obs, cfg)
+    action = _resource_floor_candidate(env, obs, path, cfg)
+    action["uav_assignment"] = _select_uav_assignment(obs, cfg)
+    if path == "defer":
+        action["sensing_decision"] = "expert_defer"
+    return env.parse_action(action)
 
 
 def _demo_action(env: V19LUTResourceEnv, obs: dict[str, Any], policy: str) -> dict[str, Any]:
@@ -2324,6 +2517,7 @@ def _demo_sample(env: V19LUTResourceEnv, obs: dict[str, Any], action: dict[str, 
         "service_action": service_idx,
         "service_mask": _plain_service_mask(obs, labels, cfg),
         "resource_target": resource_target,
+        "expert_semantic_path": str(semantic_path) if isinstance(semantic_path, str) else SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(level), "image"),
     }
 
 
@@ -2331,7 +2525,8 @@ def _behavior_clone(model: HybridActorCritic, optimizer: Any, demos: list[dict[s
     if not demos:
         return 0.0
     losses = []
-    for _ in range(max(1, int(cfg.bc_epochs))):
+    steps = int(cfg.expert_bc_steps) if bool(cfg.semantic_path_actions) else int(cfg.bc_epochs)
+    for _ in range(max(1, steps)):
         loss = _bc_loss(model, demos, cfg)
         optimizer.zero_grad()
         loss.backward()
@@ -2351,7 +2546,8 @@ def _behavior_clone_two_timescale(
     if not demos:
         return 0.0
     losses = []
-    for _ in range(max(1, int(cfg.bc_epochs))):
+    steps = int(cfg.expert_bc_steps) if bool(cfg.semantic_path_actions) else int(cfg.bc_epochs)
+    for _ in range(max(1, steps)):
         loss = _bc_loss_two_timescale(model, demos, cfg)
         optimizer.zero_grad()
         loss.backward()

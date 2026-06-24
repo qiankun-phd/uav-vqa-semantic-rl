@@ -36,6 +36,8 @@ class V19StepRecord:
     selected_path_deadline_feasible: bool
     selected_path_utm_feasible: bool
     selected_path_deadline_slack_s: float
+    expert_semantic_path: str
+    expert_path_agreement: bool
     bandwidth_hz: float
     power_w: float
     cpu_share: float
@@ -337,6 +339,8 @@ class V19LUTResourceEnv:
             selected_path_deadline_feasible=bool(info.get("selected_path_deadline_feasible", True)),
             selected_path_utm_feasible=bool(info.get("selected_path_utm_feasible", True)),
             selected_path_deadline_slack_s=float(info.get("selected_path_deadline_slack_s", 0.0)),
+            expert_semantic_path=str(info.get("expert_semantic_path", "")),
+            expert_path_agreement=bool(info.get("expert_path_agreement", False)),
             bandwidth_hz=float(info.get("bandwidth_hz", 0.0)),
             power_w=float(info.get("power_w", 0.0)),
             cpu_share=float(info.get("cpu_share", 0.0)),

@@ -979,3 +979,32 @@ Next tasks:
    - keep `fix2_comparison.md` as diagnostic, not final paper evidence;
    - commit only root summary/report CSV/MD files, not per-seed `.pt`, rollout CSVs, logs, or traces.
 
+
+
+## RL Semantic Path Fix3 Follow-up 2026-06-24
+
+Completed fix3 benchmark at `outputs/rl/semantic_path_cache_defer_fix3_20260624/`.
+
+Outcome:
+
+1. Over-defer is fixed for normal/low-SNR/UTM scenarios: `normal_patrol`, `low_snr_blockage`, and `utm_conflict` have defer ratio 0; `low_snr_soft` defer ratio is 0.002.
+2. UTM safety remains controlled: `utm_conflict` UTM violation is 0.000 and UTM-infeasible selection is 0.000.
+3. `low_snr_soft` improves over fix2 in task success (`0.217 -> 0.318`) with moderate deadline violation (`0.145`).
+4. `edge_overload` remains the primary blocker: deadline violation falls (`0.657 -> 0.297`) and cache_update is 0.000, but task success is only 0.082 and defer ratio is 0.426.
+5. `normal_patrol` narrowly misses the target (`task_success=0.274` vs required 0.275) while deadline violation is 0.000.
+
+Next tasks:
+
+1. Edge-overload service construction:
+   - increase token resource floors only when `candidate_path_metrics.token.deadline_feasible=true` or slack is near-feasible;
+   - add edge-queue-aware token scheduling instead of allowing large defer ratio;
+   - report why `deadline_infeasible_selection_ratio` remains high even after fix3.
+2. UTM semantic feasibility:
+   - separate semantic infeasibility from UTM infeasibility in the report;
+   - test whether any UTM-safe token/cache candidate can satisfy epsilon under current preset.
+3. Expert target refinement:
+   - add expert labels for UAV/mobility mode, not only semantic path;
+   - consider BC on `avoid_conflict`/`stay` mobility for UTM scenarios.
+4. Experiment hygiene:
+   - commit only root summary/report CSV/MD and code/tests/docs;
+   - do not commit `.pt`, per-scenario rollout CSV, `run_config.json`, logs, or full traces.

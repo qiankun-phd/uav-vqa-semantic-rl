@@ -5,7 +5,7 @@ import argparse
 import csv
 import json
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,6 +24,7 @@ from vqa_semcom.rl.v19_ppo import (
     save_two_timescale_model,
     train_ppo,
     train_two_timescale_ppo,
+    expert_semantic_path,
 )
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv, V19StepRecord
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
@@ -158,6 +159,14 @@ class EvalSummary:
     average_selected_path_deadline_slack_s: float
     average_q_defer: float
     average_q_cache_stale: float
+    expert_path_agreement_rate: float
+    expert_path_cache_ratio: float
+    expert_path_token_ratio: float
+    expert_path_image_ratio: float
+    expert_path_defer_ratio: float
+    expert_path_cache_update_ratio: float
+    average_defer_count: float
+    bc_loss: float
     average_reward: float
 
 
@@ -228,18 +237,30 @@ def evaluate_policy(
         obs = env.reset(seed=seed + episode, options={"policy_name": policy})
         done = False
         while not done:
-            obs, _reward, done, info = env.step(action_fn(obs))
-            records.append(V19StepRecord(**info["record"]))
+            current_obs = obs
+            action = action_fn(current_obs)
+            obs, _reward, done, info = env.step(action)
+            record = dict(info["record"])
+            expert_path = expert_semantic_path(current_obs)
+            record["expert_semantic_path"] = expert_path
+            record["expert_path_agreement"] = str(record.get("semantic_path", "")) == expert_path
+            records.append(V19StepRecord(**record))
     return records
 
 
-def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, scenario: str = "") -> list[EvalSummary]:
+def summarize(
+    records_by_policy: dict[str, list[V19StepRecord]],
+    episodes: int,
+    scenario: str = "",
+    train_trace: list[dict[str, float]] | None = None,
+) -> list[EvalSummary]:
     baseline_payload = _mean(records_by_policy.get("always_image", []), "payload_kb")
     out: list[EvalSummary] = []
     for policy, records in records_by_policy.items():
         tasks = len(records)
         payload = _mean(records, "payload_kb")
         reduction = 0.0 if baseline_payload <= 0.0 else (baseline_payload - payload) / baseline_payload
+        bc_loss = _final_trace_metric(train_trace, "bc_loss") if policy == "ppo" else 0.0
         out.append(
             EvalSummary(
                 policy=policy,
@@ -293,6 +314,14 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, 
                 average_selected_path_deadline_slack_s=round(_mean(records, "selected_path_deadline_slack_s"), 6),
                 average_q_defer=round(_mean(records, "q_defer"), 6),
                 average_q_cache_stale=round(_mean(records, "q_cache_stale"), 6),
+                expert_path_agreement_rate=round(_rate(records, "expert_path_agreement"), 6),
+                expert_path_cache_ratio=round(_expert_path_ratio(records, "cache"), 6),
+                expert_path_token_ratio=round(_expert_path_ratio(records, "token"), 6),
+                expert_path_image_ratio=round(_expert_path_ratio(records, "image"), 6),
+                expert_path_defer_ratio=round(_expert_path_ratio(records, "defer"), 6),
+                expert_path_cache_update_ratio=round(_expert_path_ratio(records, "cache_update"), 6),
+                average_defer_count=round(_mean(records, "defer_count"), 6),
+                bc_loss=round(float(bc_loss), 6),
                 average_reward=round(_mean(records, "reward"), 6),
             )
         )
@@ -567,7 +596,7 @@ def run_experiment(
             action_fn = lambda obs, name=policy, env=eval_env: choose_baseline_action(name, env, obs)
         records_by_policy[policy] = evaluate_policy(eval_env, policy, args.episodes, args.seed, action_fn)
 
-    summaries = summarize(records_by_policy, args.episodes, scenario=str(args.scenario or args.formal_scenario or ""))
+    summaries = summarize(records_by_policy, args.episodes, scenario=str(args.scenario or args.formal_scenario or ""), train_trace=train_trace)
     write_outputs(Path(args.output_dir), summaries, records_by_policy, train_trace)
     write_run_config(Path(args.output_dir), args, ppo_cfg)
     return summaries
@@ -752,6 +781,14 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "average_selected_path_deadline_slack_s",
         "average_q_defer",
         "average_q_cache_stale",
+        "expert_path_agreement_rate",
+        "expert_path_cache_ratio",
+        "expert_path_token_ratio",
+        "expert_path_image_ratio",
+        "expert_path_defer_ratio",
+        "expert_path_cache_update_ratio",
+        "average_defer_count",
+        "bc_loss",
     ]
     out: list[dict[str, Any]] = []
     for (scenario, policy), items in sorted(grouped.items()):
@@ -781,7 +818,7 @@ def _print_summary_row(row: EvalSummary) -> None:
         f"energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
         f"utm_conflict={row.utm_conflict_violation_rate:.3f} path_mix=({row.semantic_path_cache_ratio:.2f}/"
         f"{row.semantic_path_token_ratio:.2f}/{row.semantic_path_image_ratio:.2f}/{row.semantic_path_defer_ratio:.2f}/"
-        f"{row.semantic_path_cache_update_ratio:.2f})"
+        f"{row.semantic_path_cache_update_ratio:.2f}) expert_agree={row.expert_path_agreement_rate:.2f} defer_count={row.average_defer_count:.2f}"
     )
 
 
@@ -952,6 +989,21 @@ def _path_ratio(records: list[V19StepRecord], path_name: str) -> float:
     return sum(float(str(record.semantic_path) == str(path_name)) for record in records) / len(records)
 
 
+def _expert_path_ratio(records: list[V19StepRecord], path_name: str) -> float:
+    if not records:
+        return 0.0
+    return sum(float(str(record.expert_semantic_path) == str(path_name)) for record in records) / len(records)
+
+
+def _final_trace_metric(trace: list[dict[str, float]] | None, key: str) -> float:
+    if not trace:
+        return 0.0
+    for row in reversed(trace):
+        if key in row:
+            return float(row.get(key, 0.0))
+    return 0.0
+
+
 def _write_dict_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -1021,8 +1073,8 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | joint feasible sel | deadline infeasible sel | UTM infeasible sel | path cache | path token | path image | defer | cache update |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | joint feasible sel | deadline infeasible sel | UTM infeasible sel | expert agreement | bc loss | defer count | path cache | path token | path image | defer | cache update |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
@@ -1035,6 +1087,7 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
             f"{_metric(row, 'cache_eligible_ratio'):.3f} | {_metric(row, 'joint_feasible_selection_ratio'):.3f} | "
             f"{_metric(row, 'deadline_infeasible_selection_ratio'):.3f} | {_metric(row, 'utm_infeasible_selection_ratio'):.3f} | "
+            f"{_metric(row, 'expert_path_agreement_rate'):.3f} | {_metric(row, 'bc_loss'):.3f} | {_metric(row, 'average_defer_count'):.3f} | "
             f"{_metric(row, 'semantic_path_cache_ratio'):.3f} | "
             f"{_metric(row, 'semantic_path_token_ratio'):.3f} | {_metric(row, 'semantic_path_image_ratio'):.3f} | "
             f"{_metric(row, 'semantic_path_defer_ratio'):.3f} | {_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"

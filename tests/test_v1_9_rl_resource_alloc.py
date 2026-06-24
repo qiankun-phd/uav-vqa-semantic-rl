@@ -21,6 +21,7 @@ from vqa_semcom.rl.v19_ppo import (
     _resource_floor_for_obs,
     _semantic_controller_reward,
     _semantic_path_allowed,
+    expert_semantic_path,
     normalize_hidden_layers,
     resolve_torch_device,
     train_ppo,
@@ -667,3 +668,53 @@ class V19SelectedPathMetricsTest(unittest.TestCase):
         self.assertIn("selected_path_deadline_feasible", fields)
         self.assertIn("selected_path_utm_feasible", fields)
         self.assertIn("selected_path_deadline_slack_s", fields)
+
+
+class V19SemanticPathExpertTest(unittest.TestCase):
+    def _obs(self, **overrides):
+        obs = {
+            "epsilon_k": 0.70,
+            "remaining_deadline_s": 2.0,
+            "deadline_s": 2.0,
+            "defer_count": 0,
+            "cache_eligible": True,
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {
+                    "cache": True,
+                    "token": True,
+                    "image": True,
+                    "defer": True,
+                    "cache_update": True,
+                },
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.02, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
+                "token": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
+                "image": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True},
+                "cache_update": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "future_reuse_value": 1, "deadline_slack_s": 1.0},
+                "defer": {"deadline_feasible": True, "joint_feasible": True, "feasible": True},
+            },
+        }
+        obs.update(overrides)
+        return obs
+
+    def test_expert_prefers_joint_feasible_token_over_cache(self):
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(self._obs(), cfg), "token")
+
+    def test_expert_defer_is_last_resort(self):
+        obs = self._obs(cache_eligible=False)
+        for path in ["cache", "token", "image", "cache_update"]:
+            obs["candidate_path_metrics"][path]["joint_feasible"] = False
+            obs["candidate_path_metrics"][path]["deadline_feasible"] = False
+            obs["candidate_path_metrics"][path]["semantic_feasible"] = False
+        obs["candidate_path_metrics"]["cache"]["cache_eligible"] = False
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "defer")
+
+    def test_utm_infeasible_token_is_not_selected(self):
+        obs = self._obs(scenario="utm_conflict")
+        obs["candidate_path_metrics"]["token"]["utm_feasible"] = False
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertNotEqual(expert_semantic_path(obs, cfg), "token")

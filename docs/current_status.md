@@ -1817,3 +1817,48 @@ Interpretation:
 
 Next Algorithm focus: targeted edge/UTM policy rather than further broad mask tightening. Use candidate `joint_feasible` as imitation target, add explicit feasible-token preference when token is deadline-feasible, and separate defer from failure in reward so UTM-safe deferral does not erase learning signal.
 
+
+
+## RL Semantic Path Fix3 2026-06-24 Asia/Shanghai
+
+Algorithm thread implemented fix3 on branch `codex/semantic-path-cache-defer` to address fix2 over-defer / over-conservative behavior without modifying Environment or Semantic Utility.
+
+Code changes are RL-only:
+
+- Added deterministic `expert_semantic_path(obs, cfg)` using `candidate_path_metrics` as a supervised service-first target.
+- Expert priority is `token > cache > cache_update > image > defer` over `joint_feasible=true` candidates, then deadline+semantic feasible candidates, then low-gap eligible cache; defer is only a last resort.
+- Behavior cloning warm-start now uses the expert path target for semantic-path PPO and records BC loss / expert path distribution.
+- Semantic-path action logits now receive expert/joint-feasible positive bias, deadline-infeasible negative bias, UTM/resource hard bans, and defer negative bias unless expert says defer.
+- Reward adds stronger task-success utility, cache/token completion bonus, and additional penalty for defer that does not match expert last-resort conditions.
+- Rollout/results now persist `expert_semantic_path`, `expert_path_agreement`, `average_defer_count`, and expert path ratios.
+
+Validation/benchmark:
+
+```text
+outputs/rl/semantic_path_cache_defer_fix3_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_fix3_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_fix3_20260624/fix3_comparison.md
+```
+
+Settings: scenarios `normal_patrol`, `disaster_hotspot`, `low_snr_soft`, `low_snr_blockage`, `edge_overload`, `utm_conflict`; seeds `0,1,2`; train episodes `300`; eval episodes `50`; tasks per episode `12`; RA_DI `cuda:0` (`NVIDIA GeForce RTX 4060`).
+
+Fix3 proposed PPO aggregate results:
+
+| scenario | semantic success | task success | deadline vio | UTM vio | cache/token/image/defer/cache_update |
+|---|---:|---:|---:|---:|---|
+| normal_patrol | 0.274 | 0.274 | 0.000 | 0.000 | 0.436 / 0.564 / 0.000 / 0.000 / 0.000 |
+| disaster_hotspot | 0.282 | 0.102 | 0.700 | 0.000 | 0.582 / 0.418 / 0.000 / 0.000 / 0.000 |
+| low_snr_soft | 0.372 | 0.318 | 0.145 | 0.000 | 0.347 / 0.651 / 0.000 / 0.002 / 0.000 |
+| low_snr_blockage | 0.822 | 0.276 | 0.610 | 0.000 | 0.427 / 0.573 / 0.000 / 0.000 / 0.000 |
+| edge_overload | 0.321 | 0.082 | 0.297 | 0.000 | 0.097 / 0.477 / 0.000 / 0.426 / 0.000 |
+| utm_conflict | 0.000 | 0.000 | 0.481 | 0.000 | 0.621 / 0.379 / 0.000 / 0.000 / 0.000 |
+
+Interpretation:
+
+- Fix3 removes the broad over-defer behavior from normal/low-SNR/UTM scenarios and preserves UTM safety.
+- `normal_patrol` is essentially back to fix1 behavior but narrowly misses the requested `task_success >= 0.275` threshold (`0.274` after seed aggregation).
+- `low_snr_soft` improves task success over fix2 while keeping deadline violation far below low_snr_blockage.
+- `edge_overload` improves deadline violation and keeps cache_update below 0.05, but task success remains low and defer remains high because feasible service paths are scarce under edge pressure.
+- `utm_conflict` keeps UTM violation at 0 but task/semantic success stays 0, suggesting the scenario remains semantic-QoS infeasible under UTM-safe service candidates.
+
+Next Algorithm focus: edge-overload feasible-token/resource floor tuning and UTM semantic feasibility analysis. Do not add more generic defer penalties; the remaining issue is feasible service construction, not defer collapse.
