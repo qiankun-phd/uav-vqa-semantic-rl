@@ -66,6 +66,25 @@ def _model_device(model: Any) -> Any:
         return resolve_torch_device("auto")
 
 
+def _model_obs_dim(model: Any) -> int | None:
+    if nn is None:
+        return None
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            return int(module.in_features)
+    return None
+
+
+def _obs_tensor(obs: dict[str, Any], device: Any, expected_dim: int | None = None) -> Any:
+    vector = list(obs.get("vector", []))
+    if expected_dim is not None and expected_dim > 0:
+        if len(vector) < expected_dim:
+            vector = vector + [0.0] * (expected_dim - len(vector))
+        elif len(vector) > expected_dim:
+            vector = vector[:expected_dim]
+    return torch.as_tensor(vector, dtype=torch.float32, device=device).unsqueeze(0)
+
+
 def normalize_hidden_layers(hidden_layers: Any = None, hidden_size: int = 128) -> tuple[int, ...]:
     if hidden_layers is None or hidden_layers == "":
         return (int(hidden_size), int(hidden_size))
@@ -334,11 +353,12 @@ class TwoTimescalePPOPolicy:
         self.device = _model_device(model)
         self.model = model.to(self.device)
         self.model.eval()
+        self.obs_dim = _model_obs_dim(self.model)
         self._cached_mobility: dict[str, Any] | None = None
         self._cached_step = -1
 
     def act(self, obs: dict[str, Any], deterministic: bool = True) -> dict[str, Any]:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=self.device).unsqueeze(0)
+        obs_tensor = _obs_tensor(obs, self.device, self.obs_dim)
         step = int(obs.get("episode_step", 0))
         with torch.no_grad():
             (
@@ -397,9 +417,10 @@ class PPOServicePolicy:
         self.device = _model_device(model)
         self.model = model.to(self.device)
         self.model.eval()
+        self.obs_dim = _model_obs_dim(self.model)
 
     def act(self, obs: dict[str, Any], deterministic: bool = True) -> dict[str, Any]:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=self.device).unsqueeze(0)
+        obs_tensor = _obs_tensor(obs, self.device, self.obs_dim)
         with torch.no_grad():
             logits, resource_mean, resource_log_std, _value = self.model(obs_tensor)
             mask = _service_mask_tensor(obs, self.env.service_levels, logits.device, self.cfg)
