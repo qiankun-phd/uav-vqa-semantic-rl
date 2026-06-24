@@ -75,6 +75,17 @@ class SemanticUtilityTest(unittest.TestCase):
         self.assertEqual(len(values), 1)
         self.assertTrue(all("cache_snr_invariant" in cell.calibration_note for cell in cells))
 
+    def test_cache_quality_lcb_query_is_snr_invariant(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="-5dB", correct=True, payload_bytes=0) for _ in range(12)])
+        rows.extend([_row(service_level=0, snr_bin="20dB", correct=False, payload_bytes=0) for _ in range(12)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        low_snr_lcb = model.cache_quality_lcb("presence", "-5dB", "good", "fresh", "normal")
+        high_snr_lcb = model.cache_quality_lcb("presence", "20dB", "good", "fresh", "normal")
+        unseen_snr_lcb = model.cache_quality_lcb("presence", "8dB", "good", "fresh", "normal")
+        self.assertAlmostEqual(low_snr_lcb, high_snr_lcb)
+        self.assertAlmostEqual(low_snr_lcb, unseen_snr_lcb)
+
     def test_query_api_returns_lcb_payload_uncertainty_and_count(self) -> None:
         rows = [_row(snr_bin="0dB", correct=True), _row(snr_bin="0dB", correct=False)]
         cells = build_semantic_utility_from_predictions(rows)
@@ -197,6 +208,79 @@ class SemanticUtilityTest(unittest.TestCase):
         self.assertAlmostEqual(candidates[0].estimated_delay_s, 1.5)
         self.assertFalse(candidates[0].deadline_feasible)
         self.assertFalse(candidates[0].joint_feasible)
+
+    def test_cache_recommendation_declines_with_stale_or_expired_critical_cache(self) -> None:
+        rows: list[dict[str, str]] = []
+        for freshness in ("fresh", "stale", "expired"):
+            rows.extend(
+                [
+                    _row(
+                        service_level=0,
+                        snr_bin="-5dB",
+                        correct=True,
+                        payload_bytes=0,
+                        freshness=freshness,
+                        risk="critical",
+                    )
+                    for _ in range(30)
+                ]
+            )
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        fresh = model.cache_quality_metrics("presence", "-5dB", "good", "fresh", "critical", epsilon_k=0.70)
+        stale = model.cache_quality_metrics("presence", "-5dB", "good", "stale", "critical", epsilon_k=0.70)
+        expired = model.cache_quality_metrics("presence", "-5dB", "good", "expired", "critical", epsilon_k=0.70)
+        self.assertTrue(fresh.recommended)
+        self.assertFalse(stale.recommended)
+        self.assertFalse(expired.recommended)
+        self.assertGreaterEqual(fresh.accuracy_lcb, 0.70)
+
+    def test_critical_cache_rejects_low_confidence_even_when_fresh(self) -> None:
+        rows = [_row(service_level=0, snr_bin="-5dB", correct=True, payload_bytes=0, risk="critical") for _ in range(1)]
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows, min_samples=5))
+        cache = model.cache_quality_metrics("presence", "-5dB", "good", "fresh", "critical", epsilon_k=0.10)
+        self.assertFalse(cache.recommended)
+        self.assertGreater(cache.uncertainty, 0.40)
+
+    def test_path_utility_supports_cache_token_image_and_cache_update_paths(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="0dB", correct=True, payload_bytes=0) for _ in range(20)])
+        rows.extend([_row(service_level=1, snr_bin="0dB", correct=True, payload_bytes=1024) for _ in range(20)])
+        rows.extend([_row(service_level=2, snr_bin="0dB", correct=True, payload_bytes=102400) for _ in range(20)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        cache = model.path_utility("cache", "presence", "0dB", "good", "fresh", "normal", epsilon_k=0.70)
+        token = model.path_utility("token", "presence", "0dB", "good", "fresh", "normal", epsilon_k=0.70)
+        image = model.path_utility("image", "presence", "0dB", "good", "fresh", "normal", epsilon_k=0.70)
+        update = model.path_utility("cache_update", "presence", "0dB", "good", "fresh", "normal", epsilon_k=0.70)
+        self.assertEqual(cache.service_level, 0)
+        self.assertEqual(token.service_level, 1)
+        self.assertEqual(image.service_level, 2)
+        self.assertEqual(update.service_level, 1)
+        self.assertTrue(update.cache_update)
+        self.assertGreater(token.payload_kb, cache.payload_kb)
+        self.assertGreater(image.payload_kb, token.payload_kb)
+
+    def test_service_candidates_expose_cache_fields_for_environment(self) -> None:
+        rows: list[dict[str, str]] = []
+        rows.extend([_row(service_level=0, snr_bin="0dB", correct=True, payload_bytes=0) for _ in range(20)])
+        rows.extend([_row(service_level=1, snr_bin="0dB", correct=True, payload_bytes=1024) for _ in range(20)])
+        model = SemanticUtilityModel(build_semantic_utility_from_predictions(rows))
+        candidates = model.get_service_candidates(
+            {
+                "question_type": "presence",
+                "snr_bin": "0dB",
+                "view_quality_bin": "good",
+                "freshness_bin": "fresh",
+                "risk_level": "normal",
+                "epsilon_k": 0.70,
+            },
+            service_levels=[0, 1],
+        )
+        for item in candidates:
+            self.assertIn(item.semantic_path, {"cache", "token"})
+            self.assertGreaterEqual(item.cache_accuracy_lcb, 0.70)
+            self.assertTrue(item.cache_recommended)
+            self.assertTrue(item.cache_eligible)
+            self.assertIn("cache_quality_gap", item.candidate_path_metrics)
 
     def test_service_level_names_are_paper_facing(self) -> None:
         self.assertEqual(service_level_name(0), "cache_answer")

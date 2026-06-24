@@ -1561,3 +1561,42 @@ Ran 100 tests in 2.005s
 OK
 ```
 
+## Cache-Aware Semantic Path Utility 2026-06-24 Asia/Shanghai
+
+Added semantic utility support for the semantic path/cache-defer branch without modifying original VQA prediction CSVs or the stable LUT key.
+
+Implemented interfaces:
+
+```text
+U_sem(..., service_level=0)
+cache_quality_lcb(...)
+cache_quality_metrics(...)
+path_utility(cache/token/image/cache_update)
+get_service_candidates(...).cache_* fields
+```
+
+Cache semantics:
+
+- Cache answer is service level 0 and remains SNR-invariant.
+- `freshness_bin` controls cache quality and recommendation behavior.
+- Expired cache is not recommended for critical tasks.
+- Critical tasks can use cache only when cache is fresh, `cache_accuracy_lcb >= epsilon_k`, sample support exists, and uncertainty is acceptable.
+
+Environment-facing fields now include:
+
+```text
+semantic_path
+cache_accuracy_mean
+cache_accuracy_lcb
+cache_uncertainty
+cache_quality_gap
+cache_recommended
+cache_eligible
+candidate_path_metrics
+```
+
+Validation target:
+
+```text
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+```

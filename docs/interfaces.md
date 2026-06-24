@@ -173,7 +173,7 @@ Candidate-service usage for mobility-aware RL/env:
 candidates = utility.get_service_candidates(obs)
 ```
 
-Each candidate keeps the same semantic utility LUT key and returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+Each candidate keeps the same semantic utility LUT key and returns `semantic_path`, `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `cache_accuracy_mean`, `cache_accuracy_lcb`, `cache_uncertainty`, `cache_quality_gap`, `cache_recommended`, `cache_eligible`, `candidate_path_metrics`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
 
 The helper does not add a LUT dimension. It evaluates the same task condition across service levels and computes:
 
@@ -186,6 +186,36 @@ semantic_efficiency = quality-adjusted conservative utility per payload unit
 ```
 
 The candidate helper reads deadline from `deadline_s`, `tau_k`, or `deadline`. It reads per-service delay estimates from `estimated_delay_by_service`, `delay_by_service`, `service_delay_s`, `service_delay_by_level`, or `estimated_delay_s_by_service`. If no delay estimate is provided, it uses a small conservative fallback based on service level and payload.
+
+Cache/path helper usage for semantic path control:
+
+```python
+cache_lcb = utility.cache_quality_lcb(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level)
+cache = utility.cache_quality_metrics(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level, epsilon_k)
+path = utility.path_utility("token", task_type, snr_bin, view_quality_bin, freshness_bin, risk_level, epsilon_k)
+```
+
+Path names are paper-facing control choices:
+
+| semantic_path | service level | meaning |
+|---|---:|---|
+| `cache` | 0 | Reuse cached answer or cached semantic result. Cache is SNR-invariant; quality depends on freshness and cached answer reliability. |
+| `token` | 1 | Send compact semantic tokens such as detector tags, boxes, counts, and confidence summaries. |
+| `image` | 2 | Send image evidence for visual reasoning. Payload and deadline pressure are high under weak links. |
+| `cache_update` | default 1 | Serve with fresh evidence and refresh the cache for future requests. Defaults to token update, but callers may request image update if needed. |
+
+Cache semantics:
+
+```text
+cache_quality_gap = max(0, epsilon_k - cache_accuracy_lcb)
+cache_eligible = cache_recommended
+```
+
+- `cache_accuracy_mean`, `cache_accuracy_lcb`, and `cache_uncertainty` are always derived from service level 0.
+- Cache quality is not driven by current SNR; `freshness_bin` is the main cache-state dimension.
+- `expired` cache is not recommended for critical tasks.
+- Critical tasks can use cache only when `freshness_bin == fresh`, `cache_accuracy_lcb >= epsilon_k`, sample support exists, and uncertainty is acceptable.
+- `candidate_path_metrics` is a compact per-candidate dictionary for environment logging and policy debugging. It includes at least `semantic_path`, candidate `accuracy_lcb`, `semantic_quality_gap`, `payload_kb`, `cache_accuracy_lcb`, `cache_quality_gap`, and `cache_recommended`.
 
 Paper-facing service semantics:
 
