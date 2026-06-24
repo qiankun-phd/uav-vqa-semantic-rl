@@ -1372,3 +1372,79 @@ Notes:
 - A small inference fix pads/truncates observation vectors to the checkpoint encoder input dimension when loading a PPO model. This is needed because state_v2 currently has scenario-dependent mask/mobility metadata length.
 - No model checkpoint, rollout CSV, stdout/stderr log, or large trace file should be committed for this evaluation.
 
+## State V2 Fixed Medium PPO 2026-06-24 Asia/Shanghai
+
+Fixed `state_v2` so it no longer depends on scenario-specific vector length:
+
+- Canonical service-level feature block uses a fixed service-level order from config.
+- Canonical UAV feature block pads to a fixed max UAV count.
+- Service masks, mobility-mode masks, and UAV battery masks use fixed ordering.
+- Added explicit clipping/normalization for LCB, uncertainty, quality gap, slack ratio, fly delay, fly energy, and battery fraction.
+- PPO checkpoint inference now rejects observation dimension mismatches instead of silently padding/truncating.
+
+Implementation / experiment commit:
+
+```text
+07d974e feat(rl): fix state v2 semantic layout
+```
+
+Output directory:
+
+```text
+outputs/rl/state_v2_fixed_medium_20260624/
+```
+
+Experiment settings:
+
+```text
+candidates:
+  A: state_v1 + hidden_layers=128,128
+  B: state_v2_fixed + hidden_layers=128,128
+scenarios: nominal_patrol, disaster_hotspot, low_snr_blockage, edge_overload, utm_conflict
+seeds: 0,1,2
+train episodes: 500
+eval episodes: 50
+tasks per episode: 20
+device: cuda:0
+controller: two-timescale PPO + proposed semantic RL + deadline guard + payload-delay projection
+```
+
+Completion:
+
+```text
+completed runs: 30/30
+failed or missing runs: 0
+```
+
+Artifacts:
+
+```text
+outputs/rl/state_v2_fixed_medium_20260624/medium_summary.md
+outputs/rl/state_v2_fixed_medium_20260624/medium_eval_summary_by_scenario.csv
+outputs/rl/state_v2_fixed_medium_20260624/medium_training_summary_by_scenario.csv
+outputs/rl/state_v2_fixed_medium_20260624/medium_eval_all_seed_results.csv
+outputs/rl/state_v2_fixed_medium_20260624/medium_training_all_seed_summary.csv
+```
+
+Headline results:
+
+- Overall A: semantic success 0.382, task success 0.199, deadline violation 0.235, quality gap 0.194, reward -0.879.
+- Overall B: semantic success 0.387, task success 0.206, deadline violation 0.213, quality gap 0.195, reward -0.775.
+- `edge_overload`: B keeps the prior advantage, with task success 0.649 vs A 0.626 and deadline violation 0.000 vs A 0.029.
+- `low_snr_blockage`: both A/B still have high deadline violation at 0.854, so low-SNR deadline/resource tuning remains the main blocker before final paper-scale runs.
+- Service mix does not collapse: A token ratio 0.866, B token ratio 0.862, both below the 0.9 collapse threshold used in the summary.
+- Final-50 training windows show no Q_deadline or Q_quality explosion. Success is mostly stable, but this is still a medium 500-episode run.
+
+Decision:
+
+- Recommended next paper model: `B_state_v2_fixed_128x128`.
+- Run a 1000-episode final candidate pass next; reserve 2000 episodes for the selected model after low-SNR deadline behavior is improved or explicitly explained.
+
+Validation:
+
+```text
+/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests
+Ran 97 tests in 1.980s
+OK
+```
+
