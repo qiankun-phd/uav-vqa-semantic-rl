@@ -54,6 +54,13 @@ class V19StepRecord:
     q_utm: float
     success: bool
     delay_s: float
+    fly_delay_s: float
+    sense_delay_s: float
+    tx_delay_s: float
+    queue_delay_s: float
+    infer_delay_s: float
+    load_delay_s: float
+    deadline_token_cache_fallback: bool
     energy_j: float
     payload_kb: float
     quality_violation: bool
@@ -172,7 +179,12 @@ class V19LUTResourceEnv:
         parsed = self.parse_action(action)
         prev_obs = self._last_obs
         obs, reward, done, info = self._env.step(parsed)
+        raw_concurrent = parsed.get("concurrent_actions", [])
+        fallback_marker = str(parsed.get("sensing_decision", "")) == "deadline_token_cache_fallback" or any(
+            isinstance(item, dict) and item.get("event") == "deadline_token_cache_fallback" for item in raw_concurrent
+        )
         info = self._enrich_semantic_info(dict(info), prev_obs)
+        info["deadline_token_cache_fallback"] = bool(fallback_marker or info.get("deadline_token_cache_fallback", False))
         self._update_virtual_queues(info)
         record = self._record_from_info(info, float(reward))
         self._last_record = record
@@ -193,6 +205,13 @@ class V19LUTResourceEnv:
                 "q_utm": record.q_utm,
                 "success": record.success,
                 "delay_s": record.delay_s,
+                "fly_delay_s": record.fly_delay_s,
+                "sense_delay_s": record.sense_delay_s,
+                "tx_delay_s": record.tx_delay_s,
+                "queue_delay_s": record.queue_delay_s,
+                "infer_delay_s": record.infer_delay_s,
+                "load_delay_s": record.load_delay_s,
+                "deadline_token_cache_fallback": record.deadline_token_cache_fallback,
                 "energy_j": record.energy_j,
                 "payload_kb": record.payload_kb,
                 "quality_violation": record.quality_violation,
@@ -313,6 +332,13 @@ class V19LUTResourceEnv:
             q_utm=float(info.get("q_utm", 0.0)),
             success=bool(info.get("success", False)),
             delay_s=float(info.get("delay_s", info.get("total_delay_s", 0.0))),
+            fly_delay_s=float(info.get("fly_delay_s", info.get("arrival_delay_s", 0.0))),
+            sense_delay_s=float(info.get("sense_delay_s", 0.0)),
+            tx_delay_s=float(info.get("tx_delay_s", info.get("transmission_delay_s", 0.0))),
+            queue_delay_s=float(info.get("queue_delay_s", info.get("edge_queue_delay_s", info.get("edge_queue_s", 0.0)))),
+            infer_delay_s=float(info.get("infer_delay_s", info.get("inference_delay_s", 0.0))),
+            load_delay_s=float(info.get("load_delay_s", 0.0)),
+            deadline_token_cache_fallback=bool(info.get("deadline_token_cache_fallback", False)),
             energy_j=float(info.get("energy_j", info.get("total_energy_j", 0.0))),
             payload_kb=float(info.get("payload_kb", 0.0)),
             quality_violation=bool(info.get("quality_violation", False)),

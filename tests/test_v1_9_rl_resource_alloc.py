@@ -18,6 +18,8 @@ from vqa_semcom.rl.v19_ppo import (
     _obs_tensor,
     _project_mobility_action,
     _project_semantic_feasible_action,
+    _resource_floor_for_obs,
+    _semantic_controller_reward,
     normalize_hidden_layers,
     resolve_torch_device,
     train_ppo,
@@ -74,6 +76,13 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("q_risk", info)
         self.assertIn("q_utm", info)
         self.assertIn("delay_s", info)
+        self.assertIn("fly_delay_s", info)
+        self.assertIn("sense_delay_s", info)
+        self.assertIn("tx_delay_s", info)
+        self.assertIn("queue_delay_s", info)
+        self.assertIn("infer_delay_s", info)
+        self.assertIn("load_delay_s", info)
+        self.assertIn("deadline_token_cache_fallback", info)
         self.assertIn("energy_j", info)
         self.assertIn("payload_kb", info)
         self.assertIn("quality_violation", info)
@@ -352,6 +361,54 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.deadline_guard_slack, 0.0)
         self.assertGreater(cfg.high_payload_guard_kb, 0.0)
         self.assertTrue(cfg.critical_burst_nearest_uav)
+        self.assertGreater(cfg.deadline_slack_reward_weight, 0.0)
+        self.assertGreater(cfg.deadline_overrun_penalty_weight, 0.0)
+        self.assertGreater(cfg.token_fast_bandwidth_floor, cfg.semantic_token_bandwidth_floor)
+        self.assertGreater(cfg.token_cache_fallback_overrun_ratio, 1.0)
+
+    def test_deadline_slack_reward_penalizes_low_snr_overrun(self) -> None:
+        obs = {"epsilon_k": 0.6, "deadline_s": 1.0, "sensed_snr_db": -9.0, "snr_bin": "low"}
+        cfg = PPOTrainConfig(semantic_reward_mode="semantic_utility", deadline_slack_reward=True)
+        base_info = {
+            "risk_level": "normal",
+            "semantic_accuracy_lcb": 0.8,
+            "semantic_accuracy_mean": 0.8,
+            "semantic_success": True,
+            "success": True,
+            "service_level": 1,
+            "energy_j": 10.0,
+            "payload_kb": 1.0,
+        }
+        fast = _semantic_controller_reward(obs, dict(base_info, delay_s=0.5), 0.0, cfg)
+        slow = _semantic_controller_reward(obs, dict(base_info, delay_s=2.0, deadline_violation=True), 0.0, cfg)
+        self.assertGreater(fast, slow)
+
+    def test_token_fast_projection_raises_low_snr_resource_floors(self) -> None:
+        obs = {"deadline_s": 2.0, "sensed_snr_db": -9.0, "snr_bin": "low"}
+        cfg = PPOTrainConfig(token_fast_resource_projection=True)
+        self.assertGreaterEqual(_resource_floor_for_obs(cfg, 1, "bandwidth", obs), cfg.token_fast_bandwidth_floor)
+        self.assertGreaterEqual(_resource_floor_for_obs(cfg, 1, "power", obs), cfg.token_fast_power_floor)
+        self.assertGreaterEqual(_resource_floor_for_obs(cfg, 1, "cpu_share", obs), cfg.token_fast_cpu_floor)
+        self.assertGreaterEqual(_resource_floor_for_obs(cfg, 1, "gpu_share", obs), cfg.token_fast_gpu_floor)
+
+    def test_deadline_token_cache_fallback_marks_cache_action(self) -> None:
+        env = _ProjectionEnv()
+        obs = {
+            "epsilon_k": 0.4,
+            "deadline_s": 0.8,
+            "sensed_snr_db": -9.0,
+            "snr_bin": "low",
+            "action_mask": {"service_level_allowed": {0: True, 1: True, 2: True}},
+            "uav_state": [{"uav_id": 0, "x_m": 0.0, "y_m": 0.0}],
+        }
+        projected = _project_semantic_feasible_action(
+            env,
+            obs,
+            env.candidate_action(1, obs),
+            PPOTrainConfig(deadline_token_cache_fallback=True, token_cache_fallback_gap_threshold=0.08),
+        )
+        self.assertEqual(projected["service_level"], 0)
+        self.assertEqual(projected.get("sensing_decision"), "deadline_token_cache_fallback")
 
     def test_deadline_guard_prefers_token_over_slow_image(self) -> None:
         env = _ProjectionEnv()

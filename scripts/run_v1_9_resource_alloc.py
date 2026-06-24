@@ -357,6 +357,9 @@ def main() -> int:
     parser.add_argument("--payload-delay-aware-projection", action="store_true", help="Avoid image escalation when low SNR, high payload, and short deadline coincide.")
     parser.add_argument("--no-image-under-low-snr", action="store_true", help="Diagnostic ablation: forbid image projection under low-SNR/blockage conditions.")
     parser.add_argument("--nearest-uav-mobility", action="store_true", help="Diagnostic ablation: force nearest feasible UAV mobility and suppress extra reposition.")
+    parser.add_argument("--deadline-slack-reward", action="store_true", help="Tuning: reward positive deadline slack and penalize low-SNR deadline overruns.")
+    parser.add_argument("--token-fast-resource-projection", action="store_true", help="Tuning: raise token bandwidth/power/CPU/GPU floors under low-SNR deadline pressure.")
+    parser.add_argument("--deadline-token-cache-fallback", action="store_true", help="Tuning: allow cache fallback when token evidence is clearly deadline-infeasible and cache gap is small.")
     parser.add_argument("--disable-semantic-token", action="store_true", help="Disable service level 1 semantic-token evidence for ablations.")
     parser.add_argument("--queue-quality-weight", type=float, default=1.5)
     parser.add_argument("--queue-deadline-weight", type=float, default=0.8)
@@ -480,6 +483,9 @@ def run_experiment(
             payload_delay_aware_projection=args.payload_delay_aware_projection,
             no_image_under_low_snr=args.no_image_under_low_snr,
             nearest_uav_mobility=args.nearest_uav_mobility,
+            deadline_slack_reward=args.deadline_slack_reward,
+            token_fast_resource_projection=args.token_fast_resource_projection,
+            deadline_token_cache_fallback=args.deadline_token_cache_fallback,
         )
         if args.two_timescale_ppo:
             model, train_trace = train_two_timescale_ppo(train_env, ppo_cfg, seed=args.seed)

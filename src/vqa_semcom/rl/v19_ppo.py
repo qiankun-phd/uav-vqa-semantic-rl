@@ -216,6 +216,17 @@ class PPOTrainConfig:
     short_deadline_guard_s: float = 6.0
     nearest_uav_mobility: bool = False
     critical_burst_nearest_uav: bool = True
+    deadline_slack_reward: bool = False
+    deadline_slack_reward_weight: float = 1.0
+    deadline_overrun_penalty_weight: float = 2.0
+    token_fast_resource_projection: bool = False
+    token_fast_bandwidth_floor: float = 0.90
+    token_fast_power_floor: float = 0.85
+    token_fast_cpu_floor: float = 0.65
+    token_fast_gpu_floor: float = 0.15
+    deadline_token_cache_fallback: bool = False
+    token_cache_fallback_gap_threshold: float = 0.08
+    token_cache_fallback_overrun_ratio: float = 1.25
 
 
 @dataclass
@@ -1376,10 +1387,10 @@ def _build_hybrid_action(
     if int(service_level) == 0:
         action.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
     elif cfg.hybrid_actions:
-        bandwidth_floor = _resource_floor(cfg, service_level, "bandwidth")
-        power_floor = _resource_floor(cfg, service_level, "power")
-        cpu_floor = _resource_floor(cfg, service_level, "cpu_share")
-        gpu_floor = _resource_floor(cfg, service_level, "gpu_share")
+        bandwidth_floor = _resource_floor_for_obs(cfg, service_level, "bandwidth", obs)
+        power_floor = _resource_floor_for_obs(cfg, service_level, "power", obs)
+        cpu_floor = _resource_floor_for_obs(cfg, service_level, "cpu_share", obs)
+        gpu_floor = _resource_floor_for_obs(cfg, service_level, "gpu_share", obs)
         action.update(
             {
                 "bandwidth": _scaled_unit(resources[0], bandwidth_floor, 1.0),
@@ -1438,6 +1449,9 @@ def _project_semantic_feasible_action(
     cache_override = _needs_cache_override(current, current_info, obs, cfg)
     best_gap = _semantic_gap(current_info, obs)
     best_projection_score = _semantic_projection_score(current_info, obs, cfg)
+    fallback = _deadline_token_cache_fallback_action(env, obs, current, current_info, cfg)
+    if fallback is not None:
+        return env.parse_action(fallback)
     if best_score <= 0.0:
         return best_action
     for level in env.service_levels:
@@ -1446,6 +1460,9 @@ def _project_semantic_feasible_action(
         candidate = _resource_floor_candidate(env, obs, level, cfg)
         candidate["uav_assignment"] = _select_uav_assignment(obs, cfg)
         evaluated = env.evaluate_action(candidate, obs)
+        fallback = _deadline_token_cache_fallback_action(env, obs, candidate, evaluated, cfg)
+        if fallback is not None:
+            return env.parse_action(fallback)
         if _has_hard_safety_violation(evaluated):
             continue
         if cache_override and int(level) > 0:
@@ -1471,10 +1488,10 @@ def _resource_floor_candidate(env: V19LUTResourceEnv, obs: dict[str, Any], servi
     if int(service_level) == 0:
         candidate.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
     elif cfg.hybrid_actions:
-        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _resource_floor(cfg, service_level, "bandwidth"))
-        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _resource_floor(cfg, service_level, "power"), cfg.power_min_w)
-        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _resource_floor(cfg, service_level, "cpu_share"))
-        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), _resource_floor(cfg, service_level, "gpu_share"))
+        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _resource_floor_for_obs(cfg, service_level, "bandwidth", obs))
+        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _resource_floor_for_obs(cfg, service_level, "power", obs), cfg.power_min_w)
+        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _resource_floor_for_obs(cfg, service_level, "cpu_share", obs))
+        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), _resource_floor_for_obs(cfg, service_level, "gpu_share", obs))
     candidate["service_level"] = int(service_level)
     candidate["sensing_decision"] = "reuse_cache" if int(service_level) == 0 else "observe"
     return candidate
@@ -1636,6 +1653,39 @@ def _semantic_projection_score(info: dict[str, Any], obs: dict[str, Any], cfg: P
     return float(score)
 
 
+def _deadline_token_cache_fallback_action(
+    env: V19LUTResourceEnv,
+    obs: dict[str, Any],
+    action: dict[str, Any],
+    info: dict[str, Any],
+    cfg: PPOTrainConfig,
+) -> dict[str, Any] | None:
+    if not bool(cfg.deadline_token_cache_fallback):
+        return None
+    if int(action.get("service_level", info.get("service_level", 0))) != 1:
+        return None
+    deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0)))))
+    token_delay = float(info.get("delay_s", info.get("total_delay_s", 0.0)))
+    evidence_delay = _evidence_delay_s(info)
+    overrun = max(token_delay, evidence_delay) / deadline
+    if overrun < float(cfg.token_cache_fallback_overrun_ratio):
+        return None
+    cache = env.candidate_action(0, obs)
+    cache["uav_assignment"] = _select_uav_assignment(obs, cfg)
+    cache_info = env.evaluate_action(cache, obs)
+    cache_gap = _semantic_gap(cache_info, obs)
+    token_gap = _semantic_gap(info, obs)
+    if cache_gap > float(cfg.token_cache_fallback_gap_threshold) and cache_gap > token_gap + float(cfg.cache_override_min_improvement):
+        return None
+    cache["service_level"] = 0
+    cache["sensing_decision"] = "deadline_token_cache_fallback"
+    cache["bandwidth"] = 0.0
+    cache["power"] = 0.0
+    cache["cpu_share"] = 0.0
+    cache["gpu_share"] = 0.0
+    return cache
+
+
 def _has_hard_safety_violation(info: dict[str, Any]) -> bool:
     return bool(info.get("battery_violation", False) or info.get("resource_violation", False))
 
@@ -1743,12 +1793,17 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         + mobility_cost
         + safety_cost
     )
+    deadline_slack_bonus = 0.0
+    if cfg.deadline_slack_reward and (_is_low_snr(obs, cfg) or _is_deadline_tight(obs, cfg)):
+        slack = 1.0 - delay_norm
+        deadline_slack_bonus = cfg.deadline_slack_reward_weight * max(0.0, min(1.0, slack))
+        deadline_slack_bonus -= cfg.deadline_overrun_penalty_weight * max(0.0, -slack)
     if cfg.semantic_reward_mode == "no_semantic_utility":
         snr_scaled = _snr_scaled(obs)
-        return float(snr_scaled - resource_cost)
+        return float(snr_scaled - resource_cost + deadline_slack_bonus)
     margin = accuracy - epsilon
     if cfg.semantic_reward_mode == "accuracy_only":
-        return float(risk_weight * accuracy_mean - 0.1 * resource_cost)
+        return float(risk_weight * accuracy_mean - 0.1 * resource_cost + deadline_slack_bonus)
     semantic_gap = max(0.0, -margin)
     utility = (
         cfg.semantic_success_weight * risk_weight * semantic_success
@@ -1757,6 +1812,7 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         - cfg.semantic_gap_weight * risk_weight * semantic_gap
         + 0.5 * cfg.semantic_success_weight * risk_weight * task_success
         - resource_cost
+        + deadline_slack_bonus
     )
     if service_level == 0 and semantic_gap > 0.0:
         cache_multiplier = _cache_risk_multiplier(info, obs, cfg)
@@ -2027,6 +2083,26 @@ def _service_resource_floor(cfg: PPOTrainConfig, service_level: int, key: str) -
             3: float(cfg.roi_gpu_floor),
         }.get(level, float(cfg.share_floor))
     raise KeyError(key)
+
+
+def _is_deadline_tight(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    deadline = float(obs.get("deadline_s", obs.get("tau_k", 5.0)))
+    return deadline <= float(cfg.short_deadline_guard_s)
+
+
+def _resource_floor_for_obs(cfg: PPOTrainConfig, service_level: int, key: str, obs: dict[str, Any]) -> float:
+    base = _resource_floor(cfg, service_level, key)
+    if not bool(cfg.token_fast_resource_projection) or int(service_level) != 1:
+        return base
+    if not (_is_low_snr(obs, cfg) or _is_deadline_tight(obs, cfg)):
+        return base
+    fast = {
+        "bandwidth": float(cfg.token_fast_bandwidth_floor),
+        "power": float(cfg.token_fast_power_floor),
+        "cpu_share": float(cfg.token_fast_cpu_floor),
+        "gpu_share": float(cfg.token_fast_gpu_floor),
+    }.get(key, base)
+    return max(base, min(1.0, fast))
 
 
 def _resource_floor(cfg: PPOTrainConfig, service_level: int, key: str) -> float:
