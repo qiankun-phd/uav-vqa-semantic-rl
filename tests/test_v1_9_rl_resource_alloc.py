@@ -20,6 +20,7 @@ from vqa_semcom.rl.v19_ppo import (
     _project_semantic_feasible_action,
     _resource_floor_for_obs,
     _semantic_controller_reward,
+    _semantic_path_allowed,
     normalize_hidden_layers,
     resolve_torch_device,
     train_ppo,
@@ -404,6 +405,82 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertFalse(cfg.semantic_path_actions)
         self.assertGreater(cfg.defer_penalty_weight, 0.0)
         self.assertGreater(cfg.cache_update_success_bonus, 0.0)
+        self.assertTrue(cfg.semantic_path_joint_feasible_mask)
+        self.assertTrue(cfg.cache_update_gate_enabled)
+        self.assertGreater(cfg.cache_update_overuse_penalty_weight, 0.0)
+        self.assertGreater(cfg.utm_violation_strong_penalty_weight, 0.0)
+        self.assertGreater(cfg.edge_overload_deadline_queue_boost, 1.0)
+
+
+    def test_semantic_path_mask_blocks_edge_overload_deadline_negative_paths(self) -> None:
+        obs = {
+            "scenario": "edge_overload",
+            "epsilon_k": 0.7,
+            "remaining_deadline_s": 1.0,
+            "cache_eligible": True,
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {"cache": True, "token": True, "image": True, "defer": True, "cache_update": True},
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.02, "joint_feasible": True},
+                "token": {"deadline_feasible": False, "deadline_slack_s": -0.2, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "cache_update": {"deadline_feasible": False, "deadline_slack_s": -0.1, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "defer": {"feasible": True, "deadline_feasible": True},
+            },
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertFalse(_semantic_path_allowed(obs, "token", cfg))
+        self.assertFalse(_semantic_path_allowed(obs, "cache_update", cfg))
+        self.assertTrue(_semantic_path_allowed(obs, "cache", cfg))
+
+    def test_cache_update_gate_requires_refresh_value_and_slack(self) -> None:
+        obs = {
+            "scenario": "nominal_patrol",
+            "epsilon_k": 0.7,
+            "remaining_deadline_s": 5.0,
+            "task_id": "t0",
+            "task_queue": [{"task_id": "t0", "area_id": "a", "task_type": "search"}],
+            "action_mask": {"service_level_allowed": {0: True, 1: True, 2: True}, "semantic_path_allowed": {"cache_update": True}},
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.01},
+                "cache_update": {"deadline_slack_s": 1.0, "utm_feasible": True, "joint_feasible": True, "resource_feasible": True},
+            },
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertFalse(_semantic_path_allowed(obs, "cache_update", cfg))
+        obs["candidate_path_metrics"]["cache"]["quality_gap"] = 0.2
+        obs["task_queue"].append({"task_id": "t1", "area_id": "a", "task_type": "search"})
+        self.assertTrue(_semantic_path_allowed(obs, "cache_update", cfg))
+
+    def test_projected_deadline_infeasible_cache_update_downgrades_to_cache(self) -> None:
+        env = _ProjectionEnv()
+        obs = {
+            "epsilon_k": 0.4,
+            "deadline_s": 0.8,
+            "scenario": "edge_overload",
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {"cache": True, "token": True, "image": True, "defer": True, "cache_update": True},
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.0, "joint_feasible": True},
+                "token": {"deadline_feasible": False, "deadline_slack_s": -0.2, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "cache_update": {"deadline_feasible": False, "deadline_slack_s": -0.4, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "defer": {"feasible": True, "deadline_feasible": True},
+            },
+            "uav_state": [{"uav_id": 0, "x_m": 0.0, "y_m": 0.0}],
+        }
+        current = env.candidate_action(1, obs)
+        current["semantic_path"] = "cache_update"
+        projected = _project_semantic_feasible_action(
+            env,
+            obs,
+            current,
+            PPOTrainConfig(semantic_path_actions=True, projected_deadline_downgrade=True),
+        )
+        self.assertEqual(projected.get("semantic_path"), "cache")
+        self.assertEqual(projected["service_level"], 0)
 
     def test_deadline_slack_reward_penalizes_low_snr_overrun(self) -> None:
         obs = {"epsilon_k": 0.6, "deadline_s": 1.0, "sensed_snr_db": -9.0, "snr_bin": "low"}

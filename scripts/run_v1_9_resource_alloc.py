@@ -658,6 +658,9 @@ def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
         args.semantic_path_ppo = True
         args.token_fast_resource_projection = True
         args.deadline_token_cache_fallback = True
+        args.queue_deadline_weight = max(float(args.queue_deadline_weight), 1.2)
+        args.queue_utm_weight = max(float(args.queue_utm_weight), 1.5)
+        args.utm_conflict_cost_weight = max(float(args.utm_conflict_cost_weight), 12.0)
     elif variant == "monolithic_ppo":
         _enable_proposed_semantic_rl_defaults(args)
     elif variant == "no_mobility_actor":

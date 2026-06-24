@@ -237,6 +237,18 @@ class PPOTrainConfig:
     cache_stale_queue_weight: float = 1.2
     cache_update_success_bonus: float = 1.0
     cache_update_resource_floor_boost: float = 0.10
+    semantic_path_joint_feasible_mask: bool = True
+    semantic_path_deadline_slack_margin_s: float = 0.0
+    edge_overload_deadline_slack_margin_s: float = 0.0
+    cache_update_gate_enabled: bool = True
+    cache_update_min_quality_gap: float = 0.05
+    cache_update_max_edge_queue_delay_s: float = 0.25
+    cache_update_max_edge_load: float = 0.55
+    cache_update_min_future_reuse: int = 1
+    cache_update_overuse_penalty_weight: float = 5.0
+    utm_violation_strong_penalty_weight: float = 40.0
+    edge_overload_deadline_queue_boost: float = 2.5
+    projected_deadline_downgrade: bool = True
 
 
 @dataclass
@@ -1545,6 +1557,9 @@ def _project_semantic_feasible_action(
     fallback = _deadline_token_cache_fallback_action(env, obs, current, current_info, cfg)
     if fallback is not None:
         return env.parse_action(fallback)
+    deadline_fallback = _projected_deadline_downgrade_action(env, obs, current, current_info, cfg)
+    if deadline_fallback is not None:
+        return env.parse_action(deadline_fallback)
     if best_score <= 0.0:
         return best_action
     for level in _semantic_action_labels(env, cfg):
@@ -1586,10 +1601,19 @@ def _resource_floor_candidate(env: V19LUTResourceEnv, obs: dict[str, Any], seman
     if int(service_level) == 0:
         candidate.update({"bandwidth": 0.0, "power": 0.0, "cpu_share": 0.0, "gpu_share": 0.0})
     elif cfg.hybrid_actions:
-        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), _resource_floor_for_obs(cfg, service_level, "bandwidth", obs))
-        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), _resource_floor_for_obs(cfg, service_level, "power", obs), cfg.power_min_w)
-        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), _resource_floor_for_obs(cfg, service_level, "cpu_share", obs))
-        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), _resource_floor_for_obs(cfg, service_level, "gpu_share", obs))
+        bandwidth_floor = _resource_floor_for_obs(cfg, service_level, "bandwidth", obs)
+        power_floor = _resource_floor_for_obs(cfg, service_level, "power", obs)
+        cpu_floor = _resource_floor_for_obs(cfg, service_level, "cpu_share", obs)
+        gpu_floor = _resource_floor_for_obs(cfg, service_level, "gpu_share", obs)
+        if semantic_path == "cache_update":
+            boost = float(cfg.cache_update_resource_floor_boost)
+            bandwidth_floor = min(1.0, bandwidth_floor + boost)
+            cpu_floor = min(1.0, cpu_floor + boost)
+            gpu_floor = min(1.0, gpu_floor + 0.5 * boost)
+        candidate["bandwidth"] = max(float(candidate.get("bandwidth", 0.0)), bandwidth_floor)
+        candidate["power"] = max(float(candidate.get("power", cfg.power_min_w)), power_floor, cfg.power_min_w)
+        candidate["cpu_share"] = max(float(candidate.get("cpu_share", cfg.share_floor)), cpu_floor)
+        candidate["gpu_share"] = max(float(candidate.get("gpu_share", cfg.share_floor)), gpu_floor)
     candidate["service_level"] = int(service_level)
     candidate["semantic_path"] = semantic_path
     candidate["sensing_decision"] = "reuse_cache" if semantic_path == "cache" else "observe"
@@ -1607,7 +1631,20 @@ def _semantic_safety_score(info: dict[str, Any], obs: dict[str, Any], cfg: PPOTr
     score += 100.0 * float(_has_hard_safety_violation(info))
     score += 24.0 * risk_weight * float(bool(info.get("quality_violation", False)))
     score += 16.0 * risk_weight * float(bool(info.get("deadline_violation", False)))
-    score += 8.0 * float(bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False)))
+    semantic_path = str(info.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(info.get("service_level", 0)), "token")))
+    utm_bad = bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))
+    score += 8.0 * float(utm_bad)
+    if utm_bad:
+        score += float(cfg.utm_violation_strong_penalty_weight)
+    if semantic_path in {"token", "image", "cache_update"} and _path_metric(obs, semantic_path):
+        if not _path_bool_metric(obs, semantic_path, "utm_feasible", True):
+            score += float(cfg.utm_violation_strong_penalty_weight)
+        if _path_deadline_slack_s(obs, semantic_path) <= float(cfg.semantic_path_deadline_slack_margin_s):
+            score += 32.0
+        if bool(cfg.semantic_path_joint_feasible_mask) and not _path_bool_metric(obs, semantic_path, "joint_feasible", True):
+            score += 24.0
+    if semantic_path == "cache_update" and not _cache_update_gate_ok(obs, cfg):
+        score += float(cfg.cache_update_overuse_penalty_weight) * (2.0 if _is_edge_overload_obs(obs, cfg) else 1.0)
     score += 4.0 * float(not bool(info.get("dss_available", True)))
     score += cfg.off_nominal_cost_weight * float(info.get("off_nominal_planning_penalty", 0.0))
     score += 10.0 * risk_weight * max(0.0, epsilon - accuracy)
@@ -1785,6 +1822,49 @@ def _deadline_token_cache_fallback_action(
     return cache
 
 
+def _projected_deadline_downgrade_action(
+    env: V19LUTResourceEnv,
+    obs: dict[str, Any],
+    action: dict[str, Any],
+    info: dict[str, Any],
+    cfg: PPOTrainConfig,
+) -> dict[str, Any] | None:
+    if not bool(cfg.projected_deadline_downgrade):
+        return None
+    current_path = str(action.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(action.get("service_level", 0)), "token")))
+    deadline_bad = bool(info.get("deadline_violation", False)) or _deadline_guard_blocks(info, obs, cfg)
+    if _path_metric(obs, current_path):
+        deadline_bad = deadline_bad or _path_deadline_slack_s(obs, current_path) <= 0.0
+    if not deadline_bad:
+        return None
+    downgrade_order = {
+        "image": ("token", "cache", "defer"),
+        "cache_update": ("token", "cache", "defer"),
+        "token": ("cache", "defer"),
+        "cache": ("defer",),
+        "defer": (),
+    }.get(current_path, ("token", "cache", "defer"))
+    current_gap = _semantic_gap(info, obs)
+    for path in downgrade_order:
+        if not _semantic_path_allowed(obs, path, cfg):
+            continue
+        candidate = _resource_floor_candidate(env, obs, path, cfg)
+        candidate["uav_assignment"] = _select_uav_assignment(obs, cfg)
+        evaluated = env.evaluate_action(candidate, obs)
+        if _has_hard_safety_violation(evaluated):
+            continue
+        if bool(evaluated.get("deadline_violation", False)) or _deadline_guard_blocks(evaluated, obs, cfg):
+            continue
+        if bool(evaluated.get("utm_constraint_violation", False) or evaluated.get("utm_conflict_violation", False)):
+            continue
+        if path == "cache":
+            cache_gap = _semantic_gap(evaluated, obs)
+            if cache_gap > float(cfg.token_cache_fallback_gap_threshold) and cache_gap > current_gap + float(cfg.cache_override_min_improvement):
+                continue
+        return candidate
+    return None
+
+
 def _has_hard_safety_violation(info: dict[str, Any]) -> bool:
     return bool(info.get("battery_violation", False) or info.get("resource_violation", False))
 
@@ -1866,13 +1946,114 @@ def _semantic_choice_allowed(obs: dict[str, Any], choice: int | str, cfg: PPOTra
     return _service_allowed(obs, level)
 
 
+def _path_metric(obs: dict[str, Any], path: str) -> dict[str, Any]:
+    metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
+    data = metrics.get(path, {}) if isinstance(metrics.get(path, {}), dict) else {}
+    return data if isinstance(data, dict) else {}
+
+
+def _path_bool_metric(obs: dict[str, Any], path: str, key: str, default: bool = True) -> bool:
+    data = _path_metric(obs, path)
+    if key in data:
+        return bool(data.get(key))
+    if key == "joint_feasible" and "feasible" in data:
+        return bool(data.get("feasible"))
+    return bool(default)
+
+
+def _path_deadline_slack_s(obs: dict[str, Any], path: str) -> float:
+    data = _path_metric(obs, path)
+    if "deadline_slack_s" in data:
+        return float(data.get("deadline_slack_s", 0.0))
+    deadline = float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 0.0))))
+    return deadline - float(data.get("delay_s", 0.0))
+
+
+def _path_quality_gap(obs: dict[str, Any], path: str) -> float:
+    data = _path_metric(obs, path)
+    if "quality_gap" in data:
+        return max(0.0, float(data.get("quality_gap", 0.0)))
+    epsilon = float(obs.get("epsilon_k", 0.0))
+    return max(0.0, epsilon - float(data.get("accuracy_lcb", 0.0)))
+
+
+def _edge_load_pressure(obs: dict[str, Any]) -> float:
+    loads = obs.get("edge_load", [])
+    if isinstance(loads, (list, tuple)) and loads:
+        try:
+            return max(float(item) for item in loads)
+        except (TypeError, ValueError):
+            pass
+    try:
+        return float(obs.get("edge_load_scalar", obs.get("edge_load", 0.0)) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _edge_queue_delay_s(obs: dict[str, Any]) -> float:
+    try:
+        return float(obs.get("edge_queue_delay_s", obs.get("edge_queue_s", obs.get("queue_delay_s", 0.0))) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _is_edge_overload_obs(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    scenario = str(obs.get("formal_scenario", obs.get("scenario", ""))).lower()
+    if "edge_overload" in scenario or "edge-overload" in scenario:
+        return True
+    return _edge_load_pressure(obs) >= float(cfg.cache_update_max_edge_load) or _edge_queue_delay_s(obs) > float(cfg.cache_update_max_edge_queue_delay_s)
+
+
+def _future_cache_reuse_count(obs: dict[str, Any]) -> int:
+    queue = list(obs.get("task_queue", []) or [])
+    if len(queue) <= 1:
+        return 0
+    task_id = str(obs.get("task_id", ""))
+    current = next((item for item in queue if str(item.get("task_id", "")) == task_id), queue[0])
+    area = str(current.get("area_id", current.get("area", "")))
+    task_type = str(current.get("task_type", current.get("type", obs.get("task_type", ""))))
+    count = 0
+    for item in queue:
+        if str(item.get("task_id", "")) == task_id:
+            continue
+        same_area = bool(area) and str(item.get("area_id", item.get("area", ""))) == area
+        same_type = bool(task_type) and str(item.get("task_type", item.get("type", ""))) == task_type
+        if same_area or same_type:
+            count += 1
+    return count
+
+
+def _cache_update_gate_ok(obs: dict[str, Any], cfg: PPOTrainConfig) -> bool:
+    if not bool(cfg.cache_update_gate_enabled):
+        return True
+    update_data = _path_metric(obs, "cache_update")
+    if update_data and bool(cfg.semantic_path_joint_feasible_mask) and not bool(update_data.get("joint_feasible", update_data.get("feasible", True))):
+        return False
+    if update_data and not bool(update_data.get("utm_feasible", True)):
+        return False
+    if _path_deadline_slack_s(obs, "cache_update") <= float(cfg.semantic_path_deadline_slack_margin_s):
+        return False
+    cache_data = _path_metric(obs, "cache")
+    cache_eligible = bool(cache_data.get("cache_eligible", obs.get("cache_eligible", False)))
+    cache_gap = _path_quality_gap(obs, "cache")
+    cache_needs_refresh = (not cache_eligible) or cache_gap >= float(cfg.cache_update_min_quality_gap)
+    if not cache_needs_refresh:
+        return False
+    if _edge_load_pressure(obs) > float(cfg.cache_update_max_edge_load) or _edge_queue_delay_s(obs) > float(cfg.cache_update_max_edge_queue_delay_s):
+        return False
+    if _future_cache_reuse_count(obs) < int(cfg.cache_update_min_future_reuse):
+        return False
+    return True
+
+
 def _semantic_path_allowed(obs: dict[str, Any], path: str, cfg: PPOTrainConfig) -> bool:
     mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
     allowed = mask.get("semantic_path_allowed", {}) if isinstance(mask.get("semantic_path_allowed", {}), dict) else {}
     if not bool(allowed.get(path, True)):
         return False
     metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
-    data = metrics.get(path, {}) if isinstance(metrics.get(path, {}), dict) else {}
+    data = _path_metric(obs, path)
+    has_metric = path in metrics and bool(data)
     if path == "cache":
         return bool(data.get("cache_eligible", obs.get("cache_eligible", False)))
     if path == "defer":
@@ -1881,10 +2062,25 @@ def _semantic_path_allowed(obs: dict[str, Any], path: str, cfg: PPOTrainConfig) 
         remaining = float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 1.0))))
         if remaining <= 0.5:
             return False
+        if has_metric and not bool(data.get("deadline_feasible", data.get("feasible", True))):
+            return False
         return bool(data.get("feasible", True))
-    if path in {"image", "cache_update"}:
+    if path in {"token", "image", "cache_update"}:
         level = SEMANTIC_PATH_TO_SERVICE_LEVEL[path]
         if not _service_allowed(obs, level):
+            return False
+        if has_metric and not bool(data.get("utm_feasible", True)):
+            return False
+        if has_metric and not bool(data.get("resource_feasible", True)):
+            return False
+        if has_metric and bool(cfg.semantic_path_joint_feasible_mask):
+            joint = bool(data.get("joint_feasible", data.get("feasible", True)))
+            if path in {"image", "cache_update"} and not joint:
+                return False
+        if _is_edge_overload_obs(obs, cfg) and path in {"token", "cache_update"}:
+            if _path_deadline_slack_s(obs, path) <= float(cfg.edge_overload_deadline_slack_margin_s):
+                return False
+        if path == "cache_update" and not _cache_update_gate_ok(obs, cfg):
             return False
     return True
 
@@ -1923,11 +2119,13 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     dss_delay_norm = (
         float(info.get("dss_delay_s", 0.0)) + float(info.get("subscription_notification_delay_s", 0.0))
     ) / max(0.5, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))
+    utm_bad = bool(info.get("utm_constraint_violation", False) or info.get("utm_conflict_violation", False))
     safety_cost = (
         cfg.conflict_cost_weight * float(bool(info.get("airspace_conflict", False)))
         + cfg.battery_cost_weight * float(bool(info.get("battery_violation", False)))
         + cfg.gpu_cost_weight * float(bool(info.get("resource_violation", False)))
-        + cfg.utm_conflict_cost_weight * float(bool(info.get("utm_constraint_violation", False)))
+        + cfg.utm_conflict_cost_weight * float(utm_bad)
+        + cfg.utm_violation_strong_penalty_weight * float(utm_bad)
         + cfg.dss_delay_cost_weight * dss_delay_norm
         + cfg.off_nominal_cost_weight * float(info.get("off_nominal_planning_penalty", 0.0))
     )
@@ -1967,8 +2165,12 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
     )
     if semantic_path == "defer":
         utility -= cfg.defer_penalty_weight * risk_weight * (1.0 + float(info.get("defer_count", obs.get("defer_count", 0))))
-    if semantic_path == "cache_update" and semantic_success > 0.0:
-        utility += cfg.cache_update_success_bonus * risk_weight
+    if semantic_path == "cache_update":
+        gate_ok = _cache_update_gate_ok(obs, cfg)
+        if semantic_success > 0.0 and gate_ok:
+            utility += cfg.cache_update_success_bonus * risk_weight
+        if (not gate_ok) or bool(info.get("deadline_violation", False)) or _is_edge_overload_obs(obs, cfg):
+            utility -= cfg.cache_update_overuse_penalty_weight * risk_weight * (1.0 + max(0.0, delay_norm - 1.0))
     if service_level == 0 and semantic_path == "cache" and semantic_gap > 0.0:
         cache_multiplier = _cache_risk_multiplier(info, obs, cfg)
         utility -= cfg.cache_shortfall_penalty_weight * cache_multiplier * (1.0 + epsilon) * semantic_gap
@@ -1984,10 +2186,13 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
         utility += cfg.semantic_token_exploration_bonus * risk_weight
     if cfg.semantic_reward_mode == "uncertainty_aware":
         utility += 0.5 * risk_weight * max(0.0, margin) - 0.4 * uncertainty
+    if _is_edge_overload_obs(obs, cfg) and bool(info.get("deadline_violation", False)):
+        utility -= cfg.edge_overload_deadline_queue_boost * max(1.0, delay_norm)
     if cfg.lyapunov_reward and cfg.use_lyapunov_queues:
+        deadline_queue_weight = cfg.queue_deadline_weight * (float(cfg.edge_overload_deadline_queue_boost) if _is_edge_overload_obs(obs, cfg) else 1.0)
         queue_penalty = (
             cfg.queue_quality_weight * float(info.get("q_quality", 0.0)) * max(0.0, -margin)
-            + cfg.queue_deadline_weight * float(info.get("q_deadline", 0.0)) * max(0.0, delay_norm - 1.0)
+            + deadline_queue_weight * float(info.get("q_deadline", 0.0)) * max(0.0, delay_norm - 1.0)
             + cfg.queue_energy_weight * float(info.get("q_energy", 0.0)) / max(1.0, float(cfg.energy_budget_j))
             + cfg.queue_risk_weight * float(info.get("q_risk", 0.0))
             + cfg.queue_utm_weight * float(info.get("q_utm", 0.0))

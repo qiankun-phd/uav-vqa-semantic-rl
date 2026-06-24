@@ -1745,3 +1745,32 @@ Next interface recommendation:
 
 - Add an explicit environment/algorithm-side field such as `future_reuse_value`, `cache_update_value`, or `expected_future_cache_hits` before treating `cache_update` as actively recommended.
 - Keep the semantic utility layer conservative: `cache_update` remains a candidate path with current-task token utility plus a documented limitation.
+
+## RL Semantic Path Feasibility Fix1 2026-06-24 Asia/Shanghai
+
+Algorithm thread stabilized the semantic-path/cache-defer PPO controller without modifying the environment. The fix consumes `candidate_path_metrics` on the RL side and adds path-level feasibility control:
+
+- `candidate_path_metrics[path].utm_feasible`, `resource_feasible`, `joint_feasible`, and `deadline_slack_s` now influence semantic-path masks and safety projection.
+- `cache_update` is gated by cache need, positive deadline slack, edge load/queue pressure, and future reuse value.
+- projected deadline-infeasible paths degrade through `image/cache_update -> token -> cache -> defer`, with cache allowed only when eligible and not a large semantic shortfall.
+- reward now adds stronger UTM violation cost, edge-overload deadline queue boost, and cache-update overuse penalty while preserving cache-collapse penalties.
+
+Validation:
+
+- Targeted RL tests: `/home/qiankun/.conda/envs/uav_semcom/bin/python -m unittest discover -s tests -p 'test_v1_9_rl_resource_alloc.py' -v` passed, 24 tests OK.
+- Benchmark used RA_DI with `cuda:0` (`NVIDIA GeForce RTX 4060`) and wrote `outputs/rl/semantic_path_cache_defer_fix1_20260624/`.
+- Full unittest is scheduled after report/doc generation before commit.
+
+Fix1 aggregate results for `semantic_path_two_timescale_ppo`:
+
+| scenario | semantic success | task success | deadline vio | UTM vio | cache/token/image/defer/cache_update |
+|---|---:|---:|---:|---:|---|
+| normal_patrol | 0.275 | 0.275 | 0.000 | 0.000 | 0.434 / 0.566 / 0.000 / 0.000 / 0.000 |
+| disaster_hotspot | 0.280 | 0.196 | 0.336 | 0.000 | 0.418 / 0.431 / 0.151 / 0.000 / 0.000 |
+| low_snr_soft | 0.822 | 0.276 | 0.608 | 0.000 | 0.427 / 0.573 / 0.000 / 0.000 / 0.000 |
+| low_snr_blockage | 0.822 | 0.276 | 0.608 | 0.000 | 0.427 / 0.573 / 0.000 / 0.000 / 0.000 |
+| edge_overload | 0.384 | 0.104 | 0.557 | 0.000 | 0.265 / 0.712 / 0.000 / 0.001 / 0.022 |
+| utm_conflict | 0.000 | 0.000 | 0.679 | 0.179 | 0.373 / 0.325 / 0.301 / 0.000 / 0.000 |
+
+Conclusion: fix1 removes cache_update overuse in edge_overload (`0.381 -> 0.022`) and removes normal_patrol deadline regression, but it is not final-paper ready. Edge-overload task success is still below the previous B_state_v2 baseline, and UTM conflict remains unsolved. See `outputs/rl/semantic_path_cache_defer_fix1_20260624/fix1_comparison.md`.
+

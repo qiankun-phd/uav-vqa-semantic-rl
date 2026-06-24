@@ -934,3 +934,23 @@ outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_summary.
 outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_report.md
 outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
 ```
+
+## RL Semantic Path Fix2 TODO 2026-06-24
+
+Fix1 stabilized semantic-path action feasibility but did not fully recover edge_overload or utm_conflict. Next Algorithm tasks:
+
+1. Edge-overload fix2:
+   - learn/hand-code token-first projection with stricter positive deadline slack, not just cache_update suppression;
+   - add edge queue/load features directly to fast actor reward normalization;
+   - calibrate token resource floors for edge_overload so token can satisfy deadline when feasible;
+   - compare against B_state_v2 edge result (`task_success=0.649`, `deadline_vio=0.000`).
+2. UTM conflict fix2:
+   - make slow mobility actor consume operational intent / UTM feasibility more directly;
+   - forbid token/image/cache_update when candidate path is UTM infeasible unless mobility mode is `avoid_conflict` and projected delay remains feasible;
+   - add explicit UAV assignment selection among UTM-feasible intents rather than relying on nearest UAV.
+3. Scenario cleanup:
+   - keep noting that `low_snr_soft` is currently an alias of `low_snr_blockage` unless Environment provides a distinct preset.
+4. Experiment hygiene:
+   - do not treat `semantic_path_cache_defer_fix1_20260624` as final paper result;
+   - commit only root CSV/MD reports, not `.pt`, rollout CSVs, per-seed logs, or large traces.
+
