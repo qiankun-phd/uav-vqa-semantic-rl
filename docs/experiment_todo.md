@@ -914,3 +914,23 @@ Next steps:
 2. Do not expect large speedups for the current small MLP/small-batch benchmark; environment rollout remains the bottleneck.
 3. If GPU acceleration is needed for wall-clock speed, increase vectorized rollout/batch size or move to larger model/batched scenario collection rather than only moving the tiny network to CUDA.
 4. Continue the low-SNR deadline-control fix before running a 300-episode v2 formal claim.
+
+## Semantic Path Cache/Defer PPO Follow-Up 2026-06-24
+
+Completed short 300-episode semantic-path two-timescale PPO benchmark on branch `codex/semantic-path-cache-defer`.
+
+Next algorithm items:
+
+- Add a distinct Environment preset for `low_snr_soft`; currently it aliases to `low_snr_blockage`.
+- Fix edge-overload regression: semantic path PPO uses token/cache_update but deadline violation rises to 0.569; projection should account for edge queue/cache-update refresh cost.
+- Fix UTM-conflict feasibility: semantic success remains 0.0 even though payload is low; need conflict-aware mobility/assignment and stricter action mask for risky serve/reposition.
+- Tune cache_update usage: it helps low-SNR/edge freshness but can increase edge queue delay when overload is high.
+- After these fixes, rerun 1000-episode final candidate with semantic-path actor enabled.
+
+Short benchmark artifacts:
+
+```text
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
+```

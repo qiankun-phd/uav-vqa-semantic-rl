@@ -25,6 +25,13 @@ class V19StepRecord:
     sensed_snr_db: float
     snr_bin: str
     service_level: int
+    semantic_path: str
+    task_status: str
+    remaining_deadline_s: float
+    defer_count: int
+    cache_eligible: bool
+    cache_quality_lcb: float
+    cache_age: float
     bandwidth_hz: float
     power_w: float
     cpu_share: float
@@ -52,6 +59,8 @@ class V19StepRecord:
     q_energy: float
     q_risk: float
     q_utm: float
+    q_defer: float
+    q_cache_stale: float
     success: bool
     delay_s: float
     fly_delay_s: float
@@ -203,6 +212,15 @@ class V19LUTResourceEnv:
                 "q_energy": record.q_energy,
                 "q_risk": record.q_risk,
                 "q_utm": record.q_utm,
+                "q_defer": record.q_defer,
+                "q_cache_stale": record.q_cache_stale,
+                "semantic_path": record.semantic_path,
+                "task_status": record.task_status,
+                "remaining_deadline_s": record.remaining_deadline_s,
+                "defer_count": record.defer_count,
+                "cache_eligible": record.cache_eligible,
+                "cache_quality_lcb": record.cache_quality_lcb,
+                "cache_age": record.cache_age,
                 "success": record.success,
                 "delay_s": record.delay_s,
                 "fly_delay_s": record.fly_delay_s,
@@ -303,6 +321,13 @@ class V19LUTResourceEnv:
             sensed_snr_db=float(info.get("sensed_snr_db", 0.0)),
             snr_bin=str(info.get("snr_bin", "")),
             service_level=int(info.get("service_level", self.service_levels[0])),
+            semantic_path=str(info.get("semantic_path", "cache" if int(info.get("service_level", 0)) == 0 else "token")),
+            task_status=str(info.get("task_status", "served" if bool(info.get("success", False)) else "pending")),
+            remaining_deadline_s=float(info.get("remaining_deadline_s", info.get("deadline_s", 0.0))),
+            defer_count=int(info.get("defer_count", 0)),
+            cache_eligible=bool(info.get("cache_eligible", False)),
+            cache_quality_lcb=float(info.get("cache_quality_lcb", 0.0)),
+            cache_age=float(info.get("cache_age", 0.0)),
             bandwidth_hz=float(info.get("bandwidth_hz", 0.0)),
             power_w=float(info.get("power_w", 0.0)),
             cpu_share=float(info.get("cpu_share", 0.0)),
@@ -330,6 +355,8 @@ class V19LUTResourceEnv:
             q_energy=float(info.get("q_energy", 0.0)),
             q_risk=float(info.get("q_risk", 0.0)),
             q_utm=float(info.get("q_utm", 0.0)),
+            q_defer=float(info.get("q_defer", 0.0)),
+            q_cache_stale=float(info.get("q_cache_stale", 0.0)),
             success=bool(info.get("success", False)),
             delay_s=float(info.get("delay_s", info.get("total_delay_s", 0.0))),
             fly_delay_s=float(info.get("fly_delay_s", info.get("arrival_delay_s", 0.0))),
@@ -375,8 +402,18 @@ class V19LUTResourceEnv:
         info.setdefault("semantic_accuracy_lcb", raw_accuracy)
         info.setdefault("semantic_uncertainty", 0.0)
         info.setdefault("semantic_sample_count", 0)
+        semantic_path = str(info.get("semantic_path", "cache" if int(info.get("service_level", 0)) == 0 else "token"))
+        info["semantic_path"] = semantic_path
         model = self._semantic_utility
-        if model is not None:
+        if semantic_path == "defer":
+            info["semantic_accuracy_mean"] = 0.0
+            info["semantic_accuracy_lcb"] = 0.0
+            info["semantic_uncertainty"] = 0.0
+            info["semantic_sample_count"] = 0
+            info["answer_accuracy_est"] = 0.0
+            info["payload_kb"] = 0.0
+            info["semantic_payload_kb"] = 0.0
+        elif model is not None:
             query = self._semantic_query(info, obs)
             estimate = model.U_sem(
                 query["question_type"],
@@ -402,6 +439,12 @@ class V19LUTResourceEnv:
         energy_j = float(info.get("energy_j", info.get("total_energy_j", 0.0)))
         energy_budget_j = self._energy_budget_from_obs_or_info(info, obs)
         info.setdefault("semantic_payload_kb", float(info.get("payload_kb", 0.0)))
+        info.setdefault("task_status", "served" if bool(info.get("success", False)) else "pending")
+        info.setdefault("remaining_deadline_s", float(deadline_s))
+        info.setdefault("defer_count", 0)
+        info.setdefault("cache_eligible", False)
+        info.setdefault("cache_quality_lcb", 0.0)
+        info.setdefault("cache_age", 0.0)
         info["epsilon_k"] = float(epsilon)
         info["semantic_quality_gap"] = max(0.0, epsilon - accuracy_lcb)
         info["semantic_success"] = bool(accuracy_lcb >= epsilon)
@@ -432,6 +475,9 @@ class V19LUTResourceEnv:
         info["off_nominal_planning_penalty"] = 1.0 if state in {"nonconforming", "contingent"} else 0.0
         info["q_risk_increment"] = self._risk_increment(info)
         info["q_utm_increment"] = float(bool(info.get("utm_constraint_violation", False)))
+        info["q_defer_increment"] = float(str(info.get("semantic_path", "")) == "defer")
+        cache_stale = str(info.get("semantic_path", "")) == "cache" and (not bool(info.get("cache_eligible", False)) or str(info.get("cache_freshness_bin", info.get("freshness_bin", "fresh"))) in {"stale", "expired"})
+        info["q_cache_stale_increment"] = float(cache_stale) * max(1.0, float(info.get("semantic_quality_gap", 0.0)))
         info["success"] = not (
             bool(info.get("quality_violation", False))
             or bool(info.get("deadline_violation", False))
@@ -540,8 +586,45 @@ class V19LUTResourceEnv:
                     slack_ratio,
                 ]
             )
+        features += self._semantic_path_feature_vector(obs)
         features += self._uav_mobility_feature_vector(obs)
         features += self._mask_feature_vector(obs)
+        return features
+
+
+    def _semantic_path_feature_vector(self, obs: dict[str, Any]) -> list[float]:
+        paths = ("cache", "token", "image", "defer", "cache_update")
+        metrics = obs.get("candidate_path_metrics", {}) if isinstance(obs.get("candidate_path_metrics", {}), dict) else {}
+        deadline = max(1e-6, float(obs.get("remaining_deadline_s", obs.get("deadline_s", obs.get("tau_k", 5.0)))))
+        features: list[float] = []
+        for path in paths:
+            data = metrics.get(path, {}) if isinstance(metrics.get(path, {}), dict) else {}
+            accuracy_lcb = self._clip01(float(data.get("accuracy_lcb", 0.0)))
+            accuracy_mean = self._clip01(float(data.get("accuracy_mean", accuracy_lcb)))
+            gap = self._clip01(float(data.get("quality_gap", max(0.0, float(obs.get("epsilon_k", 0.0)) - accuracy_lcb))))
+            delay_s = max(0.0, float(data.get("delay_s", 0.0)))
+            energy_j = max(0.0, float(data.get("energy_j", 0.0)))
+            payload_kb = max(0.0, float(data.get("payload_kb", 0.0)))
+            semantic_feasible = float(gap <= 1e-9)
+            deadline_feasible = float(delay_s <= deadline)
+            feasible = float(bool(data.get("feasible", semantic_feasible > 0.0 and deadline_feasible > 0.0)))
+            slack_ratio = self._clip(float(data.get("deadline_slack_s", deadline - delay_s)) / deadline, -1.0, 1.0)
+            features.extend(
+                [
+                    feasible,
+                    accuracy_lcb,
+                    accuracy_mean,
+                    gap,
+                    semantic_feasible,
+                    deadline_feasible,
+                    float(semantic_feasible > 0.0 and deadline_feasible > 0.0),
+                    slack_ratio,
+                    self._clip01(payload_kb / 200.0),
+                    self._clip01(energy_j / self._state_v2_energy_norm_j),
+                    float(bool(data.get("cache_eligible", False))),
+                    float(bool(data.get("utm_constraint_violation", False))),
+                ]
+            )
         return features
 
     def _uav_mobility_feature_vector(self, obs: dict[str, Any]) -> list[float]:
@@ -575,6 +658,8 @@ class V19LUTResourceEnv:
     def _mask_feature_vector(self, obs: dict[str, Any]) -> list[float]:
         mask = obs.get("action_mask", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
         service_allowed = mask.get("service_level_allowed", {}) if isinstance(mask.get("service_level_allowed", {}), dict) else {}
+        path_allowed = mask.get("semantic_path_allowed", {}) if isinstance(mask.get("semantic_path_allowed", {}), dict) else {}
+        path_values = [float(bool(path_allowed.get(path, True))) for path in ("cache", "token", "image", "defer", "cache_update")]
         service_values = [
             float(bool(service_allowed.get(level, service_allowed.get(str(level), int(level) in self.service_levels))))
             for level in self._state_v2_service_levels
@@ -586,7 +671,7 @@ class V19LUTResourceEnv:
         for uid in range(self._state_v2_max_uavs):
             active = self._uav_by_index_or_id(obs, uid) is not None
             uav_values.append(float(active and bool(uav_ok.get(uid, uav_ok.get(str(uid), True)))))
-        return service_values + mobility_values + uav_values
+        return path_values + service_values + mobility_values + uav_values
 
     @staticmethod
     def _clip(value: float, low: float, high: float) -> float:
@@ -627,7 +712,7 @@ class V19LUTResourceEnv:
 
     @staticmethod
     def _empty_queue_state() -> dict[str, float]:
-        return {"quality": 0.0, "deadline": 0.0, "energy": 0.0, "risk": 0.0, "utm": 0.0}
+        return {"quality": 0.0, "deadline": 0.0, "energy": 0.0, "risk": 0.0, "utm": 0.0, "defer": 0.0, "cache_stale": 0.0}
 
     def _queue_vector(self) -> list[float]:
         return [
@@ -636,6 +721,8 @@ class V19LUTResourceEnv:
             float(self._queue_state["energy"]) / max(1.0, float(self.energy_budget_j)),
             float(self._queue_state["risk"]),
             float(self._queue_state["utm"]),
+            float(self._queue_state["defer"]),
+            float(self._queue_state["cache_stale"]),
         ]
 
     def _attach_queue_state(self, info: dict[str, Any]) -> None:
@@ -644,6 +731,8 @@ class V19LUTResourceEnv:
         info["q_energy"] = float(self._queue_state["energy"])
         info["q_risk"] = float(self._queue_state["risk"])
         info["q_utm"] = float(self._queue_state["utm"])
+        info["q_defer"] = float(self._queue_state["defer"])
+        info["q_cache_stale"] = float(self._queue_state["cache_stale"])
 
     def _update_virtual_queues(self, info: dict[str, Any]) -> None:
         self._queue_state["quality"] = max(0.0, self._queue_state["quality"] + float(info.get("q_quality_increment", 0.0)))
@@ -651,6 +740,8 @@ class V19LUTResourceEnv:
         self._queue_state["energy"] = max(0.0, self._queue_state["energy"] + float(info.get("q_energy_increment", 0.0)))
         self._queue_state["risk"] = max(0.0, self._queue_state["risk"] + float(info.get("q_risk_increment", 0.0)))
         self._queue_state["utm"] = max(0.0, self._queue_state["utm"] + float(info.get("q_utm_increment", 0.0)))
+        self._queue_state["defer"] = max(0.0, self._queue_state["defer"] + float(info.get("q_defer_increment", 0.0)))
+        self._queue_state["cache_stale"] = max(0.0, self._queue_state["cache_stale"] + float(info.get("q_cache_stale_increment", 0.0)))
         self._attach_queue_state(info)
 
     @staticmethod

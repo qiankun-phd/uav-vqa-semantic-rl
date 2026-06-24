@@ -55,7 +55,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         ]:
             self.assertIn(key, obs)
         self.assertIn("lyapunov_queues", obs)
-        self.assertEqual(set(obs["lyapunov_queues"]), {"quality", "deadline", "energy", "risk", "utm"})
+        self.assertEqual(set(obs["lyapunov_queues"]), {"quality", "deadline", "energy", "risk", "utm", "defer", "cache_stale"})
         action = env.candidate_action(1, obs)
         next_obs, reward, done, info = env.step(action)
         self.assertIn("answer_accuracy_est", info)
@@ -75,6 +75,11 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("q_energy", info)
         self.assertIn("q_risk", info)
         self.assertIn("q_utm", info)
+        self.assertIn("q_defer", info)
+        self.assertIn("q_cache_stale", info)
+        self.assertIn("semantic_path", info)
+        self.assertIn("defer_count", info)
+        self.assertIn("cache_eligible", info)
         self.assertIn("delay_s", info)
         self.assertIn("fly_delay_s", info)
         self.assertIn("sense_delay_s", info)
@@ -311,6 +316,37 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn(action["mobility_mode"], {"stay", "serve_task", "reposition", "avoid_conflict", "return_base"})
         self.assertEqual(len(action["waypoint_delta"]), 2)
 
+
+    def test_semantic_path_two_timescale_ppo_outputs_path_action(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=18, tasks_per_episode=3, state_version="v2")
+        try:
+            model, trace = train_two_timescale_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=1,
+                    update_epochs=1,
+                    hidden_size=32,
+                    semantic_reward_mode="semantic_utility",
+                    lyapunov_reward=True,
+                    semantic_path_actions=True,
+                    mobility_update_interval=3,
+                    device="cpu",
+                ),
+                seed=18,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 1)
+        self.assertIn("path_defer_ratio", trace[0])
+        obs = env.reset(seed=28)
+        action = TwoTimescalePPOPolicy(
+            env,
+            model,
+            PPOTrainConfig(hidden_size=32, semantic_path_actions=True, mobility_update_interval=3),
+        ).act(obs)
+        self.assertIn(action["semantic_path"], {"cache", "token", "image", "defer", "cache_update"})
+        self.assertIn("service_level", action)
+
     def test_tiny_proposed_semantic_controller_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=3, tasks_per_episode=3)
         try:
@@ -365,6 +401,9 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.deadline_overrun_penalty_weight, 0.0)
         self.assertGreater(cfg.token_fast_bandwidth_floor, cfg.semantic_token_bandwidth_floor)
         self.assertGreater(cfg.token_cache_fallback_overrun_ratio, 1.0)
+        self.assertFalse(cfg.semantic_path_actions)
+        self.assertGreater(cfg.defer_penalty_weight, 0.0)
+        self.assertGreater(cfg.cache_update_success_bonus, 0.0)
 
     def test_deadline_slack_reward_penalizes_low_snr_overrun(self) -> None:
         obs = {"epsilon_k": 0.6, "deadline_s": 1.0, "sensed_snr_db": -9.0, "snr_bin": "low"}

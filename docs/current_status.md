@@ -1645,3 +1645,64 @@ cache_hit_probability
 `cache_eligible=True` requires an exact or nearby same-type semantic cache entry, non-expired freshness, and `cache_quality_lcb >= epsilon_k`. Expired or low-quality cache entries can still appear in diagnostics, but they cannot satisfy cache-route semantic QoS.
 
 Observations now expose `candidate_path_metrics` for `cache/token/image/defer/cache_update`, with feasibility, accuracy LCB/mean, semantic quality gap, payload, delay, energy, deadline slack, cache eligibility, and UTM constraint violation. `defer` keeps the task in the queue and consumes deadline; `cache_update` maps to token evidence and writes or refreshes semantic cache after successful service.
+
+## Semantic Path Cache/Defer PPO 2026-06-24 Asia/Shanghai
+
+Implemented and smoke/short-benchmarked the semantic-path branch controller on `codex/semantic-path-cache-defer`.
+
+Code changes:
+
+- Added semantic path action support for two-timescale PPO: `cache`, `token`, `image`, `defer`, and `cache_update`.
+- Kept the slow mobility actor for UAV assignment / mobility mode / waypoint deltas and the fast actor for semantic path plus bandwidth/power/CPU/GPU actions.
+- Added semantic-path action masks using `candidate_path_metrics`, cache eligibility, defer feasibility, service/GPU feasibility, and UTM/mobility constraints.
+- Extended Lyapunov queues with `Q_defer` and `Q_cache_stale`, and exposed them in observation vectors, rollout CSV, and training trace.
+- Added path-aware reward terms: cache shortfall penalty, defer penalty, cache-update success bonus, and queue-weighted penalties.
+- Added state-vector V2 candidate path features from `candidate_path_metrics` with fixed ordering and clipping.
+- Added runner support for `--semantic-path-ppo` and scenario aliases: `normal_patrol -> nominal_patrol`, `low_snr_soft -> low_snr_blockage`.
+
+Short benchmark:
+
+```text
+outputs/rl/semantic_path_cache_defer_short_20260624/
+```
+
+Settings:
+
+```text
+scenarios: normal_patrol, disaster_hotspot, low_snr_soft, low_snr_blockage, edge_overload, utm_conflict
+seeds: 0,1,2
+train episodes: 300
+rollout eval episodes: 50
+tasks per episode: 12
+device: cuda:0
+variant: semantic_path_two_timescale_ppo
+```
+
+Main result summary for `semantic_path_two_timescale_ppo`:
+
+| scenario | semantic success | task success | deadline violation | payload KB | cache/token/image/defer/cache_update |
+|---|---:|---:|---:|---:|---:|
+| disaster_hotspot | 0.316 | 0.278 | 0.144 | 0.641 | 0.451 / 0.504 / 0.000 / 0.000 / 0.044 |
+| edge_overload | 0.609 | 0.231 | 0.569 | 0.864 | 0.034 / 0.585 / 0.000 / 0.000 / 0.381 |
+| low_snr_blockage | 0.931 | 0.271 | 0.699 | 0.672 | 0.305 / 0.450 / 0.000 / 0.010 / 0.235 |
+| low_snr_soft | 0.931 | 0.271 | 0.699 | 0.672 | 0.305 / 0.450 / 0.000 / 0.010 / 0.235 |
+| normal_patrol | 0.378 | 0.230 | 0.251 | 0.751 | 0.257 / 0.688 / 0.000 / 0.004 / 0.050 |
+| utm_conflict | 0.000 | 0.000 | 0.541 | 0.592 | 0.501 / 0.499 / 0.000 / 0.000 / 0.000 |
+
+Compared with previous `B_state_v2_fixed_128x128` medium run:
+
+- `low_snr_blockage`: semantic success 0.948 -> 0.931, task success 0.128 -> 0.271, deadline violation 0.854 -> 0.699, payload 0.918 -> 0.672 KB.
+- `disaster_hotspot`: semantic success 0.180 -> 0.316, task success 0.099 -> 0.278, deadline violation 0.211 -> 0.144.
+- `normal_patrol`: semantic success 0.156 -> 0.378 and payload drops sharply, but deadline violation rises to 0.251.
+- `edge_overload`: semantic success remains close to prior B (0.649 -> 0.609), but task success drops and deadline violation rises; next tuning should reduce cache_update/token queue delay under edge overload.
+- `utm_conflict`: still zero semantic/task success; path PPO lowers payload but does not solve UTM feasibility.
+
+Artifacts to keep small/commit:
+
+```text
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
+```
+
+Do not commit per-seed `.pt`, rollout CSV, or logs.

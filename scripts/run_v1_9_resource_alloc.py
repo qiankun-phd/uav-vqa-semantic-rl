@@ -37,6 +37,18 @@ SCENARIO_BENCHMARK_SCENARIOS = (
     "edge_overload",
     "utm_conflict",
 )
+SEMANTIC_PATH_BENCHMARK_SCENARIOS = (
+    "normal_patrol",
+    "disaster_hotspot",
+    "low_snr_soft",
+    "low_snr_blockage",
+    "edge_overload",
+    "utm_conflict",
+)
+SCENARIO_ALIASES = {
+    "normal_patrol": "nominal_patrol",
+    "low_snr_soft": "low_snr_blockage",
+}
 
 SCENARIO_BENCHMARK_POLICIES = (
     "always_cache",
@@ -54,6 +66,7 @@ SCENARIO_BENCHMARK_POLICIES = (
     "proposed_v2_deadline_guard",
     "proposed_v2_no_image_under_low_snr",
     "proposed_v2_nearest_uav_mobility",
+    "semantic_path_two_timescale_ppo",
 )
 
 SCENARIO_BENCHMARK_BASELINES = (
@@ -75,6 +88,7 @@ SCENARIO_BENCHMARK_PPO_VARIANTS = (
     "proposed_v2_deadline_guard",
     "proposed_v2_no_image_under_low_snr",
     "proposed_v2_nearest_uav_mobility",
+    "semantic_path_two_timescale_ppo",
 )
 
 BASELINE_POLICIES = (
@@ -133,6 +147,14 @@ class EvalSummary:
     service_level_1_ratio: float
     service_level_2_ratio: float
     service_level_3_ratio: float
+    semantic_path_cache_ratio: float
+    semantic_path_token_ratio: float
+    semantic_path_image_ratio: float
+    semantic_path_defer_ratio: float
+    semantic_path_cache_update_ratio: float
+    cache_eligible_ratio: float
+    average_q_defer: float
+    average_q_cache_stale: float
     average_reward: float
 
 
@@ -256,6 +278,14 @@ def summarize(records_by_policy: dict[str, list[V19StepRecord]], episodes: int, 
                 service_level_1_ratio=round(_service_ratio(records, 1), 6),
                 service_level_2_ratio=round(_service_ratio(records, 2), 6),
                 service_level_3_ratio=round(_service_ratio(records, 3), 6),
+                semantic_path_cache_ratio=round(_path_ratio(records, "cache"), 6),
+                semantic_path_token_ratio=round(_path_ratio(records, "token"), 6),
+                semantic_path_image_ratio=round(_path_ratio(records, "image"), 6),
+                semantic_path_defer_ratio=round(_path_ratio(records, "defer"), 6),
+                semantic_path_cache_update_ratio=round(_path_ratio(records, "cache_update"), 6),
+                cache_eligible_ratio=round(_rate(records, "cache_eligible"), 6),
+                average_q_defer=round(_mean(records, "q_defer"), 6),
+                average_q_cache_stale=round(_mean(records, "q_cache_stale"), 6),
                 average_reward=round(_mean(records, "reward"), 6),
             )
         )
@@ -320,6 +350,7 @@ def main() -> int:
     parser.add_argument("--formal-scenario", default=None, help="Optional formal semantic-network scenario, e.g. train_mixed_random/test_utm_dss_outage.")
     parser.add_argument("--scenario-benchmark", action="store_true", help="Run the five scenario-aware semantic communication benchmark smokes.")
     parser.add_argument("--benchmark-scenarios", default=",".join(SCENARIO_BENCHMARK_SCENARIOS), help="Comma-separated scenario benchmark list.")
+    parser.add_argument("--semantic-path-benchmark-short", action="store_true", help="Use semantic-path/cache-defer short benchmark scenario list and PPO variant.")
     parser.add_argument("--seeds", default="0", help="Comma-separated seeds for scenario benchmark mode.")
     parser.add_argument("--policy", default="all", choices=["all", "ppo", *BASELINE_POLICIES])
     parser.add_argument("--train-ppo", action="store_true", help="Train and evaluate centralized hybrid PPO.")
@@ -331,6 +362,7 @@ def main() -> int:
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
+    parser.add_argument("--semantic-path-ppo", action="store_true", help="Use semantic_path cache/token/image/defer/cache_update actor instead of service-level actor.")
     parser.add_argument("--mobility-update-interval", type=int, default=3, help="Slow mobility actor update interval K in slots.")
     parser.add_argument("--no-mobility-actor", action="store_true", help="Ablation: disable learned mobility actor and use deterministic mobility defaults.")
     parser.add_argument("--benchmark-ppo-variants", default=None, help="Optional comma-separated PPO variants for scenario benchmark mode.")
@@ -396,6 +428,10 @@ def main() -> int:
             args.semantic_reward_mode = "semantic_utility"
         if args.output_dir == default_output_dir:
             args.output_dir = str(ROOT / "outputs" / "rl" / "v1_9_hybrid_tch_ppo_smoke")
+    if args.semantic_path_benchmark_short:
+        args.scenario_benchmark = True
+        args.benchmark_scenarios = ",".join(SEMANTIC_PATH_BENCHMARK_SCENARIOS)
+        args.benchmark_ppo_variants = args.benchmark_ppo_variants or "semantic_path_two_timescale_ppo"
     if args.proposed_semantic_rl:
         _enable_proposed_semantic_rl_defaults(args)
 
@@ -486,6 +522,7 @@ def run_experiment(
             deadline_slack_reward=args.deadline_slack_reward,
             token_fast_resource_projection=args.token_fast_resource_projection,
             deadline_token_cache_fallback=args.deadline_token_cache_fallback,
+            semantic_path_actions=args.semantic_path_ppo,
         )
         if args.two_timescale_ppo:
             model, train_trace = train_two_timescale_ppo(train_env, ppo_cfg, seed=args.seed)
@@ -616,7 +653,12 @@ def _configure_ppo_variant(args: argparse.Namespace, variant: str) -> None:
     args.semantic_reward_mode = "semantic_utility"
     args.two_timescale_ppo = False
     args.no_mobility_actor = False
-    if variant == "monolithic_ppo":
+    if variant == "semantic_path_two_timescale_ppo":
+        _enable_proposed_v2_defaults(args)
+        args.semantic_path_ppo = True
+        args.token_fast_resource_projection = True
+        args.deadline_token_cache_fallback = True
+    elif variant == "monolithic_ppo":
         _enable_proposed_semantic_rl_defaults(args)
     elif variant == "no_mobility_actor":
         _enable_proposed_semantic_rl_defaults(args)
@@ -688,6 +730,14 @@ def _aggregate_benchmark_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
         "service_level_0_ratio",
         "service_level_1_ratio",
         "service_level_2_ratio",
+        "semantic_path_cache_ratio",
+        "semantic_path_token_ratio",
+        "semantic_path_image_ratio",
+        "semantic_path_defer_ratio",
+        "semantic_path_cache_update_ratio",
+        "cache_eligible_ratio",
+        "average_q_defer",
+        "average_q_cache_stale",
     ]
     out: list[dict[str, Any]] = []
     for (scenario, policy), items in sorted(grouped.items()):
@@ -715,7 +765,9 @@ def _print_summary_row(row: EvalSummary) -> None:
         f"gap={row.average_semantic_quality_gap:.3f} q_quality={row.average_q_quality:.3f} q_deadline={row.average_q_deadline:.3f} "
         f"q_energy={row.average_q_energy:.3f} q_utm={row.average_q_utm:.3f} delay={row.average_delay:.3f} "
         f"energy={row.average_energy:.3f} payload_kb={row.average_payload_kb:.3f} deadline_vio={row.deadline_violation_rate:.3f} "
-        f"utm_conflict={row.utm_conflict_violation_rate:.3f}"
+        f"utm_conflict={row.utm_conflict_violation_rate:.3f} path_mix=({row.semantic_path_cache_ratio:.2f}/"
+        f"{row.semantic_path_token_ratio:.2f}/{row.semantic_path_image_ratio:.2f}/{row.semantic_path_defer_ratio:.2f}/"
+        f"{row.semantic_path_cache_update_ratio:.2f})"
     )
 
 
@@ -724,7 +776,7 @@ def _cfg_with_scenario(cfg: dict[str, Any], scenario: str | None) -> dict[str, A
         return cfg
     out = dict(cfg)
     env_cfg = dict(out.get("multi_uav_env", {}))
-    env_cfg["scenario"] = scenario
+    env_cfg["scenario"] = SCENARIO_ALIASES.get(str(scenario), str(scenario))
     out["multi_uav_env"] = env_cfg
     return out
 
@@ -874,6 +926,12 @@ def _service_ratio(records: list[V19StepRecord], level: int) -> float:
     return sum(float(record.service_level == level) for record in records) / len(records)
 
 
+def _path_ratio(records: list[V19StepRecord], path_name: str) -> float:
+    if not records:
+        return 0.0
+    return sum(float(str(record.semantic_path) == str(path_name)) for record in records) / len(records)
+
+
 def _write_dict_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -918,14 +976,16 @@ def _write_summary_md(path: Path, summaries: list[EvalSummary], rollout_rows: in
             "",
             "## Service Level Selection Ratio",
             "",
-            "| policy | cache s=0 | semantic tokens s=1 | image s=2 | roi s=3 |",
-            "|---|---:|---:|---:|---:|",
+            "| policy | cache s=0 | semantic tokens s=1 | image s=2 | roi s=3 | path cache | path token | path image | defer | cache update | cache eligible |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in summaries:
         lines.append(
             f"| {row.policy} | {row.service_level_0_ratio:.3f} | {row.service_level_1_ratio:.3f} | "
-            f"{row.service_level_2_ratio:.3f} | {row.service_level_3_ratio:.3f} |"
+            f"{row.service_level_2_ratio:.3f} | {row.service_level_3_ratio:.3f} | {row.semantic_path_cache_ratio:.3f} | "
+            f"{row.semantic_path_token_ratio:.3f} | {row.semantic_path_image_ratio:.3f} | {row.semantic_path_defer_ratio:.3f} | "
+            f"{row.semantic_path_cache_update_ratio:.3f} | {row.cache_eligible_ratio:.3f} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -941,24 +1001,21 @@ def _write_scenario_benchmark_report(path: Path, rows: list[dict[str, Any]], arg
         f"- train episodes per PPO variant: `{args.train_episodes}`",
         f"- tasks per episode: `{args.tasks_per_episode}`",
         "",
-        "| scenario | policy | semantic success | accuracy LCB | accuracy mean | uncertainty | epsilon | failed eps mean | quality gap | Q_quality | Q_deadline | Q_energy | Q_utm | delay | energy | flight energy | arrival delay | coverage | payload KB | deadline vio | UTM conflict | cache | token | image |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| scenario | policy | semantic success | task success | accuracy LCB | quality gap | Q_quality | Q_deadline | Q_defer | Q_cache_stale | delay | energy | payload KB | deadline vio | UTM conflict | cache eligible | path cache | path token | path image | defer | cache update |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| {row.get('scenario', '')} | {row.get('benchmark_policy', row.get('policy', ''))} | "
-            f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'average_accuracy'):.3f} | "
-            f"{_metric(row, 'average_accuracy_mean'):.3f} | {_metric(row, 'average_uncertainty'):.3f} | "
-            f"{_metric(row, 'average_epsilon_k'):.3f} | {_metric(row, 'failed_epsilon_k_mean'):.3f} | "
-            f"{_metric(row, 'average_semantic_quality_gap'):.3f} | {_metric(row, 'average_q_quality'):.3f} | "
-            f"{_metric(row, 'average_q_deadline'):.3f} | {_metric(row, 'average_q_energy'):.3f} | "
-            f"{_metric(row, 'average_q_utm'):.3f} | {_metric(row, 'average_delay'):.3f} | "
-            f"{_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_mobility_energy_j'):.3f} | "
-            f"{_metric(row, 'average_arrival_delay_s'):.3f} | {_metric(row, 'average_coverage_gain'):.3f} | "
-            f"{_metric(row, 'average_payload_kb'):.3f} | "
+            f"{_metric(row, 'semantic_success_rate'):.3f} | {_metric(row, 'task_success_rate'):.3f} | "
+            f"{_metric(row, 'average_accuracy'):.3f} | {_metric(row, 'average_semantic_quality_gap'):.3f} | "
+            f"{_metric(row, 'average_q_quality'):.3f} | {_metric(row, 'average_q_deadline'):.3f} | "
+            f"{_metric(row, 'average_q_defer'):.3f} | {_metric(row, 'average_q_cache_stale'):.3f} | "
+            f"{_metric(row, 'average_delay'):.3f} | {_metric(row, 'average_energy'):.3f} | {_metric(row, 'average_payload_kb'):.3f} | "
             f"{_metric(row, 'deadline_violation_rate'):.3f} | {_metric(row, 'utm_conflict_violation_rate'):.3f} | "
-            f"{_metric(row, 'service_level_0_ratio'):.3f} | {_metric(row, 'service_level_1_ratio'):.3f} | "
-            f"{_metric(row, 'service_level_2_ratio'):.3f} |"
+            f"{_metric(row, 'cache_eligible_ratio'):.3f} | {_metric(row, 'semantic_path_cache_ratio'):.3f} | "
+            f"{_metric(row, 'semantic_path_token_ratio'):.3f} | {_metric(row, 'semantic_path_image_ratio'):.3f} | "
+            f"{_metric(row, 'semantic_path_defer_ratio'):.3f} | {_metric(row, 'semantic_path_cache_update_ratio'):.3f} |"
         )
     lines.extend(
         [
@@ -980,7 +1037,11 @@ def _metric(row: dict[str, Any], key: str) -> float:
 
 
 def _write_benchmark_analysis(path: Path, all_rows: list[dict[str, Any]], summary_rows: list[dict[str, Any]]) -> None:
-    proposed_rows = [row for row in summary_rows if str(row.get("benchmark_policy", "")) == "proposed_ppo"]
+    proposed_rows = [
+        row
+        for row in summary_rows
+        if str(row.get("benchmark_policy", "")) in {"proposed_ppo", "semantic_path_two_timescale_ppo"}
+    ]
     cache_rows = [row for row in summary_rows if str(row.get("benchmark_policy", "")) == "always_cache"]
     cache_by_scenario = {str(row.get("scenario", "")): row for row in cache_rows}
     lines = [
@@ -989,7 +1050,7 @@ def _write_benchmark_analysis(path: Path, all_rows: list[dict[str, Any]], summar
         "## Diagnosis",
         "",
         "- Previous smoke PPO had high cache ratios because cache minimized delay/energy/payload while the semantic shortfall penalty was too small.",
-        "- The v3 controller persists `epsilon_k`, uses risk/staleness/UTM-aware cache shortfall penalties, distills semantic-greedy routing, and keeps a stronger semantic-token prior.",
+        "- The semantic-path controller persists `epsilon_k`, uses risk/staleness/UTM-aware cache shortfall penalties, exposes defer/cache_update ratios, and keeps a stronger semantic-token/cache-update prior.",
         "- Compute-aware projection prefers semantic tokens over cache when token evidence reduces LCB shortfall under edge/deadline pressure; UTM conflicts are recorded as risk/queue costs instead of being hidden by cache fallback.",
         "- Cache actions are projected to zero bandwidth/power/cpu/gpu; token/image actions retain service-dependent resource floors.",
         "",
