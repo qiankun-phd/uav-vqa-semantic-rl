@@ -291,17 +291,20 @@
     "count_calibration_min_raw_count": 3,
     "channel_model": "ldpc_fading",
     "fading_link": {
+      "channel_mode": "rate_adaptive",
       "fading": {
         "kind": "rician",
         "k_factor_db": 6.0
       },
+      "bandwidth_hz": 1000000.0,
+      "tx_time_budget_s": 0.3,
+      "min_payload_bytes": 1500,
       "ldpc": {
         "n": 96,
         "d_v": 3,
         "d_c": 6,
         "maxiter": 50
       },
-      "modulation": "bpsk",
       "image_grid": 8,
       "packet_payload_bits": 1024,
       "calib_blocks": 3000,

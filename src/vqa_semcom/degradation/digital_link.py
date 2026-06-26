@@ -55,7 +55,12 @@ class LinkConfig:
     modulation: str = "bpsk"
     packet_payload_bits: int = 1024   # one transmission unit ("frame") mapped to FER
     calib_blocks: int = 1500
-    image_grid: int = 8               # image sent as image_grid x image_grid independently-coded tiles
+    image_grid: int = 8               # image sent as image_grid x image_grid tiles (ldpc_erasure mode)
+    # rate-adaptive (link-adaptation) mode: SNR -> achievable rate -> byte budget -> JPEG quality
+    channel_mode: str = "rate_adaptive"   # "rate_adaptive" | "ldpc_erasure"
+    bandwidth_hz: float = 1.0e6
+    tx_time_budget_s: float = 0.3         # per-image transmission slot
+    min_payload_bytes: int = 1500         # smallest deliverable image; below -> outage
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +158,90 @@ def _fer_for_snr(calib: dict[str, dict[str, float]], snr_db: float) -> float:
     # nearest SNR fallback
     best = min(calib.values(), key=lambda r: abs(r["snr_db"] - float(snr_db)))
     return float(best["fer"])
+
+
+# ---------------------------------------------------------------------------
+# Rate-adaptive (link-adaptation) image transmission
+# ---------------------------------------------------------------------------
+
+def ergodic_spectral_efficiency(snr_db: float, fading: FadingConfig, n: int = 40000,
+                                rng: np.random.Generator | None = None) -> float:
+    """E[log2(1 + SNR*|h|^2)] in bits/s/Hz -- achievable rate with adaptation."""
+    rng = rng or np.random.default_rng(0)
+    snr_lin = 10.0 ** (float(snr_db) / 10.0)
+    g = sample_power_gain(fading.kind, fading.k_factor_db, n, rng)
+    return float(np.mean(np.log2(1.0 + snr_lin * g)))
+
+
+def outage_probability(snr_db: float, fading: FadingConfig, r_target: float,
+                       n: int = 40000, rng: np.random.Generator | None = None) -> float:
+    """P(log2(1+SNR|h|^2) < r_target): information-outage of a capacity-approaching code."""
+    rng = rng or np.random.default_rng(1)
+    snr_lin = 10.0 ** (float(snr_db) / 10.0)
+    g = sample_power_gain(fading.kind, fading.k_factor_db, n, rng)
+    return float(np.mean(np.log2(1.0 + snr_lin * g) < r_target))
+
+
+def rate_budget_bytes(snr_db: float, link_cfg: LinkConfig,
+                      rng: np.random.Generator | None = None) -> float:
+    se = ergodic_spectral_efficiency(snr_db, link_cfg.fading, rng=rng)
+    return link_cfg.bandwidth_hz * se * link_cfg.tx_time_budget_s / 8.0
+
+
+def _fit_jpeg_to_budget(image_bgr: np.ndarray, budget_bytes: float,
+                        q_lo: int = 8, q_hi: int = 95, min_scale: float = 0.12):
+    """Encode within ``budget_bytes`` via resolution + JPEG-quality adaptation.
+
+    Returns (decoded_image_at_original_size, meta).  Searches the highest JPEG
+    quality (and, if needed, the largest scale) whose encoded size fits.
+    """
+    import cv2
+
+    h, w = image_bgr.shape[:2]
+    scale = 1.0
+    while scale >= min_scale - 1e-9:
+        if scale < 1.0:
+            im = cv2.resize(image_bgr, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+        else:
+            im = image_bgr
+        lo, hi, best = q_lo, q_hi, None
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            ok, buf = cv2.imencode(".jpg", im, [int(cv2.IMWRITE_JPEG_QUALITY), int(mid)])
+            if ok and len(buf) <= budget_bytes:
+                best = (mid, buf)
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        if best is not None:
+            dec = cv2.imdecode(best[1], cv2.IMREAD_COLOR)
+            if dec is not None and (dec.shape[0] != h or dec.shape[1] != w):
+                dec = cv2.resize(dec, (w, h), interpolation=cv2.INTER_LINEAR)  # receiver upsamples for display
+            return dec, {"scale": round(scale, 3), "quality": int(best[0]), "bytes": int(len(best[1]))}
+        scale *= 0.7
+    # even the smallest scale at q_lo overflows -> send minimal version
+    im = cv2.resize(image_bgr, (max(1, int(w * min_scale)), max(1, int(h * min_scale))), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", im, [int(cv2.IMWRITE_JPEG_QUALITY), int(q_lo)])
+    dec = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    dec = cv2.resize(dec, (w, h), interpolation=cv2.INTER_LINEAR)
+    return dec, {"scale": round(min_scale, 3), "quality": int(q_lo), "bytes": int(len(buf)), "over_budget": True}
+
+
+def transmit_image_rate_adaptive(image_bgr: np.ndarray, snr_db: float, link_cfg: LinkConfig,
+                                 rng: np.random.Generator) -> tuple[np.ndarray, dict]:
+    """Link-adaptive transmission: SNR sets the byte budget (achievable rate x slot),
+    image is source-coded to fit (error-free), with deep-fade information outage."""
+    budget = rate_budget_bytes(snr_db, link_cfg, rng=rng)
+    r_min = (link_cfg.min_payload_bytes * 8.0 / link_cfg.tx_time_budget_s) / link_cfg.bandwidth_hz
+    p_out = outage_probability(snr_db, link_cfg.fading, r_min, rng=rng)
+    if rng.random() < p_out:
+        dec = np.full_like(image_bgr, 128)  # outage -> nothing delivered
+        return dec, {"snr_db": float(snr_db), "budget_bytes": round(budget, 1),
+                     "outage": True, "p_outage": round(p_out, 4)}
+    dec, fit = _fit_jpeg_to_budget(image_bgr, budget)
+    fit.update({"snr_db": float(snr_db), "budget_bytes": round(budget, 1),
+                "outage": False, "p_outage": round(p_out, 4)})
+    return dec, fit
 
 
 def transmit_image(image_bgr: np.ndarray, snr_db: float, calib, link_cfg: LinkConfig,
@@ -258,6 +347,10 @@ def link_config_from_dict(d: dict[str, Any]) -> LinkConfig:
         packet_payload_bits=int(d.get("packet_payload_bits", 1024)),
         calib_blocks=int(d.get("calib_blocks", 1500)),
         image_grid=int(d.get("image_grid", 8)),
+        channel_mode=d.get("channel_mode", "rate_adaptive"),
+        bandwidth_hz=float(d.get("bandwidth_hz", 1.0e6)),
+        tx_time_budget_s=float(d.get("tx_time_budget_s", 0.3)),
+        min_payload_bytes=int(d.get("min_payload_bytes", 1500)),
     )
 
 
@@ -266,6 +359,8 @@ def link_config_to_dict(cfg: LinkConfig) -> dict[str, Any]:
         "fading": asdict(cfg.fading), "ldpc": asdict(cfg.ldpc),
         "modulation": cfg.modulation, "packet_payload_bits": cfg.packet_payload_bits,
         "calib_blocks": cfg.calib_blocks, "image_grid": cfg.image_grid,
+        "channel_mode": cfg.channel_mode, "bandwidth_hz": cfg.bandwidth_hz,
+        "tx_time_budget_s": cfg.tx_time_budget_s, "min_payload_bytes": cfg.min_payload_bytes,
     }
 
 
@@ -325,26 +420,44 @@ def _seed_from(*parts) -> int:
     return int(hashlib.sha1("|".join(str(x) for x in parts).encode()).hexdigest()[:8], 16)
 
 
+TOKEN_PAYLOAD_BYTES = 256  # serialized detector evidence is tiny
+
+
 def fer_for(cfg: dict, channel_bin) -> float:
+    """Frame-loss probability for a transmitted unit at this SNR.
+
+    In rate-adaptive mode this is the information-outage probability of the small
+    token payload (near 0 except in deep fade); in ldpc_erasure mode it is the
+    calibrated LDPC frame-error rate.
+    """
     from vqa_semcom.snr import snr_db_from_label
+    link_cfg = build_link_config(cfg)
+    snr_db = snr_db_from_label(channel_bin)
+    if link_cfg.channel_mode == "rate_adaptive":
+        r_min = (TOKEN_PAYLOAD_BYTES * 8.0 / link_cfg.tx_time_budget_s) / link_cfg.bandwidth_hz
+        return outage_probability(snr_db, link_cfg.fading, r_min)
     _, calib = load_or_calibrate(cfg)
-    return _fer_for_snr(calib, snr_db_from_label(channel_bin))
+    return _fer_for_snr(calib, snr_db)
 
 
 def transmit_image_to_path(image_path, out_dir, channel_bin, cfg: dict):
-    """Channel-route an image file through the LDPC link and write the result."""
+    """Channel-route an image file through the link (mode-dependent) and write it."""
     import cv2
     from vqa_semcom.config import ensure_parent
     from vqa_semcom.snr import snr_db_from_label
 
-    link_cfg, calib = load_or_calibrate(cfg)
+    link_cfg = build_link_config(cfg)
     snr_db = snr_db_from_label(channel_bin)
     img = cv2.imread(str(image_path))
     if img is None:
         raise RuntimeError(f"cv2.imread failed: {image_path}")
     rng = np.random.default_rng(_seed_from(Path(image_path).stem, channel_bin))
-    quality = int((cfg.get("vlm", {}).get("fading_link", {}) or {}).get("jpeg_quality", 90))
-    dec, _meta = transmit_image(img, snr_db, calib, link_cfg, rng, jpeg_quality=quality)
+    if link_cfg.channel_mode == "rate_adaptive":
+        dec, _meta = transmit_image_rate_adaptive(img, snr_db, link_cfg, rng)
+    else:
+        _, calib = load_or_calibrate(cfg)
+        quality = int((cfg.get("vlm", {}).get("fading_link", {}) or {}).get("jpeg_quality", 90))
+        dec, _meta = transmit_image(img, snr_db, calib, link_cfg, rng, jpeg_quality=quality)
     out_path = Path(out_dir) / str(channel_bin) / f"{Path(image_path).stem}_{channel_bin}.jpg"
     ensure_parent(out_path)
     cv2.imwrite(str(out_path), dec, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
