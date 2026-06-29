@@ -1,0 +1,73 @@
+{
+  "key": "e1a9d60e2247c928",
+  "link": {
+    "fading": {
+      "kind": "awgn",
+      "k_factor_db": 6.0
+    },
+    "ldpc": {
+      "n": 96,
+      "d_v": 3,
+      "d_c": 6,
+      "maxiter": 50
+    },
+    "modulation": "bpsk",
+    "packet_payload_bits": 1024,
+    "calib_blocks": 3000,
+    "image_grid": 8,
+    "channel_mode": "ldpc_erasure",
+    "bandwidth_hz": 1000000.0,
+    "tx_time_budget_s": 0.3,
+    "min_payload_bytes": 1500
+  },
+  "calib": {
+    "-5dB": {
+      "snr_db": -5.0,
+      "ber": 0.28626666666666667,
+      "fer": 1.0,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    },
+    "0dB": {
+      "snr_db": 0.0,
+      "ber": 0.12417333333333333,
+      "fer": 0.883,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    },
+    "5dB": {
+      "snr_db": 5.0,
+      "ber": 0.00066,
+      "fer": 0.014333333333333333,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    },
+    "10dB": {
+      "snr_db": 10.0,
+      "ber": 2e-05,
+      "fer": 0.0006666666666666666,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    },
+    "15dB": {
+      "snr_db": 15.0,
+      "ber": 0.0,
+      "fer": 0.0,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    },
+    "20dB": {
+      "snr_db": 20.0,
+      "ber": 0.0,
+      "fer": 0.0,
+      "code_rate": 0.5208333333333334,
+      "k": 50,
+      "n": 96
+    }
+  }
+}
