@@ -332,7 +332,41 @@ def main() -> int:
                                 transmitted_records = degrade_detections_for_channel(records, link_quality, cfg, image_id)
                                 target_count = _detector_target_count(transmitted_records, task)
                                 detector_count = target_count
-                                if use_semantic_decoder and (
+                                if task.get("question_type") == "comparison":
+                                    cb = task.get("target_class_b", "")
+                                    count_a = sum(1 for rr in transmitted_records if rr.category == task.get("target_class", ""))
+                                    count_b = sum(1 for rr in transmitted_records if rr.category == cb)
+                                    cmp_pred = "yes" if count_a > count_b else "no"
+                                    _chk = check_answer("comparison", cmp_pred, task["answer"], tolerance_ratio=float(vlm_cfg.get("count_tolerance_ratio", 0.10)))
+                                    predicted, normalized, correct = cmp_pred, _chk.normalized_prediction, _chk.correct
+                                    payload_bytes = _payload_bytes(service_level, evidence_type, evidence_repr, "")
+                                    prediction_cache[cache_key] = (
+                                        predicted, normalized, correct, detector_latency, "semantic-token-decoder",
+                                        evidence_type, evidence_repr, payload_bytes, detector_latency, detector_model, count_a,
+                                        count_a, count_b, count_a, str(bool(correct)),
+                                    )
+                                    semantic_decoded = True
+                                elif task.get("question_type") in ("co_presence", "threshold"):
+                                    ca = sum(1 for rr in transmitted_records if rr.category == task.get("target_class", ""))
+                                    if task.get("question_type") == "co_presence":
+                                        cb2 = sum(1 for rr in transmitted_records if rr.category == task.get("target_class_b", ""))
+                                        xpred = "yes" if (ca > 0 and cb2 > 0) else "no"
+                                    else:
+                                        try:
+                                            thr = int(float(task.get("threshold_n", "1")))
+                                        except ValueError:
+                                            thr = 1
+                                        xpred = "yes" if ca >= thr else "no"
+                                    _xchk = check_answer(task["question_type"], xpred, task["answer"], tolerance_ratio=float(vlm_cfg.get("count_tolerance_ratio", 0.10)))
+                                    predicted, normalized, correct = xpred, _xchk.normalized_prediction, _xchk.correct
+                                    payload_bytes = _payload_bytes(service_level, evidence_type, evidence_repr, "")
+                                    prediction_cache[cache_key] = (
+                                        predicted, normalized, correct, detector_latency, "semantic-token-decoder",
+                                        evidence_type, evidence_repr, payload_bytes, detector_latency, detector_model, ca,
+                                        ca, ca, ca, str(bool(correct)),
+                                    )
+                                    semantic_decoded = True
+                                elif use_semantic_decoder and (
                                     decoder_mode == "v1_7_direct_calibrated"
                                     or task.get("question_type") == "counting"
                                 ):

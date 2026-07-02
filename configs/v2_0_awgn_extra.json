@@ -1,0 +1,332 @@
+{
+ "paths": {
+  "visdrone_train": "data/raw/visdrone/DET/train",
+  "visdrone_val": "data/raw/visdrone/DET/val",
+  "tasks_csv": "outputs/tasks/v2_extra_tasks.csv",
+  "sim_results_csv": "outputs/sim/v2_0_awgn_resource_results.csv",
+  "sim_summary_md": "outputs/sim/v2_0_awgn_resource_summary.md",
+  "vlm_predictions_csv": "outputs/vlm/v2_0_awgn_extra_predictions.csv",
+  "vlm_lut_csv": "outputs/lut/v2_0_awgn_semantic_quality_lut.csv",
+  "vlm_report_md": "outputs/reports/v2_0_awgn_eval_report.md",
+  "qwen_model_status_md": "outputs/reports/qwen_model_setup_status.md",
+  "degraded_image_dir": "outputs/vlm/degraded_images_v2_0_awgn_extra",
+  "paper_figures_dir": "outputs/figures/v2_0_snr",
+  "paper_tables_dir": "outputs/reports/v2_0_snr_tables",
+  "link_calibration_json": "outputs/lut/link_calibration_v2_0_awgn.json"
+ },
+ "bins": {
+  "channel": [
+   "bad",
+   "medium",
+   "good"
+  ],
+  "snr_db": [
+   -5,
+   0,
+   5,
+   10,
+   15,
+   20
+  ],
+  "view_quality": [
+   "poor",
+   "medium",
+   "good"
+  ],
+  "freshness": [
+   "fresh",
+   "stale",
+   "expired"
+  ],
+  "service_levels": [
+   0,
+   1,
+   2
+  ],
+  "question_types": [
+   "presence",
+   "counting"
+  ],
+  "risk_levels": [
+   "normal",
+   "critical"
+  ]
+ },
+ "thresholds": {
+  "epsilon_normal": 0.65,
+  "epsilon_critical": 0.82,
+  "tau_normal": 5.0,
+  "tau_critical": 3.0
+ },
+ "evaluator": {
+  "seed": 7,
+  "ci_noise_scale": 0.035,
+  "base_accuracy": {
+   "presence": 0.93,
+   "counting": 0.84,
+   "risk": 0.82
+  },
+  "service_gain": {
+   "0": 0.76,
+   "1": 0.9,
+   "2": 1.0
+  },
+  "light_evidence_boost": {
+   "presence": 1.12,
+   "counting": 1.1,
+   "risk": 1.0
+  },
+  "channel_quality": {
+   "bad": 0.68,
+   "medium": 0.86,
+   "good": 0.98
+  },
+  "view_quality": {
+   "poor": 0.58,
+   "medium": 0.8,
+   "good": 0.97
+  },
+  "freshness_quality": {
+   "0": {
+    "fresh": 0.96,
+    "stale": 0.76,
+    "expired": 0.52
+   },
+   "1": {
+    "fresh": 0.98,
+    "stale": 0.9,
+    "expired": 0.78
+   },
+   "2": {
+    "fresh": 0.99,
+    "stale": 0.97,
+    "expired": 0.92
+   }
+  },
+  "risk_penalty": {
+   "normal": 1.0,
+   "critical": 0.94
+  }
+ },
+ "simulation": {
+  "seed": 13,
+  "tasks_per_episode": 40,
+  "policies": [
+   "always_cache",
+   "always_light",
+   "always_image",
+   "greedy_min_sufficient_evidence",
+   "no_cache_greedy",
+   "no_semantic_tokens_greedy",
+   "oracle_best_feasible_evidence"
+  ],
+  "delay_by_level": {
+   "0": 0.6,
+   "1": 1.8,
+   "2": 3.4
+  },
+  "energy_by_level": {
+   "0": 0.2,
+   "1": 1.0,
+   "2": 2.5
+  },
+  "channel_delay_multiplier": {
+   "bad": 1.45,
+   "medium": 1.1,
+   "good": 0.9
+  },
+  "service_level_order": [
+   0,
+   1,
+   2
+  ],
+  "use_snr_rate_model": true,
+  "bandwidth_hz": 1000000,
+  "sensed_snr_db_values": [
+   -5,
+   0,
+   5,
+   10,
+   15,
+   20
+  ],
+  "processing_delay_by_level": {
+   "0": 0.05,
+   "1": 0.35,
+   "2": 1.2
+  }
+ },
+ "multi_uav_env": {
+  "scenario": "nominal",
+  "enabled_service_levels": [
+   0,
+   1,
+   2
+  ],
+  "enable_service_level_3": false,
+  "calibration": {
+   "propulsion": {
+    "flight_energy_j_per_m": 8.4,
+    "hover_power_w": 78.0
+   },
+   "sensing": {
+    "sensing_delay_s_by_level": {
+     "0": 0.0,
+     "1": 0.16,
+     "2": 0.36
+    },
+    "processing_delay_s_by_level": {
+     "0": 0.05,
+     "1": 0.34,
+     "2": 1.18
+    },
+    "cpu_workload_by_level": {
+     "0": 0.02,
+     "1": 0.28,
+     "2": 0.68
+    },
+    "gpu_workload_by_level": {
+     "0": 0.0,
+     "1": 0.12,
+     "2": 0.86
+    }
+   },
+   "a2g": {
+    "carrier_mhz": 2400.0,
+    "reference_distance_m": 1.0,
+    "reference_gain_db": -40.2,
+    "path_loss_exponent": 2.25,
+    "noise_figure_db": 7.0,
+    "excess_loss_db": 4.5,
+    "los_excess_loss_db": 1.0,
+    "nlos_excess_loss_db": 12.0,
+    "los_a": 9.61,
+    "los_b": 0.16,
+    "fading_mode": "slow_fading",
+    "slow_fading_std_db": 2.0,
+    "fast_fading_std_db": 5.0,
+    "fading_correlation": 0.85,
+    "interference_enabled": true,
+    "interference_floor_dbm": -120.0,
+    "interference_overlap_scale": 0.02
+   },
+   "edge": {
+    "queue_delay_scale_s": 0.45,
+    "gpu_queue_delay_scale_s": 0.22,
+    "edge_load_decay": 0.65,
+    "model_load_delay_s": 0.38,
+    "model_cache_hit_delay_s": 0.04,
+    "model_cache_capacity": 3,
+    "gpu_memory_capacity_mb": 8192.0,
+    "gpu_memory_load": 0.25,
+    "model_memory_mb_by_level": {
+     "0": 128.0,
+     "1": 768.0,
+     "2": 3072.0,
+     "3": 2048.0
+    }
+   }
+  }
+ },
+ "vlm": {
+  "seed": 23,
+  "model_name": "Qwen/Qwen2-VL-2B-Instruct",
+  "model_local_path": "/home/qiankun/.cache/huggingface/hub/models--Qwen--Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+  "fallback_model_name": "Qwen/Qwen2-VL-2B-Instruct",
+  "device": "cuda",
+  "torch_dtype": "auto",
+  "processor_use_fast": false,
+  "min_pixels": 200704,
+  "max_pixels": 802816,
+  "max_new_tokens": 24,
+  "question_types": [
+   "co_presence",
+   "threshold"
+  ],
+  "max_tasks_per_image": 6,
+  "count_tolerance_ratio": 0.1,
+  "cache_ignore_snr": true,
+  "image_degradation": {
+   "good": {
+    "jpeg_quality": 90,
+    "resize_scale": 1.0,
+    "blur_radius": 0.0,
+    "packet_loss_mask_rate": 0.0
+   },
+   "medium": {
+    "jpeg_quality": 50,
+    "resize_scale": 0.75,
+    "blur_radius": 0.0,
+    "packet_loss_mask_rate": 0.015
+   },
+   "bad": {
+    "jpeg_quality": 25,
+    "resize_scale": 0.5,
+    "blur_radius": 0.8,
+    "packet_loss_mask_rate": 0.04
+   }
+  },
+  "light_evidence_degradation": {
+   "good": {
+    "drop_rate": 0.0,
+    "class_corrupt_rate": 0.0,
+    "bbox_quantization": 1,
+    "confidence_threshold": 0.0
+   },
+   "medium": {
+    "drop_rate": 0.1,
+    "class_corrupt_rate": 0.0,
+    "bbox_quantization": 8,
+    "confidence_threshold": 0.25
+   },
+   "bad": {
+    "drop_rate": 0.3,
+    "class_corrupt_rate": 0.1,
+    "bbox_quantization": 16,
+    "confidence_threshold": 0.45
+   }
+  },
+  "semantic_token_decoder": true,
+  "semantic_decoder_mode": "v1_7_direct_calibrated",
+  "count_calibration_min_raw_count": 3,
+  "channel_model": "ldpc_fading",
+  "fading_link": {
+   "channel_mode": "rate_adaptive",
+   "fading": {
+    "kind": "awgn",
+    "k_factor_db": 6.0
+   },
+   "bandwidth_hz": 1000000.0,
+   "tx_time_budget_s": 0.3,
+   "min_payload_bytes": 1500,
+   "ldpc": {
+    "n": 96,
+    "d_v": 3,
+    "d_c": 6,
+    "maxiter": 50
+   },
+   "image_grid": 8,
+   "packet_payload_bits": 1024,
+   "calib_blocks": 3000,
+   "jpeg_quality": 90
+  }
+ },
+ "detector": {
+  "yolo_dataset_dir": "data/processed/visdrone_yolo",
+  "dataset_yaml": "data/processed/visdrone_yolo/visdrone.yaml",
+  "class_mapping_json": "data/processed/visdrone_yolo/detector_classes.json",
+  "base_model": "yolov8n.pt",
+  "weights_path": "outputs/detector/visdrone_yolov8n/weights/best.pt",
+  "train_project": "outputs/detector",
+  "train_name": "visdrone_yolov8n",
+  "detections_csv": "outputs/detector/v2_0_awgn_extra_detections.csv",
+  "epochs": 50,
+  "imgsz": 640,
+  "batch_fallback": [
+   16,
+   8,
+   4
+  ],
+  "conf": 0.25
+ }
+}
