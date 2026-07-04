@@ -1,0 +1,33 @@
+ablation,variant,channel,criterion,test_accuracy,n
+3a_featureset,none,awgn,lcb,0.6346,5616
+3a_featureset,none,rayleigh,lcb,0.6339,5616
+3a_featureset,none,rician,lcb,0.6339,5616
+3a_featureset,none,pooled,lcb,0.6341,16848
+3a_featureset,qt,awgn,lcb,0.6725,5616
+3a_featureset,qt,rayleigh,lcb,0.6667,5616
+3a_featureset,qt,rician,lcb,0.6702,5616
+3a_featureset,qt,pooled,lcb,0.6698,16848
+3a_featureset,qt+snr  (current M4),awgn,lcb,0.6725,5616
+3a_featureset,qt+snr  (current M4),rayleigh,lcb,0.666,5616
+3a_featureset,qt+snr  (current M4),rician,lcb,0.6672,5616
+3a_featureset,qt+snr  (current M4),pooled,lcb,0.6686,16848
+3a_featureset,qt+snr+view,awgn,lcb,0.6697,5616
+3a_featureset,qt+snr+view,rayleigh,lcb,0.6627,5616
+3a_featureset,qt+snr+view,rician,lcb,0.6676,5616
+3a_featureset,qt+snr+view,pooled,lcb,0.6667,16848
+3a_featureset,qt+snr+view+risk,awgn,lcb,0.6695,5616
+3a_featureset,qt+snr+view+risk,rayleigh,lcb,0.6652,5616
+3a_featureset,qt+snr+view+risk,rician,lcb,0.6676,5616
+3a_featureset,qt+snr+view+risk,pooled,lcb,0.6674,16848
+3a_featureset,qt+snr+freshness,awgn,lcb,0.6725,5616
+3a_featureset,qt+snr+freshness,rayleigh,lcb,0.666,5616
+3a_featureset,qt+snr+freshness,rician,lcb,0.6672,5616
+3a_featureset,qt+snr+freshness,pooled,lcb,0.6686,16848
+3b_criterion,lcb,awgn,lcb,0.6725,5616
+3b_criterion,lcb,rayleigh,lcb,0.666,5616
+3b_criterion,lcb,rician,lcb,0.6672,5616
+3b_criterion,lcb,pooled,lcb,0.6686,16848
+3b_criterion,mean,awgn,mean,0.6725,5616
+3b_criterion,mean,rayleigh,mean,0.666,5616
+3b_criterion,mean,rician,mean,0.6672,5616
+3b_criterion,mean,pooled,mean,0.6686,16848
