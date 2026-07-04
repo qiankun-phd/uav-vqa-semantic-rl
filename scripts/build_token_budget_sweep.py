@@ -86,6 +86,17 @@ def load_tasks():
     return tasks
 
 
+def logged_counting_set(pred_csv):
+    """The main eval selects a task subset (max_tasks_per_image cap); restrict
+    counting to exactly the logged tasks so t=full reproduces the paper numbers
+    and the per-t calibration mirrors the deployed system's own task mix."""
+    allowed = set()
+    for r in csv.DictReader(open(pred_csv)):
+        if r["question_type"] == "counting":
+            allowed.add((r["image_id"], r["question"]))
+    return allowed
+
+
 def decode(task, tx, calib, min_raw, cfg):
     qt = task["question_type"]
     tol = float((cfg.get("vlm", {}) or {}).get("count_tolerance_ratio", 0.10))
@@ -112,24 +123,28 @@ def decode(task, tx, calib, min_raw, cfg):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--channels", default="rician,awgn,rayleigh")
+    ap.add_argument("--pred-dir", default="outputs/vlm")
     ap.add_argument("--out", default="outputs/reports/token_budget_sweep.csv")
     ap.add_argument("--out-dir", default="outputs/figures/comparison")
     ap.add_argument("--fig-channel", default="rician")
     ap.add_argument("--tag", default="v3")
     args = ap.parse_args()
 
-    tasks = load_tasks()
-    counting_tasks = [t for t in tasks if t["question_type"] == "counting"]
-    test_tasks = [t for t in tasks if bc.is_test(t["image_id"])]
-    print(f"tasks: total={len(tasks)} test={len(test_tasks)} "
-          f"({ {q: sum(1 for t in test_tasks if t['question_type']==q) for q in QT_SYMBOLIC} })")
-
+    all_tasks = load_tasks()
     SNR_LABELS = derive_snr_labels("outputs/vlm/v3_0_rician_predictions.csv")
     print(f"snr labels (exact eval strings): {SNR_LABELS}")
 
     rows = []
     for ch in args.channels.split(","):
         cfg = load_config(CH_CFG[ch])
+        allowed = logged_counting_set(f"{args.pred_dir}/v2_0_{ch}_predictions.csv")
+        tasks = [t for t in all_tasks
+                 if t["question_type"] != "counting"
+                 or (t["image_id"], t["question"]) in allowed]
+        counting_tasks = [t for t in tasks if t["question_type"] == "counting"]
+        test_tasks = [t for t in tasks if bc.is_test(t["image_id"])]
+        print(f"[{ch}] tasks: total={len(tasks)} test={len(test_tasks)} "
+              f"({ {q: sum(1 for t in test_tasks if t['question_type']==q) for q in QT_SYMBOLIC} })")
         det_csv = (cfg.get("detector", {}) or {}).get("detections_csv",
                                                       "outputs/detector/v2_0_snr_detections.csv")
         if not os.path.exists(det_csv):
