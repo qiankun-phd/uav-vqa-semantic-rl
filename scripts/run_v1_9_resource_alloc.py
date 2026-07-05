@@ -364,15 +364,17 @@ def main() -> int:
     parser.add_argument("--queue-quality-weight", type=float, default=1.5)
     parser.add_argument("--queue-deadline-weight", type=float, default=0.8)
     parser.add_argument("--queue-energy-weight", type=float, default=0.25)
-    parser.add_argument("--queue-risk-weight", type=float, default=1.0)
-    parser.add_argument("--queue-utm-weight", type=float, default=1.0)
+    parser.add_argument("--queue-risk-weight", type=float, default=0.0, help="v3 calibration: 0 removes the risk-queue reward penalty; q_risk stays in the state. Conflict pressure is carried by the dual lambda only.")
+    parser.add_argument("--queue-utm-weight", type=float, default=0.0, help="v3 calibration: 0 removes the utm-queue reward penalty; q_utm stays in the state.")
     parser.add_argument("--uncertainty-cost-weight", type=float, default=0.35)
     parser.add_argument("--energy-budget-j", type=float, default=500.0)
+    parser.add_argument("--conflict-cost-weight", type=float, default=0.0, help="v3 calibration: shaped conflict penalty is 0 by default; the Lagrangian dual channel (-lambda_conflict * violation) is the sole conflict feedback path.")
     parser.add_argument("--utm-conflict-cost-weight", type=float, default=0.0, help="Kept at 0 by default: BUBBLES conflicts set airspace+utm flags together; the conflict channel already charges the event once.")
     parser.add_argument("--dss-delay-cost-weight", type=float, default=0.25)
     parser.add_argument("--off-nominal-cost-weight", type=float, default=1.0)
     parser.add_argument("--no-safety-layer", action="store_true", help="Disable the service/GPU/battery/conflict safety projection layer.")
     parser.add_argument("--lambda-lr", type=float, default=0.1)
+    parser.add_argument("--lambda-lr-conflict", type=float, default=0.2, help="v3 calibration: dedicated dual ascent rate for the conflict channel (it is the only conflict feedback path).")
     parser.add_argument("--lambda-max", type=float, default=20.0)
     parser.add_argument("--lambda-max-conflict", type=float, default=8.0, help="Per-channel dual ceiling for the conflict constraint (0 disables the channel).")
     parser.add_argument("--conflict-cost-limit", type=float, default=0.08, help="Conflict-rate budget for the conflict dual channel (TLS exposure anchor).")
@@ -464,10 +466,12 @@ def run_experiment(
             queue_utm_weight=args.queue_utm_weight,
             uncertainty_cost_weight=args.uncertainty_cost_weight,
             energy_budget_j=args.energy_budget_j,
+            conflict_cost_weight=args.conflict_cost_weight,
             utm_conflict_cost_weight=args.utm_conflict_cost_weight,
             dss_delay_cost_weight=args.dss_delay_cost_weight,
             off_nominal_cost_weight=args.off_nominal_cost_weight,
             lambda_lr=args.lambda_lr,
+            lambda_lr_conflict=args.lambda_lr_conflict,
             lambda_max=args.lambda_max,
             lambda_max_conflict=args.lambda_max_conflict,
             conflict_cost_limit=args.conflict_cost_limit,

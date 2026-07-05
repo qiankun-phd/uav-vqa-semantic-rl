@@ -146,9 +146,15 @@ class PPOTrainConfig:
     payload_cost_weight: float = 0.10
     # P1 dedup (2026-07 v19 review): a BUBBLES conflict raises airspace_conflict
     # and utm_constraint_violation together; keep a single shaped-penalty channel
-    # (conflict 0.5) and zero the same-source utm weight so one event is not
-    # billed twice on top of the dual lambda and Lyapunov queues.
-    conflict_cost_weight: float = 0.5
+    # and zero the same-source utm weight so one event is not billed twice on
+    # top of the dual lambda and Lyapunov queues.
+    # v3 calibration (2026-07 A/B round 2): the shaped conflict weight is now 0.
+    # The A/B v2 chain showed B2 (lambda_conflict disabled) was bit-identical to
+    # A2 -- the dual channel was decorative because the shaped 0.5 penalty did
+    # all the work.  Conflict pressure is now carried exclusively by the
+    # Lagrangian term -lambda_conflict * violation (see DualState.penalty), so
+    # disabling the channel must visibly degrade conflict rate.
+    conflict_cost_weight: float = 0.0
     battery_cost_weight: float = 2.0
     gpu_cost_weight: float = 1.5
     utm_conflict_cost_weight: float = 0.0
@@ -160,8 +166,13 @@ class PPOTrainConfig:
     queue_quality_weight: float = 2.5
     queue_deadline_weight: float = 0.8
     queue_energy_weight: float = 0.25
-    queue_risk_weight: float = 1.0
-    queue_utm_weight: float = 1.0
+    # v3 calibration: risk/utm Lyapunov reward penalties are zeroed so the
+    # conflict constraint has a single load-bearing channel (the dual lambda).
+    # q_risk/q_utm queues are still tracked and stay in the observation state;
+    # only the reward-side penalty terms are removed.  quality/deadline/energy
+    # queue terms are intentionally untouched.
+    queue_risk_weight: float = 0.0
+    queue_utm_weight: float = 0.0
     uncertainty_cost_weight: float = 0.35
     energy_budget_j: float = 500.0
     quality_cost_limit: float = 0.0
@@ -180,6 +191,9 @@ class PPOTrainConfig:
     battery_cost_limit: float = 0.0
     gpu_cost_limit: float = 0.0
     lambda_lr: float = 0.1
+    # v3 calibration: dedicated dual step size for the conflict channel (it is
+    # now the only conflict feedback path, so it gets a faster ascent rate).
+    lambda_lr_conflict: float = 0.2
     lambda_max: float = 20.0
     lambda_max_conflict: float = 8.0
     lambda_decay: float = 0.01
@@ -1979,7 +1993,12 @@ def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig)
         dual.deadline_normal = deadline
         dual.deadline_critical = deadline
     dual.conflict = _dual_update(
-        dual.conflict, _mean(rollout["conflict_costs"]), cfg.conflict_cost_limit, cfg, lambda_max=cfg.lambda_max_conflict
+        dual.conflict,
+        _mean(rollout["conflict_costs"]),
+        cfg.conflict_cost_limit,
+        cfg,
+        lambda_max=cfg.lambda_max_conflict,
+        lambda_lr=cfg.lambda_lr_conflict,
     )
     dual.battery = _dual_update(dual.battery, _mean(rollout["battery_costs"]), cfg.battery_cost_limit, cfg)
     dual.gpu = _dual_update(dual.gpu, _mean(rollout["gpu_costs"]), cfg.gpu_cost_limit, cfg)
@@ -2257,13 +2276,16 @@ def _dual_update(
     limit: float,
     cfg: PPOTrainConfig,
     lambda_max: float | None = None,
+    lambda_lr: float | None = None,
 ) -> float:
     # Leaky projected sub-gradient ascent: lambda <- (1-decay)*lambda + lr*(cost-limit).
     # The decay term breaks the one-way ratchet observed in the 2026-07 review
     # (lambda monotone non-decreasing whenever limit=0), letting lambda relax
-    # once the observed cost stays below the limit.
+    # once the observed cost stays below the limit.  lambda_lr allows a
+    # per-channel step size (v3: conflict channel uses cfg.lambda_lr_conflict).
     ceiling = float(cfg.lambda_max if lambda_max is None else lambda_max)
-    updated = (1.0 - float(cfg.lambda_decay)) * float(current) + float(cfg.lambda_lr) * (float(observed_cost) - float(limit))
+    step = float(cfg.lambda_lr if lambda_lr is None else lambda_lr)
+    updated = (1.0 - float(cfg.lambda_decay)) * float(current) + step * (float(observed_cost) - float(limit))
     return max(0.0, min(ceiling, updated))
 
 

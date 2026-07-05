@@ -36,6 +36,7 @@ from vqa_semcom.rl.v19_ppo import (
     _two_timescale_log_probs_entropy_values,
     _two_timescale_rollout_tensors,
     _two_timescale_step_semantic_reward,
+    _update_duals,
 )
 from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
@@ -126,8 +127,13 @@ class V19CorrectnessTest(unittest.TestCase):
         )
 
     def test_lyapunov_uses_risk_utm_increments(self) -> None:
-        """The queue penalty must charge conflict events once, not per water level."""
-        cfg = _proposed_two_timescale_cfg()
+        """The queue penalty must charge conflict events once, not per water level.
+
+        v3 calibration zeroes queue_risk_weight/queue_utm_weight by default, so
+        this test pins them back to 1.0 to keep the increment-vs-level check
+        meaningful.
+        """
+        cfg = _proposed_two_timescale_cfg(queue_risk_weight=1.0, queue_utm_weight=1.0)
         obs = {"epsilon_k": 0.9, "deadline_s": 5.0}
         base_info = {
             "risk_level": "normal",
@@ -161,6 +167,39 @@ class V19CorrectnessTest(unittest.TestCase):
             lam = _dual_update(lam, observed_cost=1.0, limit=cfg.conflict_cost_limit, cfg=cfg, lambda_max=cfg.lambda_max_conflict)
         self.assertLessEqual(lam, cfg.lambda_max_conflict)
         self.assertGreater(lam, 0.9 * cfg.lambda_max_conflict)
+
+    def test_conflict_dual_is_sole_load_bearing_channel(self) -> None:
+        """v3 calibration: only -lambda_conflict*violation carries conflict cost.
+
+        Defaults must zero every shaped/queue conflict path, and the conflict
+        dual channel must ascend with its dedicated lambda_lr_conflict rate.
+        """
+        cfg = PPOTrainConfig()
+        self.assertEqual(cfg.conflict_cost_weight, 0.0)
+        self.assertEqual(cfg.utm_conflict_cost_weight, 0.0)
+        self.assertEqual(cfg.queue_risk_weight, 0.0)
+        self.assertEqual(cfg.queue_utm_weight, 0.0)
+        self.assertEqual(cfg.lambda_lr_conflict, 0.2)
+        # Wiring: _update_duals must use lambda_lr_conflict for the conflict channel.
+        cfg2 = _proposed_two_timescale_cfg()
+        dual = DualState()
+        rollout = {
+            "quality_costs": [0.0],
+            "deadline_costs": [0.0],
+            "quality_costs_normal": [0.0],
+            "quality_costs_critical": [0.0],
+            "deadline_costs_normal": [0.0],
+            "deadline_costs_critical": [0.0],
+            "conflict_costs": [1.0],
+            "battery_costs": [0.0],
+            "gpu_costs": [0.0],
+        }
+        _update_duals(dual, rollout, cfg2)
+        self.assertAlmostEqual(
+            dual.conflict,
+            cfg2.lambda_lr_conflict * (1.0 - cfg2.conflict_cost_limit),
+            places=9,
+        )
 
     def test_advantage_normalization_keeps_constant_penalty(self) -> None:
         normalized = _normalize_advantages([-3.0, -2.0, -4.0, -2.5])
