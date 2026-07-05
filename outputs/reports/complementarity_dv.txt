@@ -1,0 +1,17 @@
+=== (1) token-gain by question reasoning type (DroneVehicle rician, test) ===
+qtype        reasoning      token    image     d=t-i   note
+counting     symbolic       0.626    0.415    +0.211   absolute count: exact number
+comparison   symbolic       0.911    0.812    +0.098   relative count: count(A) vs count(B)
+co_presence  symbolic       0.748    0.657    +0.091   joint existence via counts: A>0 and B>0
+threshold    symbolic       0.585    0.508    +0.077   count threshold: count(A) >= N
+presence     perceptual     0.812    0.826    -0.014   existence: needs to visually confirm >=1 instance
+
+=== (3) zero-parameter semantic rule vs calibrated selector (test acc) ===
+  fixed token (M3)           0.7246  (n=4260)
+  fixed image (M1)           0.6408  (n=4260)
+  SEMANTIC RULE (0-param)    0.7293  (n=4260)
+  data-CALIBRATED (LCB)      0.7246  (n=4260)
+  oracle (per-decision)      0.8063
+
+SYMBOLIC set: ['co_presence', 'comparison', 'counting', 'threshold']
+semantic rule == calibrated policy? False
