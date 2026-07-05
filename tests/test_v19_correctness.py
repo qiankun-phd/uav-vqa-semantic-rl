@@ -29,6 +29,7 @@ from vqa_semcom.rl.v19_ppo import (
     TwoTimescaleMobilitySemanticActorCritic,
     _collect_two_timescale_episode,
     _dual_update,
+    _init_dual_state,
     _mobility_reward_adjustment,
     _normalize_advantages,
     _scheduled_bc_aux_weight,
@@ -200,6 +201,43 @@ class V19CorrectnessTest(unittest.TestCase):
             cfg2.lambda_lr_conflict * (1.0 - cfg2.conflict_cost_limit),
             places=9,
         )
+
+    def test_lambda_init_conflict_warm_start(self) -> None:
+        """lambda_init_conflict warm-starts the conflict dual at episode 0.
+
+        Dual-latency probe (2026-07): with init=0 the conflict lambda needs
+        hundreds of episodes to reach its ~4 equilibrium, arriving after the
+        BC/high-entropy policy-formation phase.  The warm start must (a) seed
+        DualState.conflict with the requested value, (b) stay clamped by the
+        per-channel ceiling so lambda_max_conflict=0 still disables the
+        channel, and (c) remain governed by the leaky dual update -- it can
+        rise under violation pressure and fall once cost < limit.
+        """
+        # Default keeps the existing cold-start behavior.
+        self.assertEqual(PPOTrainConfig().lambda_init_conflict, 0.0)
+        self.assertEqual(_init_dual_state(PPOTrainConfig()).conflict, 0.0)
+        # (a) warm start seeds the conflict channel; other channels stay 0.
+        cfg = PPOTrainConfig(lambda_init_conflict=4.0)
+        dual = _init_dual_state(cfg)
+        self.assertEqual(dual.conflict, 4.0)
+        self.assertEqual(dual.quality_normal, 0.0)
+        self.assertEqual(dual.battery, 0.0)
+        # (b) clamped to the per-channel ceiling; disabled channel stays off.
+        capped = _init_dual_state(PPOTrainConfig(lambda_init_conflict=99.0))
+        self.assertEqual(capped.conflict, PPOTrainConfig().lambda_max_conflict)
+        disabled = _init_dual_state(PPOTrainConfig(lambda_init_conflict=4.0, lambda_max_conflict=0.0))
+        self.assertEqual(disabled.conflict, 0.0)
+        # (c) the leaky update still moves the warm-started lambda both ways.
+        risen = _dual_update(
+            dual.conflict, observed_cost=1.0, limit=cfg.conflict_cost_limit,
+            cfg=cfg, lambda_max=cfg.lambda_max_conflict, lambda_lr=cfg.lambda_lr_conflict,
+        )
+        self.assertGreater(risen, 4.0)
+        fallen = _dual_update(
+            dual.conflict, observed_cost=0.0, limit=cfg.conflict_cost_limit,
+            cfg=cfg, lambda_max=cfg.lambda_max_conflict, lambda_lr=cfg.lambda_lr_conflict,
+        )
+        self.assertLess(fallen, 4.0)
 
     def test_advantage_normalization_keeps_constant_penalty(self) -> None:
         normalized = _normalize_advantages([-3.0, -2.0, -4.0, -2.5])

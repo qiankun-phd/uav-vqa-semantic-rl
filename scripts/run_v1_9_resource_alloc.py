@@ -377,6 +377,7 @@ def main() -> int:
     parser.add_argument("--lambda-lr-conflict", type=float, default=0.2, help="v3 calibration: dedicated dual ascent rate for the conflict channel (it is the only conflict feedback path).")
     parser.add_argument("--lambda-max", type=float, default=20.0)
     parser.add_argument("--lambda-max-conflict", type=float, default=8.0, help="Per-channel dual ceiling for the conflict constraint (0 disables the channel).")
+    parser.add_argument("--lambda-init-conflict", type=float, default=0.0, help="Warm-start value for lambda_conflict at episode 0 (clamped to --lambda-max-conflict). Puts the Lagrangian conflict price in the reward during the policy-formation phase instead of waiting for dual ascent.")
     parser.add_argument("--conflict-cost-limit", type=float, default=0.08, help="Conflict-rate budget for the conflict dual channel (TLS exposure anchor).")
     parser.add_argument("--quality-cost-limit", type=float, default=0.0)
     parser.add_argument("--deadline-cost-limit", type=float, default=0.0)
@@ -474,6 +475,7 @@ def run_experiment(
             lambda_lr_conflict=args.lambda_lr_conflict,
             lambda_max=args.lambda_max,
             lambda_max_conflict=args.lambda_max_conflict,
+            lambda_init_conflict=args.lambda_init_conflict,
             conflict_cost_limit=args.conflict_cost_limit,
             quality_cost_limit=args.quality_cost_limit,
             deadline_cost_limit=args.deadline_cost_limit,

@@ -197,6 +197,15 @@ class PPOTrainConfig:
     lambda_max: float = 20.0
     lambda_max_conflict: float = 8.0
     lambda_decay: float = 0.01
+    # Lambda warm-start (2026-07 dual-latency probe): with lambda_init_conflict=0
+    # the conflict dual needs hundreds of episodes to climb to its equilibrium
+    # (~4 under the v3 calibration), by which time the BC warm start plus the
+    # high-entropy phase have already shaped the policy -- the constraint signal
+    # arrives too late to matter (B2 lambda==0 was behaviorally identical to A2).
+    # Setting lambda_init_conflict to the equilibrium value puts the constraint
+    # price in the reward from episode 0; the leaky dual update then self-
+    # corrects it downward if the realized cost stays below the limit.
+    lambda_init_conflict: float = 0.0
     bandwidth_floor: float = 0.02
     share_floor: float = 0.01
     semantic_token_bandwidth_floor: float = 0.35
@@ -290,6 +299,19 @@ class DualState:
             "lambda_quality": float((self.quality_normal + self.quality_critical) / 2.0),
             "lambda_deadline": float((self.deadline_normal + self.deadline_critical) / 2.0),
         }
+
+
+def _init_dual_state(cfg: PPOTrainConfig) -> DualState:
+    """Build the initial dual state from the config.
+
+    lambda_init_conflict warm-starts the conflict channel at (up to) the given
+    value so the Lagrangian price is present during the policy-formation phase
+    instead of arriving after the BC/high-entropy period.  The value is clamped
+    to the per-channel ceiling; a channel disabled via lambda_max_conflict=0
+    therefore stays disabled regardless of the requested init.
+    """
+    conflict0 = max(0.0, min(float(cfg.lambda_init_conflict), float(cfg.lambda_max_conflict)))
+    return DualState(conflict=conflict0)
 
 
 class HybridActorCritic(nn.Module if nn is not None else object):
@@ -498,7 +520,7 @@ def train_ppo(
     if optimizer is not None and demos:
         bc_loss = _behavior_clone(model, optimizer, demos, cfg)
 
-    dual = DualState()
+    dual = _init_dual_state(cfg)
     trace: list[dict[str, float]] = []
     for episode in range(cfg.train_episodes):
         rollout = _collect_episode(env, model, seed + episode, cfg, dual)
@@ -582,7 +604,7 @@ def train_two_timescale_ppo(
     if optimizer is not None and demos:
         bc_loss = _behavior_clone_two_timescale(model, optimizer, demos, cfg)
 
-    dual = DualState()
+    dual = _init_dual_state(cfg)
     trace: list[dict[str, float]] = []
     for episode in range(cfg.train_episodes):
         rollout = _collect_two_timescale_episode(env, model, seed + episode, cfg, dual)
