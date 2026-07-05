@@ -1,0 +1,278 @@
+{
+  "conditions": {
+    "peak": {
+      "A1": {
+        "average_accuracy": 0.533248,
+        "airspace_conflict_rate": 0.114667,
+        "utm_conflict_violation_rate": 0.114667,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.252667,
+        "service_level_1_ratio": 0.747333,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.752667,
+        "runs": 3.0
+      },
+      "A2": {
+        "average_accuracy": 0.562779,
+        "airspace_conflict_rate": 0.302667,
+        "utm_conflict_violation_rate": 0.302667,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.390667,
+        "service_level_1_ratio": 0.609333,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.719333,
+        "runs": 3.0
+      },
+      "A2warm": {
+        "average_accuracy": 0.562779,
+        "airspace_conflict_rate": 0.302667,
+        "utm_conflict_violation_rate": 0.302667,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.390667,
+        "service_level_1_ratio": 0.609333,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.719333,
+        "runs": 3.0
+      },
+      "B1": {
+        "average_accuracy": 0.581487,
+        "airspace_conflict_rate": 0.470667,
+        "utm_conflict_violation_rate": 0.470667,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.217333,
+        "service_level_1_ratio": 0.782667,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 1.0,
+        "runs": 3.0
+      },
+      "B2": {
+        "average_accuracy": 0.562779,
+        "airspace_conflict_rate": 0.302667,
+        "utm_conflict_violation_rate": 0.302667,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.390667,
+        "service_level_1_ratio": 0.609333,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.719333,
+        "runs": 3.0
+      },
+      "Ccache": {
+        "average_accuracy": 0.312683,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 1.0,
+        "service_level_1_ratio": 0.0,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.0,
+        "runs": 1.0
+      },
+      "Cgreedy": {
+        "average_accuracy": 0.385949,
+        "airspace_conflict_rate": 0.654,
+        "utm_conflict_violation_rate": 0.654,
+        "semantic_success_rate": 0.0,
+        "task_success_rate": 0.0,
+        "service_level_0_ratio": 0.0,
+        "service_level_1_ratio": 0.0,
+        "service_level_2_ratio": 1.0,
+        "deadline_violation_rate": 1.0,
+        "runs": 1.0
+      }
+    },
+    "nominal": {
+      "A1": {
+        "average_accuracy": 0.857747,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.959,
+        "task_success_rate": 0.046667,
+        "service_level_0_ratio": 0.511333,
+        "service_level_1_ratio": 0.483667,
+        "service_level_2_ratio": 0.005,
+        "deadline_violation_rate": 0.947,
+        "runs": 3.0
+      },
+      "A2": {
+        "average_accuracy": 0.633431,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.946333,
+        "task_success_rate": 0.276,
+        "service_level_0_ratio": 0.592333,
+        "service_level_1_ratio": 0.398333,
+        "service_level_2_ratio": 0.009333,
+        "deadline_violation_rate": 0.724,
+        "runs": 3.0
+      },
+      "A2warm": {
+        "average_accuracy": 0.633431,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.946333,
+        "task_success_rate": 0.276,
+        "service_level_0_ratio": 0.592333,
+        "service_level_1_ratio": 0.398333,
+        "service_level_2_ratio": 0.009333,
+        "deadline_violation_rate": 0.724,
+        "runs": 3.0
+      },
+      "B1": {
+        "average_accuracy": 0.635465,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.945333,
+        "task_success_rate": 0.315333,
+        "service_level_0_ratio": 0.568333,
+        "service_level_1_ratio": 0.421667,
+        "service_level_2_ratio": 0.01,
+        "deadline_violation_rate": 0.666667,
+        "runs": 3.0
+      },
+      "B2": {
+        "average_accuracy": 0.633431,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.946333,
+        "task_success_rate": 0.278667,
+        "service_level_0_ratio": 0.592333,
+        "service_level_1_ratio": 0.398333,
+        "service_level_2_ratio": 0.009333,
+        "deadline_violation_rate": 0.721333,
+        "runs": 3.0
+      },
+      "Ccache": {
+        "average_accuracy": 0.265511,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.297,
+        "task_success_rate": 0.297,
+        "service_level_0_ratio": 1.0,
+        "service_level_1_ratio": 0.0,
+        "service_level_2_ratio": 0.0,
+        "deadline_violation_rate": 0.0,
+        "runs": 1.0
+      },
+      "Cgreedy": {
+        "average_accuracy": 0.624142,
+        "airspace_conflict_rate": 0.0,
+        "utm_conflict_violation_rate": 0.0,
+        "semantic_success_rate": 0.896,
+        "task_success_rate": 0.368,
+        "service_level_0_ratio": 0.326,
+        "service_level_1_ratio": 0.54,
+        "service_level_2_ratio": 0.134,
+        "deadline_violation_rate": 0.632,
+        "runs": 1.0
+      }
+    }
+  },
+  "lambda_conflict_final": {
+    "A1": {
+      "0": {
+        "first": 0.044,
+        "final": 0.7547,
+        "min": 0.0182,
+        "max": 0.9581
+      },
+      "1": {
+        "first": 0.0,
+        "final": 1.0627,
+        "min": 0.0,
+        "max": 1.0628
+      },
+      "2": {
+        "first": 0.004,
+        "final": 0.798,
+        "min": 0.004,
+        "max": 0.8528
+      }
+    },
+    "A2": {
+      "0": {
+        "first": 0.004,
+        "final": 4.3047,
+        "min": 0.004,
+        "max": 4.452
+      },
+      "1": {
+        "first": 0.044,
+        "final": 4.6911,
+        "min": 0.0276,
+        "max": 4.6911
+      },
+      "2": {
+        "first": 0.004,
+        "final": 3.7168,
+        "min": 0.004,
+        "max": 4.0059
+      }
+    },
+    "A2warm": {
+      "0": {
+        "first": 3.964,
+        "final": 4.3286,
+        "min": 2.9258,
+        "max": 4.5488
+      },
+      "1": {
+        "first": 4.004,
+        "final": 4.7139,
+        "min": 3.2847,
+        "max": 4.7139
+      },
+      "2": {
+        "first": 3.964,
+        "final": 3.7545,
+        "min": 3.5802,
+        "max": 4.498
+      }
+    },
+    "B1": {
+      "0": {
+        "first": 0.064,
+        "final": 6.945,
+        "min": 0.064,
+        "max": 7.2408
+      },
+      "1": {
+        "first": 0.104,
+        "final": 7.1032,
+        "min": 0.104,
+        "max": 7.3035
+      },
+      "2": {
+        "first": 0.064,
+        "final": 6.5543,
+        "min": 0.064,
+        "max": 7.2164
+      }
+    },
+    "B2": {
+      "0": {
+        "first": 0.0,
+        "final": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "1": {
+        "first": 0.0,
+        "final": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "2": {
+        "first": 0.0,
+        "final": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    }
+  }
+}

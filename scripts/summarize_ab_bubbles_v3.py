@@ -33,13 +33,14 @@ from pathlib import Path
 ARM_POLICY = {
     "A1": "ppo",
     "A2": "ppo",
+    "A2warm": "ppo",
     "B1": "ppo",
     "B2": "ppo",
     "Cgreedy": "semantic_greedy",
     "Ccache": "always_cache",
 }
 
-ARM_ORDER = ["Cgreedy", "Ccache", "A2", "B2", "B1", "A1"]
+ARM_ORDER = ["Cgreedy", "Ccache", "A2", "A2warm", "B2", "B1", "A1"]
 
 METRICS = [
     "average_accuracy",
@@ -72,25 +73,31 @@ def _parse_run_dir(name: str) -> tuple[str, str, str] | None:
     return arm, seed, condition
 
 
-def _final_lambda_conflict(run_dir: Path) -> float | None:
+def _lambda_conflict_stats(run_dir: Path) -> dict[str, float] | None:
+    """First/final/min/max of lambda_conflict over training (trajectory shape)."""
     trace = run_dir / "ppo_lambda_trace.csv"
     if not trace.exists():
         return None
-    last: dict[str, str] | None = None
+    values: list[float] = []
     with trace.open() as handle:
         for row in csv.DictReader(handle):
-            last = row
-    if not last or "lambda_conflict" not in last:
+            try:
+                values.append(float(row["lambda_conflict"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    if not values:
         return None
-    try:
-        return float(last["lambda_conflict"])
-    except (TypeError, ValueError):
-        return None
+    return {
+        "first": round(values[0], 4),
+        "final": round(values[-1], 4),
+        "min": round(min(values), 4),
+        "max": round(max(values), 4),
+    }
 
 
-def collect(root: Path) -> tuple[dict[str, dict[str, dict[str, float]]], dict[str, dict[str, float]]]:
+def collect(root: Path) -> tuple[dict[str, dict[str, dict[str, float]]], dict[str, dict[str, dict[str, float]]]]:
     per_arm: dict[str, dict[str, list[dict[str, float]]]] = {}
-    lambdas: dict[str, dict[str, float]] = {}
+    lambdas: dict[str, dict[str, dict[str, float]]] = {}
     for run_dir in sorted(root.iterdir()):
         if not run_dir.is_dir():
             continue
@@ -109,9 +116,9 @@ def collect(root: Path) -> tuple[dict[str, dict[str, dict[str, float]]], dict[st
                         {key: float(row.get(key, 0.0) or 0.0) for key in METRICS}
                     )
         if condition == "peak" and policy == "ppo":
-            lam = _final_lambda_conflict(run_dir)
+            lam = _lambda_conflict_stats(run_dir)
             if lam is not None:
-                lambdas.setdefault(arm, {})[seed] = round(lam, 4)
+                lambdas.setdefault(arm, {})[seed] = lam
     out: dict[str, dict[str, dict[str, float]]] = {}
     for condition, arms in per_arm.items():
         out[condition] = {}
@@ -161,7 +168,10 @@ def main() -> int:
     if lambdas:
         for arm in ARM_ORDER:
             if arm in lambdas:
-                per_seed = ", ".join(f"seed{seed}={value:.3f}" for seed, value in sorted(lambdas[arm].items()))
+                per_seed = ", ".join(
+                    f"seed{seed}={stats['final']:.3f} (ep0 {stats['first']:.3f}, min {stats['min']:.3f}, max {stats['max']:.3f})"
+                    for seed, stats in sorted(lambdas[arm].items())
+                )
                 lines.append(f"- {arm}: {per_seed}")
     else:
         lines.append("- (no lambda traces found)")
@@ -193,6 +203,35 @@ def main() -> int:
         succ = a2_nom["task_success_rate"]
         verdicts.append(("nominal A2 semantic success >= 0.92", sem >= 0.92, f"{sem:.4f}"))
         verdicts.append(("nominal A2 task success >= 0.30", succ >= 0.30, f"{succ:.4f}"))
+
+    a2warm = peak.get("A2warm")
+    a2warm_nom = nominal.get("A2warm")
+    if a2 and a2warm:
+        delta = a2warm["airspace_conflict_rate"] - a2["airspace_conflict_rate"]
+        verdicts.append((
+            "WARM H1: A2warm conflict < A2 conflict - 0.05 (warm-started dual is load-bearing)",
+            delta <= -0.05,
+            f"{delta:+.4f}",
+        ))
+    if a2warm:
+        conflict = a2warm["airspace_conflict_rate"]
+        verdicts.append(("WARM H2: A2warm conflict rate <= 0.15 (pulled by limit 0.08)", conflict <= 0.15, f"{conflict:.4f}"))
+        cache = a2warm["service_level_0_ratio"]
+        verdicts.append((
+            "WARM guard: A2warm cache ratio <= 0.5 (no cache-collapse escape route)",
+            cache <= 0.5,
+            f"{cache:.4f}",
+        ))
+    if a2 and a2warm:
+        margin = a2warm["average_accuracy"] - (a2["average_accuracy"] - 0.05)
+        verdicts.append((
+            "WARM guard: A2warm average_accuracy >= A2 average_accuracy - 0.05",
+            margin >= 0.0,
+            f"margin {margin:+.4f}",
+        ))
+    if a2warm_nom:
+        sem = a2warm_nom["semantic_success_rate"]
+        verdicts.append(("WARM guard: nominal A2warm semantic success >= 0.92", sem >= 0.92, f"{sem:.4f}"))
 
     lines.append("## Criteria")
     lines.append("")
