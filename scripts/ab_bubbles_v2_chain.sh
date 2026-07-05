@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Revised BUBBLES A/B chain (runs AFTER the 2026-07 P0/P1 RL-correctness fixes).
 #
+# NOTE: intentionally NOT named chain_ab_v2.sh -- a leftover 90-minute cleanup
+# loop on the 160 host (`pkill -f "[c]hain_ab"` every 60 s, from a previous
+# session) kept killing any process whose command line contained "chain_ab".
+# This filename avoids that pattern.
+#
 # Arms (docs_spec/V19_Design_Review_2026-07.md section 4):
 #   C   : non-learning baselines on bubbles (semantic_greedy, always_cache) -- seconds
 #   A2  : bubbles profile, fixed proposed two-timescale PPO, seeds 0/1/2
