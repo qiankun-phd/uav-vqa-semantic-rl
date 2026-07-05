@@ -368,12 +368,14 @@ def main() -> int:
     parser.add_argument("--queue-utm-weight", type=float, default=1.0)
     parser.add_argument("--uncertainty-cost-weight", type=float, default=0.35)
     parser.add_argument("--energy-budget-j", type=float, default=500.0)
-    parser.add_argument("--utm-conflict-cost-weight", type=float, default=1.5)
+    parser.add_argument("--utm-conflict-cost-weight", type=float, default=0.0, help="Kept at 0 by default: BUBBLES conflicts set airspace+utm flags together; the conflict channel already charges the event once.")
     parser.add_argument("--dss-delay-cost-weight", type=float, default=0.25)
     parser.add_argument("--off-nominal-cost-weight", type=float, default=1.0)
     parser.add_argument("--no-safety-layer", action="store_true", help="Disable the service/GPU/battery/conflict safety projection layer.")
-    parser.add_argument("--lambda-lr", type=float, default=0.05)
+    parser.add_argument("--lambda-lr", type=float, default=0.1)
     parser.add_argument("--lambda-max", type=float, default=20.0)
+    parser.add_argument("--lambda-max-conflict", type=float, default=8.0, help="Per-channel dual ceiling for the conflict constraint (0 disables the channel).")
+    parser.add_argument("--conflict-cost-limit", type=float, default=0.08, help="Conflict-rate budget for the conflict dual channel (TLS exposure anchor).")
     parser.add_argument("--quality-cost-limit", type=float, default=0.0)
     parser.add_argument("--deadline-cost-limit", type=float, default=0.0)
     parser.add_argument("--power-min-w", type=float, default=0.05)
@@ -467,6 +469,8 @@ def run_experiment(
             off_nominal_cost_weight=args.off_nominal_cost_weight,
             lambda_lr=args.lambda_lr,
             lambda_max=args.lambda_max,
+            lambda_max_conflict=args.lambda_max_conflict,
+            conflict_cost_limit=args.conflict_cost_limit,
             quality_cost_limit=args.quality_cost_limit,
             deadline_cost_limit=args.deadline_cost_limit,
             power_min_w=args.power_min_w,
@@ -586,7 +590,8 @@ def _enable_proposed_semantic_rl_defaults(args: argparse.Namespace) -> None:
     args.entropy_end = max(float(args.entropy_end), 0.02)
     args.service_prior_weight = max(float(args.service_prior_weight), 0.65)
     args.service_prior_decay_episodes = max(int(args.service_prior_decay_episodes), 360)
-    args.bc_aux_weight = max(float(args.bc_aux_weight), 0.28)
+    # P1 fix (2026-07 v19 review): 0.28 never-decaying BC glue kept proposed ~= teacher.
+    args.bc_aux_weight = max(float(args.bc_aux_weight), 0.05)
     args.demo_episodes = max(int(args.demo_episodes), min(50, int(args.train_episodes)))
     args.bc_epochs = max(int(args.bc_epochs), 6)
 

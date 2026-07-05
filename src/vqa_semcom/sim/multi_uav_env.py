@@ -1902,20 +1902,24 @@ class MultiUAVVQAEnv:
         sigma = bubbles_separation.T4_CONFIDENCE_SIGMA.get(confidence, 2.0)
         return bubbles_separation.SeparationParams(t4_confidence_sigma=sigma)
 
-    def _bubbles_aircraft_kinematics(self, target: EnvTask) -> tuple[
-        tuple[float, float, float], tuple[float, float, float]
-    ]:
+    def _bubbles_aircraft_kinematics(
+        self, target: EnvTask, uav: "UAVNode | None" = None
+    ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
         """Approximate an aircraft state (position, velocity) for a task volume.
 
         Position is the operational-volume centre at its mid-altitude; velocity
-        is the SAIL III-IV cruise vector pointing from the nearest UAV toward the
-        volume centre (zero if the UAV is already on top of it). This is
-        deterministic given the env state and drives the CPA prediction.
+        is the SAIL III-IV cruise vector pointing from ``uav`` toward the volume
+        centre (zero if the UAV is already on top of it). For the acting task the
+        caller passes the UAV selected by the action, so the CPA conflict outcome
+        is controllable through ``uav_assignment`` (P1-env fix: the nearest UAV
+        was used unconditionally before, making conflicts largely exogenous to
+        the policy). Background/other tasks carry no action and keep the
+        nearest-UAV approximation.
         """
         cruise = float(self.env_cfg.get("uav_speed_mps", bubbles_separation.TABLE_B2["SAIL_III_IV"].cruise_mps))
         cx, cy = float(target.area4d.center_x_m), float(target.area4d.center_y_m)
         cz = 0.5 * (float(target.area4d.altitude_min_m) + float(target.area4d.altitude_max_m))
-        uav = self._nearest_uav(target)
+        uav = uav if uav is not None else self._nearest_uav(target)
         dx, dy = cx - uav.x_m, cy - uav.y_m
         norm = math.hypot(dx, dy)
         if norm <= 1e-6:
@@ -1939,7 +1943,9 @@ class MultiUAVVQAEnv:
         )
         d_tc, h_tc = bubbles_separation.tactical_conflict_distance(perf, params)
         tc_threshold = float(self.env_cfg.get("bubbles_tc_threshold_s", 60.0))
-        p_self, v_self = self._bubbles_aircraft_kinematics(task)
+        assignment = action.get("uav_assignment", None)
+        assigned_uav = self.uavs[int(assignment) % len(self.uavs)] if assignment is not None and self.uavs else None
+        p_self, v_self = self._bubbles_aircraft_kinematics(task, uav=assigned_uav)
 
         candidates: dict[str, EnvTask] = {}
         for other_raw in action.get("concurrent_actions", []):
