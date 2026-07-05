@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from vqa_semcom.config import load_config, resolve_path
+from vqa_semcom.sim import bubbles_separation
 from vqa_semcom.semantic.utility import SemanticUtilityEstimate, SemanticUtilityModel
 from vqa_semcom.sim.resource_env import LUTEntry, load_lut, read_csv
 from vqa_semcom.snr import channel_bin_from_snr, snr_bins_from_config, snr_db_from_label, snr_db_to_bin_label
@@ -814,7 +815,45 @@ def _env_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
         out["bandwidth_hz"] = sim_cfg["bandwidth_hz"]
     if "processing_delay_by_level" in sim_cfg and "processing_delay_s_by_level" not in cfg.get("multi_uav_env", {}):
         out["processing_delay_s_by_level"] = sim_cfg["processing_delay_by_level"]
-    return _apply_calibration(out, cfg)
+    out = _apply_calibration(out, cfg)
+    return _apply_bubbles_profile(out)
+
+
+def _bubbles_profile_active(env_cfg: dict[str, Any]) -> bool:
+    """True only when the config opts into the BUBBLES-conformant scenario profile.
+
+    Gated by ``multi_uav_env.scenario_profile == "bubbles"``. Absent/None/other
+    values leave every downstream code path bit-identical to the legacy default.
+    """
+    return str(env_cfg.get("scenario_profile") or "").strip().lower() == "bubbles"
+
+
+def _apply_bubbles_profile(env_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Replace the default UAV performance envelope with the BUBBLES SAIL III-IV
+    class (D2.1 Appendix B, Table B-2, p.99) when the profile is enabled.
+
+    Cruise 14 m/s, RoC 5 m/s, RoD 4 m/s, horizontal size 2.0 m, vertical size
+    1.0 m. Constraint limits are anchored to the mid-air-collision TLS
+    ``TLS_MAC = 2.5e-7`` FAT/FH (D2.1 Appendix D, p.112): the airspace-conflict
+    penalty in this profile represents a breach of the tactical-separation
+    barrier that the TLS budget requires the U-space to keep below that rate.
+    The mapping is declarative (no explicit FAT/FH -> reward conversion is made);
+    see :data:`bubbles_separation.TLS_MAC_FAT_PER_FH`.
+    """
+    if not _bubbles_profile_active(env_cfg):
+        return env_cfg
+    out = dict(env_cfg)
+    perf = bubbles_separation.TABLE_B2["SAIL_III_IV"]
+    out["uav_speed_mps"] = float(perf.cruise_mps)
+    out["uav_roc_mps"] = float(perf.roc_mps)
+    out["uav_rod_mps"] = float(perf.rod_mps)
+    out["uav_size_h_m"] = float(perf.size_h_m)
+    out["uav_size_v_m"] = float(perf.size_v_m)
+    # TLS anchoring (documentation only; does not alter reward magnitude).
+    out.setdefault("tls_mac_fat_per_fh", bubbles_separation.TLS_MAC_FAT_PER_FH)
+    out.setdefault("tls_overall_fat_per_fh", bubbles_separation.TLS_OVERALL_FAT_PER_FH)
+    out.setdefault("bubbles_traffic_class", "SAIL_III_IV")
+    return out
 
 
 class MultiUAVVQAEnv:
@@ -1358,8 +1397,13 @@ class MultiUAVVQAEnv:
         return out
 
     def _init_tasks(self, options: dict[str, Any]) -> list[EnvTask]:
-        layout = self.scenario_cfg.get("task_layout", {})
+        layout = dict(self.scenario_cfg.get("task_layout", {}))
+        if _bubbles_profile_active(self.env_cfg) and "generation_mode" not in layout:
+            # BUBBLES profile defaults to the Table G-13 daily demand curve
+            # unless the active scenario already pins a generation mode.
+            layout["generation_mode"] = "bubbles_daily"
         count = int(options.get("tasks_per_episode", self.env_cfg["tasks_per_episode"]))
+        self._episode_task_count = count
         selected = [self.raw_tasks[self.rng.randrange(len(self.raw_tasks))] for _ in range(count)]
         tasks: list[EnvTask] = []
         spacing = float(self.env_cfg["area_spacing_m"])
@@ -1442,6 +1486,12 @@ class MultiUAVVQAEnv:
 
     def _generation_step(self, idx: int, area_id: int, layout: dict[str, Any]) -> int:
         mode = str(layout.get("generation_mode", "staggered"))
+        if mode == "bubbles_daily":
+            # D2.1 Table G-13 (p.128) daily demand curve scaled to the episode.
+            count = int(getattr(self, "_episode_task_count", self.env_cfg["tasks_per_episode"]))
+            return bubbles_separation.bubbles_daily_generation_step(
+                idx, count, int(self.env_cfg["episode_steps"])
+            )
         if mode == "burst":
             return int(layout.get("burst_start_step", 0))
         if mode == "wave":
@@ -1819,6 +1869,8 @@ class MultiUAVVQAEnv:
     def _strategic_conflict_task_ids(self, task: EnvTask, action: dict[str, Any]) -> list[str]:
         if not self._requires_operational_intent(action):
             return []
+        if _bubbles_profile_active(self.env_cfg):
+            return self._bubbles_tactical_conflict_task_ids(task, action)
         conflict_ids: list[str] = []
         for other_raw in action.get("concurrent_actions", []):
             other_task = self._task_by_id(other_raw.get("task_id"))
@@ -1844,6 +1896,75 @@ class MultiUAVVQAEnv:
         key = f"{self.episode}:{self.step_count}:{task.operational_intent_id}:{task.task_id}:background_intent"
         score = 0.5 + 0.5 * self._deterministic_normal(key) / 4.0
         return max(0.0, min(1.0, score)) < density
+
+    def _bubbles_separation_params(self) -> bubbles_separation.SeparationParams:
+        confidence = str(self.env_cfg.get("bubbles_t4_confidence", "2sigma")).strip().lower()
+        sigma = bubbles_separation.T4_CONFIDENCE_SIGMA.get(confidence, 2.0)
+        return bubbles_separation.SeparationParams(t4_confidence_sigma=sigma)
+
+    def _bubbles_aircraft_kinematics(self, target: EnvTask) -> tuple[
+        tuple[float, float, float], tuple[float, float, float]
+    ]:
+        """Approximate an aircraft state (position, velocity) for a task volume.
+
+        Position is the operational-volume centre at its mid-altitude; velocity
+        is the SAIL III-IV cruise vector pointing from the nearest UAV toward the
+        volume centre (zero if the UAV is already on top of it). This is
+        deterministic given the env state and drives the CPA prediction.
+        """
+        cruise = float(self.env_cfg.get("uav_speed_mps", bubbles_separation.TABLE_B2["SAIL_III_IV"].cruise_mps))
+        cx, cy = float(target.area4d.center_x_m), float(target.area4d.center_y_m)
+        cz = 0.5 * (float(target.area4d.altitude_min_m) + float(target.area4d.altitude_max_m))
+        uav = self._nearest_uav(target)
+        dx, dy = cx - uav.x_m, cy - uav.y_m
+        norm = math.hypot(dx, dy)
+        if norm <= 1e-6:
+            vel = (0.0, 0.0, 0.0)
+        else:
+            vel = (cruise * dx / norm, cruise * dy / norm, 0.0)
+        return (cx, cy, cz), vel
+
+    def _bubbles_tactical_conflict_task_ids(self, task: EnvTask, action: dict[str, Any]) -> list[str]:
+        """CPA-based two-condition tactical-conflict detection (D2.1 p.38/p.61).
+
+        Replaces the legacy Area4D-overlap distance test when the BUBBLES profile
+        is active. A conflicting task is one whose predicted closest point of
+        approach breaches the SAIL III-IV separation minimum ``d_TC`` (and ``h_TC``
+        vertically) while the time-to-CPA is below ``TC_th``.
+        """
+        params = self._bubbles_separation_params()
+        perf = bubbles_separation.TABLE_B2.get(
+            str(self.env_cfg.get("bubbles_traffic_class", "SAIL_III_IV")),
+            bubbles_separation.TABLE_B2["SAIL_III_IV"],
+        )
+        d_tc, h_tc = bubbles_separation.tactical_conflict_distance(perf, params)
+        tc_threshold = float(self.env_cfg.get("bubbles_tc_threshold_s", 60.0))
+        p_self, v_self = self._bubbles_aircraft_kinematics(task)
+
+        candidates: dict[str, EnvTask] = {}
+        for other_raw in action.get("concurrent_actions", []):
+            other_task = self._task_by_id(other_raw.get("task_id"))
+            if other_task is None or other_task.task_id == task.task_id:
+                continue
+            other = self.parse_action(other_raw, other_task)
+            if self._requires_operational_intent(other):
+                candidates[other_task.task_id] = other_task
+        utm = self.env_cfg.get("utm", {})
+        if bool(utm.get("background_operational_intents", False)):
+            for other_task in self._active_tasks():
+                if other_task.task_id == task.task_id or other_task.completed:
+                    continue
+                if self._background_intent_is_active(other_task):
+                    candidates.setdefault(other_task.task_id, other_task)
+
+        conflict_ids: list[str] = []
+        for other_id, other_task in candidates.items():
+            p_other, v_other = self._bubbles_aircraft_kinematics(other_task)
+            if bubbles_separation.is_tactical_conflict(
+                p_self, v_self, p_other, v_other, d_tc, tc_threshold, h_tc_m=h_tc
+            ):
+                conflict_ids.append(other_id)
+        return conflict_ids
 
     def _area4d_overlaps_with_buffer(self, first: Area4D, second: Area4D) -> bool:
         utm = self.env_cfg.get("utm", {})

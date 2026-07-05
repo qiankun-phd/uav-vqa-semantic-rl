@@ -117,6 +117,13 @@
   },
   "multi_uav_env": {
     "scenario": "nominal",
+    "scenario_profile": null,
+    "scenario_profile_note": "Set scenario_profile='bubbles' to enable the SESAR JU BUBBLES D2.1-conformant scenario (Table B-2 SAIL III-IV performance envelope, CPA two-condition tactical-conflict detection, Table G-13 'bubbles_daily' arrival curve). Default null leaves all env behaviour bit-identical to the legacy nominal scenario.",
+    "bubbles_tc_threshold_s": 60.0,
+    "bubbles_t4_confidence": "2sigma",
+    "tls_mac_fat_per_fh": 2.5e-07,
+    "tls_overall_fat_per_fh": 1.0e-06,
+    "tls_reference": "BUBBLES D2.1 Concept Formulation Ed.04.00.00 -- Appendix D p.110-112 (TLS_MAC=2.5e-7 FAT/FH, 25% of overall 1e-6 TLS). Airspace-conflict penalty maps to a breach of the tactical-separation barrier that keeps mid-air collisions below TLS_MAC; mapping is declarative, no explicit FAT/FH<->reward conversion.",
     "enabled_service_levels": [0, 1, 2],
     "enable_service_level_3": false,
     "calibration": {
