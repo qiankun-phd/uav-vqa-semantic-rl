@@ -1,0 +1,1706 @@
+image_id,question_type,question,answer,target_class,object_count,risk_level,epsilon_k,tau_k,view_quality_bin,scale_proxy,occlusion_score,truncation_score,density_score,presence_polarity
+00001,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,positive
+00001,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,negative
+00001,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+00001,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00004,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00004,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00004,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00007,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,positive
+00007,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,negative
+00007,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00010,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00010,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00010,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00013,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00013,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00013,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00016,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,0.0,negative
+00019,presence,Are there truck objects in this area?,yes,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+00019,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+00019,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+00022,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00022,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00022,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00022,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00025,presence,Are there car objects in this area?,yes,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00025,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00025,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00025,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00028,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00028,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00028,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00031,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00031,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00031,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00031,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00034,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00034,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00034,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00037,presence,Are there car objects in this area?,yes,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,positive
+00037,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,negative
+00037,counting,How many car objects are in this area?,19,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,
+00037,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,
+00040,presence,Are there car objects in this area?,yes,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00040,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00040,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00040,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00043,presence,Are there truck objects in this area?,yes,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,positive
+00043,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,negative
+00043,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,
+00046,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+00046,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+00046,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+00046,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00049,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00049,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00049,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00052,presence,Are there car objects in this area?,yes,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,positive
+00052,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,negative
+00052,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,
+00055,presence,Are there truck objects in this area?,yes,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00055,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00055,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00055,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00058,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00058,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00058,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00061,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00061,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00061,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00064,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00064,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00064,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00067,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00067,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00067,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00070,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00070,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00070,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00073,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00073,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00073,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00076,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00076,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00076,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00079,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00079,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00079,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00082,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00082,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00082,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00085,presence,Are there car objects in this area?,yes,car,40,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,positive
+00085,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,negative
+00085,counting,How many car objects are in this area?,40,car,40,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,
+00085,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,
+00088,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00088,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00088,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00091,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+00091,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+00091,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+00094,presence,Are there car objects in this area?,yes,car,33,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,positive
+00094,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,negative
+00094,counting,How many car objects are in this area?,33,car,33,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,
+00094,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,
+00097,presence,Are there car objects in this area?,yes,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,positive
+00097,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,negative
+00097,counting,How many car objects are in this area?,21,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,
+00100,presence,Are there car objects in this area?,yes,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,positive
+00100,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,negative
+00100,counting,How many car objects are in this area?,17,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+00103,presence,Are there car objects in this area?,yes,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,positive
+00103,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,negative
+00103,counting,How many car objects are in this area?,18,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+00106,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00106,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00106,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00109,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00109,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00109,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00109,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00112,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00112,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00112,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00112,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00115,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00115,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00115,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00118,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00118,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00118,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00121,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00121,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00121,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00124,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00124,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00124,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00124,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00127,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00127,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00127,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00130,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00130,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00130,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00130,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00133,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00133,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00133,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00136,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00136,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00136,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00139,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00139,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00139,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00139,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00142,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00142,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00142,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00142,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00145,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00145,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00145,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00145,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00148,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00148,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00148,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00148,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00151,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00151,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00151,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00154,presence,Are there car objects in this area?,yes,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00154,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00154,counting,How many car objects are in this area?,12,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00157,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00157,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00157,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00160,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00160,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+00160,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00163,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00163,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00163,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00166,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+00166,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+00166,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00169,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00169,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00169,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00172,presence,Are there car objects in this area?,yes,car,16,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,positive
+00172,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,negative
+00172,counting,How many car objects are in this area?,16,car,16,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+00175,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,positive
+00175,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,negative
+00175,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+00178,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00178,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00178,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00181,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00181,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00181,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00184,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00184,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00184,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00187,presence,Are there car objects in this area?,yes,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,positive
+00187,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,negative
+00187,counting,How many car objects are in this area?,28,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,
+00190,presence,Are there car objects in this area?,yes,car,25,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,positive
+00190,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,negative
+00190,counting,How many car objects are in this area?,25,car,25,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,
+00190,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,
+00193,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+00193,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,negative
+00193,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00193,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00196,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00196,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+00196,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00199,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00199,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00199,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00199,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00202,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00202,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00202,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00202,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+00205,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00205,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00205,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00208,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00208,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00208,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00208,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00211,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00211,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00211,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00211,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00214,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00214,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00214,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00217,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00217,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00217,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00220,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00220,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00220,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00223,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,positive
+00223,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,negative
+00223,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00223,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00226,presence,Are there car objects in this area?,yes,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00226,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00226,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00226,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00229,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00229,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00229,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00229,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00232,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,positive
+00232,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,negative
+00232,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00232,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00235,presence,Are there car objects in this area?,yes,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00235,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00235,counting,How many car objects are in this area?,16,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00238,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00238,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00238,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00241,presence,Are there truck objects in this area?,yes,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00241,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00241,counting,How many truck objects are in this area?,5,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00244,presence,Are there car objects in this area?,yes,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+00244,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,negative
+00244,counting,How many car objects are in this area?,14,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00247,presence,Are there car objects in this area?,yes,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00247,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00247,counting,How many car objects are in this area?,16,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00250,presence,Are there car objects in this area?,yes,car,19,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,positive
+00250,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,negative
+00250,counting,How many car objects are in this area?,19,car,19,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,
+00250,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,
+00253,presence,Are there car objects in this area?,yes,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,positive
+00253,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,negative
+00253,counting,How many car objects are in this area?,22,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00253,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,
+00256,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,positive
+00256,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,negative
+00256,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,
+00256,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,
+00259,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,positive
+00259,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,negative
+00259,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,
+00259,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,
+00262,presence,Are there car objects in this area?,yes,car,26,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,positive
+00262,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,negative
+00262,counting,How many car objects are in this area?,26,car,26,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+00262,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,
+00265,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,positive
+00265,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,negative
+00265,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,
+00265,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,
+00268,presence,Are there car objects in this area?,yes,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+00268,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+00268,counting,How many car objects are in this area?,21,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00268,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+00271,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00271,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00271,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00274,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00274,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00274,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00277,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00277,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00277,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00280,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00280,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00280,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00280,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00283,presence,Are there truck objects in this area?,yes,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00283,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00283,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00283,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00286,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00286,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00286,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00289,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00289,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00289,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00289,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00292,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00292,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00292,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00292,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00295,presence,Are there truck objects in this area?,yes,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00295,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00295,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00298,presence,Are there truck objects in this area?,yes,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00298,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00298,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00301,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00301,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00301,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00301,counting,How many truck objects are in this area?,5,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00304,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+00304,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+00304,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00307,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00307,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00307,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00310,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00310,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00310,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00313,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00313,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00313,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00313,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00316,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00316,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00316,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00316,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00319,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00319,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00319,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00319,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00322,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00322,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00322,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00322,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00325,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00325,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00325,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00325,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00328,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00328,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00328,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00331,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00331,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00331,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00331,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00334,presence,Are there car objects in this area?,yes,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+00334,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+00334,counting,How many car objects are in this area?,22,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00337,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00337,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00337,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00340,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00340,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00340,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00343,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00343,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00343,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00346,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00346,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00346,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00349,presence,Are there truck objects in this area?,yes,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00349,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00349,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00349,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00352,presence,Are there truck objects in this area?,yes,truck,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00352,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00352,counting,How many truck objects are in this area?,6,truck,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00352,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00355,presence,Are there truck objects in this area?,yes,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00355,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00355,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00355,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00358,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,positive
+00358,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,negative
+00358,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+00358,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00361,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,positive
+00361,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,negative
+00361,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+00361,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00364,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00364,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00364,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00367,presence,Are there car objects in this area?,yes,car,33,critical,0.82,3.0,medium,0.0,0.0,0.0,33.0,positive
+00367,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,33.0,negative
+00367,counting,How many car objects are in this area?,33,car,33,critical,0.82,3.0,medium,0.0,0.0,0.0,33.0,
+00370,presence,Are there car objects in this area?,yes,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,positive
+00370,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,negative
+00370,counting,How many car objects are in this area?,21,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,
+00370,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00373,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00373,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00373,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00373,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00376,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,positive
+00376,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,negative
+00376,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,
+00376,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,
+00379,presence,Are there car objects in this area?,yes,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,positive
+00379,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,negative
+00379,counting,How many car objects are in this area?,19,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,
+00379,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,
+00382,presence,Are there bus objects in this area?,yes,bus,7,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00382,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00382,counting,How many bus objects are in this area?,7,bus,7,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00382,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00385,presence,Are there bus objects in this area?,yes,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00385,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00385,counting,How many bus objects are in this area?,5,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00385,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00388,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00388,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00388,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00388,counting,How many bus objects are in this area?,3,bus,3,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00391,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,positive
+00391,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,negative
+00391,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,
+00391,counting,How many bus objects are in this area?,7,bus,7,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,
+00394,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00394,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00394,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00394,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00397,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00397,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00397,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00400,presence,Are there car objects in this area?,yes,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+00400,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,negative
+00400,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+00403,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00403,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00403,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00406,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00406,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00406,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00409,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00409,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00409,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00412,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00412,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00412,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00415,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00415,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00415,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00418,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00418,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00418,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00418,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00421,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00421,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00421,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00424,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00424,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00424,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00427,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00427,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00427,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00430,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00430,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00430,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00433,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00433,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00433,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00436,presence,Are there bus objects in this area?,yes,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00436,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00436,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00436,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+00439,presence,Are there bus objects in this area?,yes,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,positive
+00439,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,negative
+00439,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,
+00442,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00442,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00442,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00445,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00445,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00445,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00448,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00448,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00448,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00451,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00451,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00451,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00451,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00454,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00454,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00454,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00454,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00457,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00457,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00457,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00460,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,positive
+00460,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,negative
+00460,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,
+00460,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,
+00463,presence,Are there car objects in this area?,yes,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+00463,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+00463,counting,How many car objects are in this area?,21,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00463,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+00466,presence,Are there car objects in this area?,yes,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+00466,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+00466,counting,How many car objects are in this area?,21,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00466,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+00469,presence,Are there car objects in this area?,yes,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+00469,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,negative
+00469,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+00472,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00472,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00472,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00475,presence,Are there car objects in this area?,yes,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,positive
+00475,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,negative
+00475,counting,How many car objects are in this area?,37,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,
+00478,presence,Are there car objects in this area?,yes,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,positive
+00478,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,negative
+00478,counting,How many car objects are in this area?,28,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,
+00481,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,positive
+00481,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,negative
+00481,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00484,presence,Are there car objects in this area?,yes,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,positive
+00484,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,negative
+00484,counting,How many car objects are in this area?,20,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,
+00487,presence,Are there car objects in this area?,yes,car,20,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,positive
+00487,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,negative
+00487,counting,How many car objects are in this area?,20,car,20,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,
+00490,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00490,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00490,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00493,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00493,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00493,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00496,presence,Are there car objects in this area?,yes,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00496,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00496,counting,How many car objects are in this area?,16,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00499,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00499,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00499,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00502,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00502,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00502,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00505,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00505,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00505,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00508,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00508,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00508,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00508,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00511,presence,Are there car objects in this area?,yes,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00511,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00511,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00511,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00514,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00514,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00514,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00514,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00517,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00517,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00517,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00520,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00520,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00520,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00520,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00523,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00523,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00523,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00523,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00526,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00526,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00526,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00526,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00529,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00529,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00529,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00532,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00532,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00532,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00535,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00535,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00535,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00535,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00538,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+00538,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+00538,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+00541,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00541,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00541,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00544,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,positive
+00544,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,negative
+00544,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+00547,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00547,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00547,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00547,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00550,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00550,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00550,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00550,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00553,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00553,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00553,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00556,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00556,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00556,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00559,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00559,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00559,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00559,counting,How many bus objects are in this area?,4,bus,4,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+00562,presence,Are there bus objects in this area?,yes,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00562,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00562,counting,How many bus objects are in this area?,3,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00562,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00565,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00565,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00565,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00565,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00568,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00568,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00568,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00571,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00571,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00571,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00574,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00574,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00574,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00574,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00577,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00577,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00577,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00577,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00580,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00580,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00580,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00583,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00583,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00583,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00586,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00586,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00586,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00589,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00589,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00589,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00592,presence,Are there car objects in this area?,yes,car,24,normal,0.65,5.0,medium,0.0,0.0,0.0,25.0,positive
+00592,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,25.0,negative
+00592,counting,How many car objects are in this area?,24,car,24,normal,0.65,5.0,medium,0.0,0.0,0.0,25.0,
+00592,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,25.0,
+00595,presence,Are there car objects in this area?,yes,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,29.0,positive
+00595,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,29.0,negative
+00595,counting,How many car objects are in this area?,26,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,29.0,
+00595,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,29.0,
+00598,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00598,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00598,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00598,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00601,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00601,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00601,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00604,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00604,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00604,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00607,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00607,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00607,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00610,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00610,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00610,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00613,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00613,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00613,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00616,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00616,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00616,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00619,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00619,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00619,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00619,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00622,presence,Are there bus objects in this area?,yes,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00622,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00622,counting,How many bus objects are in this area?,3,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00622,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00625,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00625,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00625,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00625,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00628,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00628,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00628,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00628,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00631,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00631,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00631,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00634,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00634,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00634,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00637,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00637,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00637,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00640,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00640,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00640,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00640,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00643,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00643,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00643,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00646,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00646,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00646,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00646,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00649,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,positive
+00649,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,negative
+00649,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+00649,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00652,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00652,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00652,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00652,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00655,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00655,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00655,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00658,presence,Are there car objects in this area?,yes,car,39,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,positive
+00658,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,negative
+00658,counting,How many car objects are in this area?,39,car,39,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,
+00658,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,
+00661,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00661,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00661,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00661,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00664,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00664,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00664,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00664,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00667,presence,Are there car objects in this area?,yes,car,63,critical,0.82,3.0,medium,0.0,0.0,0.0,65.0,positive
+00667,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,65.0,negative
+00667,counting,How many car objects are in this area?,63,car,63,critical,0.82,3.0,medium,0.0,0.0,0.0,65.0,
+00667,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,65.0,
+00670,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00670,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00670,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00670,counting,How many van objects are in this area?,2,van,2,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00673,presence,Are there car objects in this area?,yes,car,53,critical,0.82,3.0,medium,0.0,0.0,0.0,54.0,positive
+00673,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,54.0,negative
+00673,counting,How many car objects are in this area?,53,car,53,critical,0.82,3.0,medium,0.0,0.0,0.0,54.0,
+00673,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,54.0,
+00676,presence,Are there car objects in this area?,yes,car,43,critical,0.82,3.0,medium,0.0,0.0,0.0,46.0,positive
+00676,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,46.0,negative
+00676,counting,How many car objects are in this area?,43,car,43,critical,0.82,3.0,medium,0.0,0.0,0.0,46.0,
+00676,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,46.0,
+00679,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+00679,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+00679,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00682,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00682,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00682,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00685,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00685,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00685,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00688,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00688,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00688,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00688,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00691,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00691,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00691,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00691,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+00694,presence,Are there car objects in this area?,yes,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,positive
+00694,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00694,counting,How many van objects are in this area?,2,van,2,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+00697,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+00697,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+00697,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00697,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00700,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00700,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00700,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00700,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00703,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00703,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00703,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00703,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00706,presence,Are there car objects in this area?,yes,car,45,critical,0.82,3.0,medium,0.0,0.0,0.0,48.0,positive
+00706,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,48.0,negative
+00706,counting,How many car objects are in this area?,45,car,45,critical,0.82,3.0,medium,0.0,0.0,0.0,48.0,
+00706,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,48.0,
+00709,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+00709,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+00709,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00709,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+00712,presence,Are there car objects in this area?,yes,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00712,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00712,counting,How many car objects are in this area?,14,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00712,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+00715,presence,Are there car objects in this area?,yes,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00715,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+00715,counting,How many car objects are in this area?,12,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00715,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00718,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00718,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00718,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00721,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00721,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00721,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00721,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00724,presence,Are there car objects in this area?,yes,car,31,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,positive
+00724,counting,How many car objects are in this area?,31,car,31,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,
+00724,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,
+00727,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+00727,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00727,counting,How many bus objects are in this area?,3,bus,3,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00730,presence,Are there car objects in this area?,yes,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,positive
+00730,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,negative
+00730,counting,How many car objects are in this area?,18,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+00730,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+00733,presence,Are there car objects in this area?,yes,car,50,normal,0.65,5.0,medium,0.0,0.0,0.0,57.0,positive
+00733,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,57.0,negative
+00733,counting,How many car objects are in this area?,50,car,50,normal,0.65,5.0,medium,0.0,0.0,0.0,57.0,
+00733,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,57.0,
+00736,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00736,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00736,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00736,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00739,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+00739,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+00739,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00739,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00742,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+00742,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+00742,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00742,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00745,presence,Are there car objects in this area?,yes,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00745,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00745,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00745,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+00748,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00748,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00748,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00751,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00751,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00751,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00751,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00754,presence,Are there car objects in this area?,yes,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,positive
+00754,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,negative
+00754,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+00754,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+00757,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00757,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00757,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00757,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00760,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00760,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00760,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00760,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00763,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+00763,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00763,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+00766,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,positive
+00766,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,negative
+00766,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00766,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00769,presence,Are there car objects in this area?,yes,car,25,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,positive
+00769,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,negative
+00769,counting,How many car objects are in this area?,25,car,25,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,
+00769,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,
+00772,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+00772,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+00772,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00772,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00775,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00775,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00775,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00775,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00778,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00778,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00778,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00778,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00781,presence,Are there car objects in this area?,yes,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+00781,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+00781,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00781,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00784,presence,Are there car objects in this area?,yes,car,25,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,positive
+00784,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,negative
+00784,counting,How many car objects are in this area?,25,car,25,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,
+00784,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+00787,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+00787,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+00787,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+00790,presence,Are there car objects in this area?,yes,car,42,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,positive
+00790,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,negative
+00790,counting,How many car objects are in this area?,42,car,42,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,
+00790,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,
+00793,presence,Are there car objects in this area?,yes,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+00793,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+00793,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+00796,presence,Are there truck objects in this area?,yes,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00796,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00796,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00799,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00799,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00799,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00802,presence,Are there car objects in this area?,yes,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00802,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00802,counting,How many car objects are in this area?,16,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00802,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+00805,presence,Are there truck objects in this area?,yes,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+00805,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+00805,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+00808,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00808,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00808,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00808,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00811,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,positive
+00811,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,negative
+00811,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,24.0,
+00811,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,24.0,
+00814,presence,Are there car objects in this area?,yes,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,positive
+00814,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,negative
+00814,counting,How many car objects are in this area?,12,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,
+00814,counting,How many truck objects are in this area?,9,truck,9,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,
+00817,presence,Are there car objects in this area?,yes,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00817,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+00817,counting,How many car objects are in this area?,12,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00817,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+00820,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,positive
+00820,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,negative
+00820,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+00820,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00823,presence,Are there car objects in this area?,yes,car,32,critical,0.82,3.0,medium,0.0,0.0,0.0,38.0,positive
+00823,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,38.0,negative
+00823,counting,How many car objects are in this area?,32,car,32,critical,0.82,3.0,medium,0.0,0.0,0.0,38.0,
+00823,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,38.0,
+00826,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00826,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00826,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00829,presence,Are there car objects in this area?,yes,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,positive
+00829,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,negative
+00829,counting,How many car objects are in this area?,20,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,
+00829,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00832,presence,Are there bus objects in this area?,yes,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00832,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00832,counting,How many bus objects are in this area?,5,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00835,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00835,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00835,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00838,presence,Are there truck objects in this area?,yes,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+00838,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+00838,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00838,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00841,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,positive
+00841,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,negative
+00841,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+00841,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00844,presence,Are there car objects in this area?,yes,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00844,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00844,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00844,counting,How many van objects are in this area?,2,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+00847,presence,Are there car objects in this area?,yes,car,63,normal,0.65,5.0,medium,0.0,0.0,0.0,79.0,positive
+00847,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,79.0,negative
+00847,counting,How many car objects are in this area?,63,car,63,normal,0.65,5.0,medium,0.0,0.0,0.0,79.0,
+00847,counting,How many truck objects are in this area?,14,truck,14,critical,0.82,3.0,medium,0.0,0.0,0.0,79.0,
+00850,presence,Are there car objects in this area?,yes,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,positive
+00850,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,negative
+00850,counting,How many car objects are in this area?,26,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,
+00853,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+00853,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+00853,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+00856,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,0.0,negative
+00859,presence,Are there car objects in this area?,yes,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,positive
+00859,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,negative
+00859,counting,How many car objects are in this area?,27,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,
+00859,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,
+00862,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00862,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00862,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00865,presence,Are there bus objects in this area?,yes,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00865,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00865,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00865,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+00868,presence,Are there car objects in this area?,yes,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,positive
+00868,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,negative
+00868,counting,How many car objects are in this area?,19,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,
+00868,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00871,presence,Are there car objects in this area?,yes,car,47,normal,0.65,5.0,medium,0.0,0.0,0.0,47.0,positive
+00871,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,47.0,negative
+00871,counting,How many car objects are in this area?,47,car,47,normal,0.65,5.0,medium,0.0,0.0,0.0,47.0,
+00874,presence,Are there car objects in this area?,yes,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,positive
+00874,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,negative
+00874,counting,How many car objects are in this area?,27,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+00877,presence,Are there truck objects in this area?,yes,truck,74,normal,0.65,5.0,medium,0.0,0.0,0.0,83.0,positive
+00877,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,83.0,negative
+00877,counting,How many truck objects are in this area?,74,truck,74,normal,0.65,5.0,medium,0.0,0.0,0.0,83.0,
+00877,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,83.0,
+00880,presence,Are there bus objects in this area?,yes,bus,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00880,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00880,counting,How many bus objects are in this area?,2,bus,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00883,presence,Are there van objects in this area?,yes,van,7,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00883,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00883,counting,How many van objects are in this area?,7,van,7,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00883,counting,How many bus objects are in this area?,5,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00886,presence,Are there car objects in this area?,yes,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00886,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00886,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00886,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00889,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+00889,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+00889,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+00892,presence,Are there car objects in this area?,yes,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,positive
+00892,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,negative
+00892,counting,How many car objects are in this area?,19,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+00895,presence,Are there bus objects in this area?,yes,bus,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00895,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00895,counting,How many bus objects are in this area?,4,bus,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00898,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00898,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00898,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00898,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+00901,presence,Are there car objects in this area?,yes,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+00901,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+00901,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+00904,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00904,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00904,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00904,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00907,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+00907,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+00907,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+00907,counting,How many van objects are in this area?,3,van,3,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+00910,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+00910,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+00910,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+00910,counting,How many bus objects are in this area?,4,bus,4,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+00913,presence,Are there car objects in this area?,yes,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00913,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00913,counting,How many car objects are in this area?,8,car,8,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00913,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+00916,presence,Are there bus objects in this area?,yes,bus,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00916,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00916,counting,How many bus objects are in this area?,11,bus,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00919,presence,Are there truck objects in this area?,yes,truck,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,positive
+00919,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,negative
+00919,counting,How many truck objects are in this area?,18,truck,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+00922,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00922,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00922,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00922,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+00925,presence,Are there truck objects in this area?,yes,truck,53,critical,0.82,3.0,medium,0.0,0.0,0.0,63.0,positive
+00925,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,63.0,negative
+00925,counting,How many truck objects are in this area?,53,truck,53,critical,0.82,3.0,medium,0.0,0.0,0.0,63.0,
+00925,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,63.0,
+00928,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,positive
+00928,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,negative
+00928,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+00931,presence,Are there car objects in this area?,yes,car,52,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,positive
+00931,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,52.0,negative
+00931,counting,How many car objects are in this area?,52,car,52,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,
+00934,presence,Are there car objects in this area?,yes,car,26,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,positive
+00934,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,negative
+00934,counting,How many car objects are in this area?,26,car,26,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,
+00937,presence,Are there truck objects in this area?,yes,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00937,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00937,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00940,presence,Are there truck objects in this area?,yes,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+00940,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+00940,counting,How many truck objects are in this area?,2,truck,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+00940,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+00943,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+00943,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+00943,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+00946,presence,Are there truck objects in this area?,yes,truck,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+00946,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+00946,counting,How many truck objects are in this area?,6,truck,6,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00946,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00949,presence,Are there car objects in this area?,yes,car,40,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,positive
+00949,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,negative
+00949,counting,How many car objects are in this area?,40,car,40,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,
+00952,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+00952,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+00952,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+00955,presence,Are there car objects in this area?,yes,car,31,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,positive
+00955,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,negative
+00955,counting,How many car objects are in this area?,31,car,31,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,
+00958,presence,Are there car objects in this area?,yes,car,36,critical,0.82,3.0,medium,0.0,0.0,0.0,43.0,positive
+00958,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,43.0,negative
+00958,counting,How many car objects are in this area?,36,car,36,critical,0.82,3.0,medium,0.0,0.0,0.0,43.0,
+00958,counting,How many van objects are in this area?,4,van,4,normal,0.65,5.0,medium,0.0,0.0,0.0,43.0,
+00961,presence,Are there car objects in this area?,yes,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,positive
+00961,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,negative
+00961,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+00961,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+00964,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+00964,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+00964,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+00964,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+00967,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+00967,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+00967,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+00970,presence,Are there car objects in this area?,yes,car,15,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+00970,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+00970,counting,How many car objects are in this area?,15,car,15,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+00970,counting,How many van objects are in this area?,2,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+00973,presence,Are there car objects in this area?,yes,car,35,normal,0.65,5.0,medium,0.0,0.0,0.0,35.0,positive
+00973,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,35.0,negative
+00973,counting,How many car objects are in this area?,35,car,35,normal,0.65,5.0,medium,0.0,0.0,0.0,35.0,
+00976,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+00976,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+00976,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00976,counting,How many van objects are in this area?,3,van,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00979,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+00979,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+00979,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+00982,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+00982,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+00982,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+00982,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+00985,presence,Are there truck objects in this area?,yes,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00985,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00985,counting,How many truck objects are in this area?,5,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00985,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00988,presence,Are there car objects in this area?,yes,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,positive
+00988,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,negative
+00988,counting,How many car objects are in this area?,39,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,
+00988,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,
+00991,presence,Are there bus objects in this area?,yes,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+00991,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+00991,counting,How many bus objects are in this area?,3,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+00991,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+00994,presence,Are there bus objects in this area?,yes,bus,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+00994,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+00994,counting,How many bus objects are in this area?,2,bus,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+00997,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+00997,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+00997,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+00997,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01000,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+01000,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+01000,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+01003,presence,Are there truck objects in this area?,yes,truck,10,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+01003,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+01003,counting,How many truck objects are in this area?,10,truck,10,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+01003,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+01006,presence,Are there car objects in this area?,yes,car,38,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,positive
+01006,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,negative
+01006,counting,How many car objects are in this area?,38,car,38,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,
+01006,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,
+01009,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,positive
+01009,presence,Are there van objects in this area?,no,van,0,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,negative
+01009,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+01009,counting,How many bus objects are in this area?,3,bus,3,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+01012,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+01012,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+01012,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+01015,presence,Are there car objects in this area?,yes,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+01015,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,negative
+01015,counting,How many car objects are in this area?,17,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+01015,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+01018,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+01018,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+01018,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+01021,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+01021,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+01021,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01024,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,0.0,negative
+01027,presence,Are there truck objects in this area?,yes,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+01027,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+01027,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+01030,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,0.0,negative
+01033,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+01033,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+01033,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01036,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+01036,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+01036,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01036,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01039,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,positive
+01039,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,negative
+01039,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+01039,counting,How many truck objects are in this area?,9,truck,9,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+01042,presence,Are there car objects in this area?,yes,car,30,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,positive
+01042,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,negative
+01042,counting,How many car objects are in this area?,30,car,30,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,
+01045,presence,Are there bus objects in this area?,yes,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+01045,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+01045,counting,How many bus objects are in this area?,5,bus,5,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01045,counting,How many van objects are in this area?,4,van,4,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01048,presence,Are there car objects in this area?,yes,car,48,normal,0.65,5.0,medium,0.0,0.0,0.0,48.0,positive
+01048,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,48.0,negative
+01048,counting,How many car objects are in this area?,48,car,48,normal,0.65,5.0,medium,0.0,0.0,0.0,48.0,
+01051,presence,Are there van objects in this area?,yes,van,5,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+01051,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+01051,counting,How many van objects are in this area?,5,van,5,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+01051,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01054,presence,Are there car objects in this area?,yes,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,positive
+01054,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,negative
+01054,counting,How many car objects are in this area?,27,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+01057,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+01057,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+01057,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01057,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01060,presence,Are there car objects in this area?,yes,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,positive
+01060,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,negative
+01060,counting,How many car objects are in this area?,19,car,19,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,
+01060,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,
+01063,presence,Are there car objects in this area?,yes,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,positive
+01063,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,negative
+01063,counting,How many car objects are in this area?,30,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,
+01063,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,
+01066,presence,Are there car objects in this area?,yes,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,positive
+01066,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,negative
+01066,counting,How many car objects are in this area?,17,car,17,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+01069,presence,Are there car objects in this area?,yes,car,28,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,positive
+01069,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,28.0,negative
+01069,counting,How many car objects are in this area?,28,car,28,critical,0.82,3.0,medium,0.0,0.0,0.0,28.0,
+01072,presence,Are there car objects in this area?,yes,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+01072,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+01072,counting,How many car objects are in this area?,12,car,12,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+01072,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+01075,presence,Are there bus objects in this area?,yes,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+01075,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01075,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+01078,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01078,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01078,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01078,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01081,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+01081,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+01081,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+01084,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+01084,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+01084,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01084,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01087,presence,Are there car objects in this area?,yes,car,22,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,positive
+01087,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,negative
+01087,counting,How many car objects are in this area?,22,car,22,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+01090,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,0.0,negative
+01093,presence,Are there car objects in this area?,yes,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,positive
+01093,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,20.0,negative
+01093,counting,How many car objects are in this area?,20,car,20,normal,0.65,5.0,medium,0.0,0.0,0.0,20.0,
+01096,presence,Are there car objects in this area?,yes,car,29,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,positive
+01096,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,negative
+01096,counting,How many car objects are in this area?,29,car,29,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,
+01096,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,
+01099,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+01099,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+01099,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+01102,presence,Are there car objects in this area?,yes,car,36,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,positive
+01102,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,negative
+01102,counting,How many car objects are in this area?,36,car,36,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,
+01102,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,
+01105,presence,Are there car objects in this area?,yes,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,positive
+01105,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,negative
+01105,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+01105,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+01108,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,25.0,positive
+01108,counting,How many car objects are in this area?,14,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,25.0,
+01108,counting,How many van objects are in this area?,6,van,6,normal,0.65,5.0,medium,0.0,0.0,0.0,25.0,
+01111,presence,Are there van objects in this area?,yes,van,22,critical,0.82,3.0,medium,0.0,0.0,0.0,35.0,positive
+01111,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,35.0,negative
+01111,counting,How many van objects are in this area?,22,van,22,critical,0.82,3.0,medium,0.0,0.0,0.0,35.0,
+01111,counting,How many car objects are in this area?,11,car,11,normal,0.65,5.0,medium,0.0,0.0,0.0,35.0,
+01114,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+01114,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+01114,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01114,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01117,presence,Are there car objects in this area?,yes,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+01117,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,negative
+01117,counting,How many car objects are in this area?,14,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+01120,presence,Are there car objects in this area?,yes,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,positive
+01120,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,negative
+01120,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+01120,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+01123,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+01123,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+01123,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01126,presence,Are there bus objects in this area?,yes,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+01126,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+01126,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01126,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+01129,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+01129,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+01129,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01129,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01132,presence,Are there truck objects in this area?,yes,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,positive
+01132,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,1.0,negative
+01132,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,1.0,
+01135,presence,Are there car objects in this area?,yes,car,31,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,positive
+01135,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,negative
+01135,counting,How many car objects are in this area?,31,car,31,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,
+01135,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,
+01138,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,0.0,negative
+01141,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+01141,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+01141,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01144,presence,Are there car objects in this area?,yes,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,positive
+01144,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,negative
+01144,counting,How many car objects are in this area?,21,car,21,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+01144,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+01147,presence,Are there car objects in this area?,yes,car,52,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,positive
+01147,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,52.0,negative
+01147,counting,How many car objects are in this area?,52,car,52,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,
+01150,presence,Are there car objects in this area?,yes,car,31,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,positive
+01150,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,negative
+01150,counting,How many car objects are in this area?,31,car,31,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,
+01153,presence,Are there car objects in this area?,yes,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,54.0,positive
+01153,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,54.0,negative
+01153,counting,How many car objects are in this area?,39,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,54.0,
+01153,counting,How many truck objects are in this area?,15,truck,15,critical,0.82,3.0,medium,0.0,0.0,0.0,54.0,
+01156,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,positive
+01156,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,negative
+01156,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+01156,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+01159,presence,Are there car objects in this area?,yes,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,39.0,positive
+01159,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,39.0,negative
+01159,counting,How many car objects are in this area?,39,car,39,normal,0.65,5.0,medium,0.0,0.0,0.0,39.0,
+01162,presence,Are there car objects in this area?,yes,car,51,critical,0.82,3.0,medium,0.0,0.0,0.0,52.0,positive
+01162,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,negative
+01162,counting,How many car objects are in this area?,51,car,51,critical,0.82,3.0,medium,0.0,0.0,0.0,52.0,
+01162,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,52.0,
+01165,presence,Are there car objects in this area?,yes,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+01165,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,negative
+01165,counting,How many car objects are in this area?,14,car,14,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+01165,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+01168,presence,Are there bus objects in this area?,yes,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+01168,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+01168,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+01168,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+01171,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+01171,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+01171,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+01171,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+01174,presence,Are there car objects in this area?,yes,car,35,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,positive
+01174,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,negative
+01174,counting,How many car objects are in this area?,35,car,35,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,
+01174,counting,How many van objects are in this area?,2,van,2,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,
+01177,presence,Are there car objects in this area?,yes,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,positive
+01177,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,negative
+01177,counting,How many car objects are in this area?,18,car,18,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,
+01180,presence,Are there van objects in this area?,yes,van,5,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+01180,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+01180,counting,How many van objects are in this area?,5,van,5,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01180,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+01183,presence,Are there truck objects in this area?,yes,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,positive
+01183,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,negative
+01183,counting,How many truck objects are in this area?,5,truck,5,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+01183,counting,How many van objects are in this area?,4,van,4,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+01186,presence,Are there truck objects in this area?,yes,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,positive
+01186,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,negative
+01186,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+01189,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+01189,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+01189,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01189,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01192,presence,Are there car objects in this area?,yes,car,43,critical,0.82,3.0,medium,0.0,0.0,0.0,65.0,positive
+01192,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,65.0,negative
+01192,counting,How many car objects are in this area?,43,car,43,critical,0.82,3.0,medium,0.0,0.0,0.0,65.0,
+01192,counting,How many bus objects are in this area?,17,bus,17,normal,0.65,5.0,medium,0.0,0.0,0.0,65.0,
+01195,presence,Are there bus objects in this area?,yes,bus,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+01195,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+01195,counting,How many bus objects are in this area?,22,bus,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+01198,presence,Are there car objects in this area?,yes,car,48,normal,0.65,5.0,medium,0.0,0.0,0.0,50.0,positive
+01198,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,50.0,negative
+01198,counting,How many car objects are in this area?,48,car,48,normal,0.65,5.0,medium,0.0,0.0,0.0,50.0,
+01198,counting,How many van objects are in this area?,2,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,50.0,
+01201,presence,Are there car objects in this area?,yes,car,74,normal,0.65,5.0,medium,0.0,0.0,0.0,74.0,positive
+01201,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,74.0,negative
+01201,counting,How many car objects are in this area?,74,car,74,normal,0.65,5.0,medium,0.0,0.0,0.0,74.0,
+01204,presence,Are there bus objects in this area?,yes,bus,4,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+01204,counting,How many bus objects are in this area?,4,bus,4,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01204,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+01207,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+01207,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+01207,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01210,presence,Are there car objects in this area?,yes,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,39.0,positive
+01210,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,39.0,negative
+01210,counting,How many car objects are in this area?,37,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,39.0,
+01210,counting,How many truck objects are in this area?,2,truck,2,normal,0.65,5.0,medium,0.0,0.0,0.0,39.0,
+01213,presence,Are there truck objects in this area?,yes,truck,57,critical,0.82,3.0,medium,0.0,0.0,0.0,61.0,positive
+01213,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,61.0,negative
+01213,counting,How many truck objects are in this area?,57,truck,57,critical,0.82,3.0,medium,0.0,0.0,0.0,61.0,
+01213,counting,How many car objects are in this area?,4,car,4,normal,0.65,5.0,medium,0.0,0.0,0.0,61.0,
+01216,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+01216,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+01216,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+01216,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,
+01219,presence,Are there car objects in this area?,yes,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+01219,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+01219,counting,How many car objects are in this area?,22,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+01222,presence,Are there truck objects in this area?,yes,truck,30,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,positive
+01222,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,negative
+01222,counting,How many truck objects are in this area?,30,truck,30,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,
+01222,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,
+01225,presence,Are there van objects in this area?,yes,van,6,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,positive
+01225,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,negative
+01225,counting,How many van objects are in this area?,6,van,6,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,
+01225,counting,How many car objects are in this area?,5,car,5,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+01228,presence,Are there car objects in this area?,yes,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,positive
+01228,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,negative
+01228,counting,How many car objects are in this area?,10,car,10,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+01231,presence,Are there van objects in this area?,yes,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+01231,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+01231,counting,How many van objects are in this area?,2,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01231,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+01234,presence,Are there truck objects in this area?,yes,truck,23,critical,0.82,3.0,medium,0.0,0.0,0.0,46.0,positive
+01234,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,46.0,negative
+01234,counting,How many truck objects are in this area?,23,truck,23,critical,0.82,3.0,medium,0.0,0.0,0.0,46.0,
+01234,counting,How many van objects are in this area?,12,van,12,normal,0.65,5.0,medium,0.0,0.0,0.0,46.0,
+01237,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+01237,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+01237,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+01240,presence,Are there truck objects in this area?,yes,truck,35,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,positive
+01240,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,negative
+01240,counting,How many truck objects are in this area?,35,truck,35,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,
+01240,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,
+01243,presence,Are there car objects in this area?,yes,car,32,normal,0.65,5.0,medium,0.0,0.0,0.0,42.0,positive
+01243,counting,How many car objects are in this area?,32,car,32,critical,0.82,3.0,medium,0.0,0.0,0.0,42.0,
+01243,counting,How many van objects are in this area?,5,van,5,normal,0.65,5.0,medium,0.0,0.0,0.0,42.0,
+01246,presence,Are there truck objects in this area?,yes,truck,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01246,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01246,counting,How many truck objects are in this area?,7,truck,7,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01249,presence,Are there car objects in this area?,yes,car,44,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,positive
+01249,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,negative
+01249,counting,How many car objects are in this area?,44,car,44,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,
+01249,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,
+01252,presence,Are there car objects in this area?,yes,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,positive
+01252,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,negative
+01252,counting,How many car objects are in this area?,30,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,31.0,
+01252,counting,How many truck objects are in this area?,1,truck,1,critical,0.82,3.0,medium,0.0,0.0,0.0,31.0,
+01255,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,positive
+01255,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,negative
+01255,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01258,presence,Are there bus objects in this area?,yes,bus,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,positive
+01258,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,negative
+01258,counting,How many bus objects are in this area?,3,bus,3,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01258,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01261,presence,Are there bus objects in this area?,yes,bus,14,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,positive
+01261,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,negative
+01261,counting,How many bus objects are in this area?,14,bus,14,critical,0.82,3.0,medium,0.0,0.0,0.0,19.0,
+01261,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,19.0,
+01264,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+01264,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+01264,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+01264,counting,How many bus objects are in this area?,1,bus,1,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+01267,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,positive
+01267,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,negative
+01267,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+01267,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+01270,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+01270,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+01270,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+01270,counting,How many truck objects are in this area?,6,truck,6,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+01273,presence,Are there car objects in this area?,yes,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,positive
+01273,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,negative
+01273,counting,How many car objects are in this area?,27,car,27,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+01276,presence,Are there car objects in this area?,yes,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+01276,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+01276,counting,How many car objects are in this area?,14,car,14,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+01279,presence,Are there car objects in this area?,yes,car,40,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,positive
+01279,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,negative
+01279,counting,How many car objects are in this area?,40,car,40,critical,0.82,3.0,medium,0.0,0.0,0.0,41.0,
+01279,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,41.0,
+01282,presence,Are there car objects in this area?,yes,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,positive
+01282,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,negative
+01282,counting,How many car objects are in this area?,2,car,2,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+01285,presence,Are there car objects in this area?,yes,car,27,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,positive
+01285,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,negative
+01285,counting,How many car objects are in this area?,27,car,27,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,
+01288,presence,Are there truck objects in this area?,yes,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01288,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01288,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01288,counting,How many car objects are in this area?,3,car,3,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01291,presence,Are there truck objects in this area?,yes,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01291,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01291,counting,How many truck objects are in this area?,5,truck,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01291,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01294,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,positive
+01294,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,negative
+01294,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01294,counting,How many bus objects are in this area?,2,bus,2,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01297,presence,Are there car objects in this area?,yes,car,16,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+01297,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+01297,counting,How many car objects are in this area?,16,car,16,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+01297,counting,How many bus objects are in this area?,3,bus,3,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,
+01300,presence,Are there truck objects in this area?,yes,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+01300,presence,Are there car objects in this area?,no,car,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+01300,counting,How many truck objects are in this area?,3,truck,3,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01300,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+01303,presence,Are there car objects in this area?,yes,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,positive
+01303,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,negative
+01303,counting,How many car objects are in this area?,17,car,17,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+01306,presence,Are there car objects in this area?,yes,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,positive
+01306,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,negative
+01306,counting,How many car objects are in this area?,30,car,30,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,
+01309,presence,Are there car objects in this area?,yes,car,47,critical,0.82,3.0,medium,0.0,0.0,0.0,47.0,positive
+01309,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,47.0,negative
+01309,counting,How many car objects are in this area?,47,car,47,critical,0.82,3.0,medium,0.0,0.0,0.0,47.0,
+01312,presence,Are there car objects in this area?,yes,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+01312,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+01312,counting,How many car objects are in this area?,9,car,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01315,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,0.0,negative
+01318,presence,Are there car objects in this area?,yes,car,27,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,positive
+01318,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,negative
+01318,counting,How many car objects are in this area?,27,car,27,normal,0.65,5.0,medium,0.0,0.0,0.0,32.0,
+01318,counting,How many van objects are in this area?,4,van,4,critical,0.82,3.0,medium,0.0,0.0,0.0,32.0,
+01321,presence,Are there truck objects in this area?,yes,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,positive
+01321,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,negative
+01321,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,6.0,
+01321,counting,How many van objects are in this area?,2,van,2,critical,0.82,3.0,medium,0.0,0.0,0.0,6.0,
+01324,presence,Are there car objects in this area?,yes,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,positive
+01324,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,negative
+01324,counting,How many car objects are in this area?,7,car,7,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+01324,counting,How many van objects are in this area?,3,van,3,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+01327,presence,Are there car objects in this area?,yes,car,42,normal,0.65,5.0,medium,0.0,0.0,0.0,42.0,positive
+01327,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,42.0,negative
+01327,counting,How many car objects are in this area?,42,car,42,normal,0.65,5.0,medium,0.0,0.0,0.0,42.0,
+01330,presence,Are there car objects in this area?,yes,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,positive
+01330,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,3.0,negative
+01330,counting,How many car objects are in this area?,3,car,3,critical,0.82,3.0,medium,0.0,0.0,0.0,3.0,
+01333,presence,Are there car objects in this area?,yes,car,70,normal,0.65,5.0,medium,0.0,0.0,0.0,70.0,positive
+01333,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,70.0,negative
+01333,counting,How many car objects are in this area?,70,car,70,normal,0.65,5.0,medium,0.0,0.0,0.0,70.0,
+01336,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+01336,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+01336,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01339,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,positive
+01339,presence,Are there bus objects in this area?,no,bus,0,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,negative
+01339,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+01339,counting,How many van objects are in this area?,4,van,4,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+01342,presence,Are there car objects in this area?,yes,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,positive
+01342,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,negative
+01342,counting,How many car objects are in this area?,28,car,28,normal,0.65,5.0,medium,0.0,0.0,0.0,30.0,
+01342,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,30.0,
+01345,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,positive
+01345,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,negative
+01345,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01348,presence,Are there van objects in this area?,yes,van,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01348,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01348,counting,How many van objects are in this area?,5,van,5,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01348,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01351,presence,Are there car objects in this area?,yes,car,34,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,positive
+01351,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,negative
+01351,counting,How many car objects are in this area?,34,car,34,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,
+01351,counting,How many van objects are in this area?,3,van,3,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,
+01354,presence,Are there car objects in this area?,yes,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,positive
+01354,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,negative
+01354,counting,How many car objects are in this area?,9,car,9,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+01354,counting,How many bus objects are in this area?,7,bus,7,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+01357,presence,Are there car objects in this area?,yes,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,positive
+01357,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,negative
+01357,counting,How many car objects are in this area?,1,car,1,critical,0.82,3.0,medium,0.0,0.0,0.0,2.0,
+01357,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,2.0,
+01360,presence,Are there car objects in this area?,yes,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,positive
+01360,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,23.0,negative
+01360,counting,How many car objects are in this area?,23,car,23,critical,0.82,3.0,medium,0.0,0.0,0.0,23.0,
+01363,presence,Are there car objects in this area?,yes,car,71,normal,0.65,5.0,medium,0.0,0.0,0.0,71.0,positive
+01363,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,71.0,negative
+01363,counting,How many car objects are in this area?,71,car,71,normal,0.65,5.0,medium,0.0,0.0,0.0,71.0,
+01366,presence,Are there car objects in this area?,yes,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,positive
+01366,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,22.0,negative
+01366,counting,How many car objects are in this area?,22,car,22,critical,0.82,3.0,medium,0.0,0.0,0.0,22.0,
+01369,presence,Are there car objects in this area?,yes,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+01369,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+01369,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+01369,counting,How many bus objects are in this area?,1,bus,1,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+01372,presence,Are there car objects in this area?,yes,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,positive
+01372,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,18.0,negative
+01372,counting,How many car objects are in this area?,18,car,18,normal,0.65,5.0,medium,0.0,0.0,0.0,18.0,
+01375,presence,Are there car objects in this area?,yes,car,36,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,positive
+01375,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,36.0,negative
+01375,counting,How many car objects are in this area?,36,car,36,critical,0.82,3.0,medium,0.0,0.0,0.0,36.0,
+01378,presence,Are there car objects in this area?,yes,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+01378,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+01378,counting,How many car objects are in this area?,6,car,6,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01378,counting,How many van objects are in this area?,3,van,3,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,
+01381,presence,Are there car objects in this area?,yes,car,15,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,positive
+01381,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,negative
+01381,counting,How many car objects are in this area?,15,car,15,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+01384,presence,Are there car objects in this area?,yes,car,132,critical,0.82,3.0,medium,0.0,0.0,0.0,135.0,positive
+01384,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,135.0,negative
+01384,counting,How many car objects are in this area?,132,car,132,critical,0.82,3.0,medium,0.0,0.0,0.0,135.0,
+01384,counting,How many van objects are in this area?,3,van,3,normal,0.65,5.0,medium,0.0,0.0,0.0,135.0,
+01387,presence,Are there car objects in this area?,yes,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,positive
+01387,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,negative
+01387,counting,How many car objects are in this area?,7,car,7,critical,0.82,3.0,medium,0.0,0.0,0.0,10.0,
+01387,counting,How many van objects are in this area?,2,van,2,normal,0.65,5.0,medium,0.0,0.0,0.0,10.0,
+01390,presence,Are there truck objects in this area?,yes,truck,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,positive
+01390,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,negative
+01390,counting,How many truck objects are in this area?,7,truck,7,critical,0.82,3.0,medium,0.0,0.0,0.0,8.0,
+01390,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,8.0,
+01393,presence,Are there car objects in this area?,yes,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,positive
+01393,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,21.0,negative
+01393,counting,How many car objects are in this area?,21,car,21,critical,0.82,3.0,medium,0.0,0.0,0.0,21.0,
+01396,presence,Are there truck objects in this area?,yes,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,positive
+01396,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,negative
+01396,counting,How many truck objects are in this area?,4,truck,4,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
+01399,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,positive
+01399,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,negative
+01399,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+01399,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+01402,presence,Are there car objects in this area?,yes,car,45,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,positive
+01402,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,negative
+01402,counting,How many car objects are in this area?,45,car,45,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,
+01405,presence,Are there car objects in this area?,yes,car,44,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,positive
+01405,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,negative
+01405,counting,How many car objects are in this area?,44,car,44,normal,0.65,5.0,medium,0.0,0.0,0.0,45.0,
+01405,counting,How many van objects are in this area?,1,van,1,critical,0.82,3.0,medium,0.0,0.0,0.0,45.0,
+01408,presence,Are there car objects in this area?,yes,car,38,normal,0.65,5.0,medium,0.0,0.0,0.0,38.0,positive
+01408,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,38.0,negative
+01408,counting,How many car objects are in this area?,38,car,38,normal,0.65,5.0,medium,0.0,0.0,0.0,38.0,
+01411,presence,Are there truck objects in this area?,yes,truck,14,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,positive
+01411,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,negative
+01411,counting,How many truck objects are in this area?,14,truck,14,critical,0.82,3.0,medium,0.0,0.0,0.0,27.0,
+01411,counting,How many car objects are in this area?,13,car,13,normal,0.65,5.0,medium,0.0,0.0,0.0,27.0,
+01414,presence,Are there car objects in this area?,yes,car,25,critical,0.82,3.0,medium,0.0,0.0,0.0,29.0,positive
+01414,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,29.0,negative
+01414,counting,How many car objects are in this area?,25,car,25,critical,0.82,3.0,medium,0.0,0.0,0.0,29.0,
+01414,counting,How many van objects are in this area?,3,van,3,normal,0.65,5.0,medium,0.0,0.0,0.0,29.0,
+01417,presence,Are there car objects in this area?,yes,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,positive
+01417,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,negative
+01417,counting,How many car objects are in this area?,12,car,12,critical,0.82,3.0,medium,0.0,0.0,0.0,13.0,
+01417,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,13.0,
+01420,presence,Are there car objects in this area?,yes,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,positive
+01420,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,11.0,negative
+01420,counting,How many car objects are in this area?,11,car,11,critical,0.82,3.0,medium,0.0,0.0,0.0,11.0,
+01423,presence,Are there car objects in this area?,yes,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,positive
+01423,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,26.0,negative
+01423,counting,How many car objects are in this area?,26,car,26,normal,0.65,5.0,medium,0.0,0.0,0.0,26.0,
+01426,presence,Are there car objects in this area?,yes,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,positive
+01426,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,negative
+01426,counting,How many car objects are in this area?,15,car,15,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,
+01426,counting,How many truck objects are in this area?,1,truck,1,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+01429,presence,Are there car objects in this area?,yes,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,positive
+01429,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,negative
+01429,counting,How many car objects are in this area?,6,car,6,critical,0.82,3.0,medium,0.0,0.0,0.0,7.0,
+01429,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,7.0,
+01432,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,0.0,negative
+01435,presence,Are there car objects in this area?,yes,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,positive
+01435,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,16.0,negative
+01435,counting,How many car objects are in this area?,16,car,16,normal,0.65,5.0,medium,0.0,0.0,0.0,16.0,
+01438,presence,Are there truck objects in this area?,yes,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+01438,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+01438,counting,How many truck objects are in this area?,4,truck,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+01438,counting,How many car objects are in this area?,1,car,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+01441,presence,Are there car objects in this area?,yes,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,positive
+01441,presence,Are there van objects in this area?,no,van,0,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,negative
+01441,counting,How many car objects are in this area?,13,car,13,critical,0.82,3.0,medium,0.0,0.0,0.0,17.0,
+01441,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,17.0,
+01444,presence,Are there car objects in this area?,yes,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,positive
+01444,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,negative
+01444,counting,How many car objects are in this area?,10,car,10,critical,0.82,3.0,medium,0.0,0.0,0.0,12.0,
+01444,counting,How many van objects are in this area?,2,van,2,normal,0.65,5.0,medium,0.0,0.0,0.0,12.0,
+01447,presence,Are there van objects in this area?,yes,van,10,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,positive
+01447,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,negative
+01447,counting,How many van objects are in this area?,10,van,10,critical,0.82,3.0,medium,0.0,0.0,0.0,15.0,
+01447,counting,How many car objects are in this area?,5,car,5,normal,0.65,5.0,medium,0.0,0.0,0.0,15.0,
+01450,presence,Are there car objects in this area?,yes,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,positive
+01450,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,negative
+01450,counting,How many car objects are in this area?,4,car,4,critical,0.82,3.0,medium,0.0,0.0,0.0,5.0,
+01450,counting,How many van objects are in this area?,1,van,1,normal,0.65,5.0,medium,0.0,0.0,0.0,5.0,
+01453,presence,Are there car objects in this area?,yes,car,40,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,positive
+01453,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,negative
+01453,counting,How many car objects are in this area?,40,car,40,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,
+01456,presence,Are there car objects in this area?,yes,car,34,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,positive
+01456,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,negative
+01456,counting,How many car objects are in this area?,34,car,34,normal,0.65,5.0,medium,0.0,0.0,0.0,37.0,
+01456,counting,How many van objects are in this area?,3,van,3,critical,0.82,3.0,medium,0.0,0.0,0.0,37.0,
+01459,presence,Are there car objects in this area?,yes,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,positive
+01459,presence,Are there truck objects in this area?,no,truck,0,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,negative
+01459,counting,How many car objects are in this area?,8,car,8,normal,0.65,5.0,medium,0.0,0.0,0.0,14.0,
+01459,counting,How many bus objects are in this area?,6,bus,6,critical,0.82,3.0,medium,0.0,0.0,0.0,14.0,
+01462,presence,Are there bus objects in this area?,yes,bus,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,positive
+01462,presence,Are there car objects in this area?,no,car,0,critical,0.82,3.0,medium,0.0,0.0,0.0,9.0,negative
+01462,counting,How many bus objects are in this area?,9,bus,9,normal,0.65,5.0,medium,0.0,0.0,0.0,9.0,
+01465,presence,Are there car objects in this area?,yes,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,positive
+01465,presence,Are there bus objects in this area?,no,bus,0,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,negative
+01465,counting,How many car objects are in this area?,37,car,37,critical,0.82,3.0,medium,0.0,0.0,0.0,40.0,
+01465,counting,How many truck objects are in this area?,3,truck,3,normal,0.65,5.0,medium,0.0,0.0,0.0,40.0,
+01468,presence,Are there bus objects in this area?,yes,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,positive
+01468,presence,Are there truck objects in this area?,no,truck,0,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,negative
+01468,counting,How many bus objects are in this area?,2,bus,2,critical,0.82,3.0,medium,0.0,0.0,0.0,4.0,
+01468,counting,How many car objects are in this area?,2,car,2,normal,0.65,5.0,medium,0.0,0.0,0.0,4.0,
