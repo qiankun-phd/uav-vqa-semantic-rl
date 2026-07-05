@@ -144,10 +144,14 @@ class PPOTrainConfig:
     delay_cost_weight: float = 0.25
     energy_cost_weight: float = 0.12
     payload_cost_weight: float = 0.10
-    conflict_cost_weight: float = 2.0
+    # P1 dedup (2026-07 v19 review): a BUBBLES conflict raises airspace_conflict
+    # and utm_constraint_violation together; keep a single shaped-penalty channel
+    # (conflict 0.5) and zero the same-source utm weight so one event is not
+    # billed twice on top of the dual lambda and Lyapunov queues.
+    conflict_cost_weight: float = 0.5
     battery_cost_weight: float = 2.0
     gpu_cost_weight: float = 1.5
-    utm_conflict_cost_weight: float = 1.5
+    utm_conflict_cost_weight: float = 0.0
     dss_delay_cost_weight: float = 0.25
     off_nominal_cost_weight: float = 1.0
     use_semantic_lcb: bool = True
@@ -166,11 +170,19 @@ class PPOTrainConfig:
     quality_cost_limit_critical: float = 0.02
     deadline_cost_limit_normal: float = 0.05
     deadline_cost_limit_critical: float = 0.02
-    conflict_cost_limit: float = 0.0
+    # P1 lambda ratchet fix: a strictly-zero limit with cost>=0 makes lambda a
+    # monotone barrier, not a shadow price.  conflict_cost_limit=0.08 anchors the
+    # TLS exposure-rate budget; lambda_decay adds a leak so lambda can come back
+    # down once the constraint is satisfied; lambda_max_conflict caps the
+    # conflict channel separately (8 vs 20) so it cannot dwarf the positive
+    # semantic utility terms.
+    conflict_cost_limit: float = 0.08
     battery_cost_limit: float = 0.0
     gpu_cost_limit: float = 0.0
-    lambda_lr: float = 0.05
+    lambda_lr: float = 0.1
     lambda_max: float = 20.0
+    lambda_max_conflict: float = 8.0
+    lambda_decay: float = 0.01
     bandwidth_floor: float = 0.02
     share_floor: float = 0.01
     semantic_token_bandwidth_floor: float = 0.35
@@ -757,22 +769,23 @@ def _collect_episode(
     done = False
     device = _model_device(model)
     while not done:
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
-        logits, resource_mean, resource_log_std, value = model(obs_tensor)
-        mask = _service_mask_tensor(obs, env.service_levels, logits.device, cfg)
-        masked_logits = _apply_service_mask(logits, mask)
-        service_dist = Categorical(logits=masked_logits)
-        action_idx = service_dist.sample()
-        resource_dist = Normal(resource_mean, resource_log_std.exp())
-        raw_resource = resource_dist.sample()
-        resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
-        service_log_prob = service_dist.log_prob(action_idx)
-        if cfg.hybrid_actions:
-            log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1)
-        else:
-            resource_values = _default_resource_values()
-            raw_resource = torch.zeros_like(raw_resource)
-            log_prob = service_log_prob
+        with torch.no_grad():  # rollout collection needs no graph (P2 efficiency fix)
+            obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
+            logits, resource_mean, resource_log_std, value = model(obs_tensor)
+            mask = _service_mask_tensor(obs, env.service_levels, logits.device, cfg)
+            masked_logits = _apply_service_mask(logits, mask)
+            service_dist = Categorical(logits=masked_logits)
+            action_idx = service_dist.sample()
+            resource_dist = Normal(resource_mean, resource_log_std.exp())
+            raw_resource = resource_dist.sample()
+            resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
+            service_log_prob = service_dist.log_prob(action_idx)
+            if cfg.hybrid_actions:
+                log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1)
+            else:
+                resource_values = _default_resource_values()
+                raw_resource = torch.zeros_like(raw_resource)
+                log_prob = service_log_prob
 
         level = env.service_levels[int(action_idx.item())]
         action = _build_hybrid_action(env, obs, level, resource_values, cfg)
@@ -823,12 +836,8 @@ def _collect_episode(
 
     returns = _discounted_returns([float(x) for x in rollout["rewards"]], [bool(x) for x in rollout["dones"]], cfg.gamma)
     advantages = [float(ret) - float(value) for ret, value in zip(returns, rollout["values"])]
-    if len(advantages) > 1:
-        avg = _mean(advantages)
-        std = _std(advantages, avg)
-        advantages = [(value - avg) / (std + 1e-8) for value in advantages]
     rollout["returns"] = returns
-    rollout["advantages"] = advantages
+    rollout["advantages"] = _normalize_advantages(advantages)
     return rollout
 
 
@@ -847,6 +856,9 @@ def _collect_two_timescale_episode(
             "mobility_mode_actions": [],
             "mobility_raw_actions": [],
             "mobility_old_log_probs": [],
+            "mobility_decisions": [],
+            "uav_masks": [],
+            "mode_masks": [],
             "mobility_reused": [],
             "mobility_energy_j": [],
             "arrival_delay_s": [],
@@ -861,71 +873,84 @@ def _collect_two_timescale_episode(
     cached_action_idx: tuple[int, int] | None = None
     cached_raw = [0.0 for _ in MOBILITY_CONTINUOUS_KEYS]
     device = _model_device(model)
+    num_uavs = int(getattr(model, "num_uavs", 1))
     while not done:
         step = int(obs.get("episode_step", 0))
-        obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
-        (
-            uav_logits,
-            mode_logits,
-            mobility_mean,
-            mobility_log_std,
-            service_logits,
-            resource_mean,
-            resource_log_std,
-            value,
-        ) = model(obs_tensor)
-        if cfg.no_mobility_actor:
-            mobility_action = _default_mobility_action(env, obs, service_level=None)
-            mobility_log_prob = torch.zeros(1, device=device)
-            uav_idx = int(mobility_action["uav_assignment"])
-            mode_idx = MOBILITY_MODES.index(str(mobility_action["mobility_mode"]))
-            raw_mobility = torch.zeros((1, len(MOBILITY_CONTINUOUS_KEYS)), dtype=torch.float32, device=device)
-            reused = True
-        elif cached_mobility is None or step % max(1, int(cfg.mobility_update_interval)) == 0:
-            mobility_action, mobility_log_prob, uav_idx, mode_idx, raw_mobility = _sample_mobility_action(
-                env,
-                obs,
-                cfg,
+        with torch.no_grad():  # rollout collection needs no graph (P2 efficiency fix)
+            obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
+            (
                 uav_logits,
                 mode_logits,
                 mobility_mean,
                 mobility_log_std,
-                deterministic=False,
-            )
-            cached_mobility = mobility_action
-            cached_action_idx = (uav_idx, mode_idx)
-            cached_raw = raw_mobility.squeeze(0).detach().cpu().tolist()
-            reused = False
-        else:
-            assert cached_mobility is not None and cached_action_idx is not None
-            mobility_action = dict(cached_mobility)
-            uav_idx, mode_idx = cached_action_idx
-            raw_mobility = torch.as_tensor([cached_raw], dtype=torch.float32, device=device)
-            mobility_log_prob = _mobility_log_prob(uav_logits, mode_logits, mobility_mean, mobility_log_std, uav_idx, mode_idx, raw_mobility)
-            reused = True
+                service_logits,
+                resource_mean,
+                resource_log_std,
+                value,
+            ) = model(obs_tensor)
+            # P0 slow-head credit fix: the mobility log-prob is booked exactly once
+            # per slow decision (mobility_decision=1); cached/reused steps store 0
+            # so the update end never replays K copies of the same decision.
+            uav_mask = [True for _ in range(num_uavs)]
+            mode_mask = [True for _ in MOBILITY_MODES]
+            if cfg.no_mobility_actor:
+                mobility_action = _default_mobility_action(env, obs, service_level=None)
+                mobility_log_prob = torch.zeros(1, device=device)
+                uav_idx = int(mobility_action["uav_assignment"])
+                mode_idx = MOBILITY_MODES.index(str(mobility_action["mobility_mode"]))
+                raw_mobility = torch.zeros((1, len(MOBILITY_CONTINUOUS_KEYS)), dtype=torch.float32, device=device)
+                reused = True
+                mobility_decision = 0.0
+            elif cached_mobility is None or step % max(1, int(cfg.mobility_update_interval)) == 0:
+                uav_mask = _uav_mask_bools(obs, num_uavs)
+                mode_mask = _mobility_mode_mask_bools(obs)
+                mobility_action, mobility_log_prob, uav_idx, mode_idx, raw_mobility = _sample_mobility_action(
+                    env,
+                    obs,
+                    cfg,
+                    uav_logits,
+                    mode_logits,
+                    mobility_mean,
+                    mobility_log_std,
+                    deterministic=False,
+                )
+                cached_mobility = mobility_action
+                cached_action_idx = (uav_idx, mode_idx)
+                cached_raw = raw_mobility.squeeze(0).detach().cpu().tolist()
+                reused = False
+                mobility_decision = 1.0
+            else:
+                assert cached_mobility is not None and cached_action_idx is not None
+                mobility_action = dict(cached_mobility)
+                uav_idx, mode_idx = cached_action_idx
+                raw_mobility = torch.as_tensor([cached_raw], dtype=torch.float32, device=device)
+                mobility_log_prob = torch.zeros(1, device=device)
+                reused = True
+                mobility_decision = 0.0
 
-        mask = _service_mask_tensor(obs, env.service_levels, service_logits.device, cfg)
-        masked_logits = _apply_service_mask(service_logits, mask)
-        service_dist = Categorical(logits=masked_logits)
-        action_idx = service_dist.sample()
-        resource_dist = Normal(resource_mean, resource_log_std.exp())
-        raw_resource = resource_dist.sample()
-        resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
-        service_log_prob = service_dist.log_prob(action_idx)
-        log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1) + mobility_log_prob
+            mask = _service_mask_tensor(obs, env.service_levels, service_logits.device, cfg)
+            masked_logits = _apply_service_mask(service_logits, mask)
+            service_dist = Categorical(logits=masked_logits)
+            action_idx = service_dist.sample()
+            resource_dist = Normal(resource_mean, resource_log_std.exp())
+            raw_resource = resource_dist.sample()
+            resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
+            service_log_prob = service_dist.log_prob(action_idx)
+            log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1) + mobility_log_prob
         service_level = env.service_levels[int(action_idx.item())]
         action = _build_two_timescale_action(env, obs, service_level, resource_values, mobility_action, cfg)
         next_obs, raw_reward, done, info = env.step(action)
-        semantic_reward = _semantic_controller_reward(obs, info, raw_reward, cfg)
-        mobility_reward = _mobility_reward_adjustment(info, cfg)
-        shaped_reward = semantic_reward + mobility_reward
-        shaped_reward = shaped_reward - dual.penalty(info) if cfg.constrained else shaped_reward
+        semantic_reward = _two_timescale_step_semantic_reward(obs, info, raw_reward, cfg)
+        shaped_reward = semantic_reward - dual.penalty(info) if cfg.constrained else semantic_reward
 
         _append_common_rollout(rollout, obs, action_idx, mask, raw_resource, log_prob, value, shaped_reward, semantic_reward, raw_reward, done, info, action)
         rollout["uav_actions"].append(int(uav_idx))
         rollout["mobility_mode_actions"].append(int(mode_idx))
         rollout["mobility_raw_actions"].append(raw_mobility.squeeze(0).detach().cpu().tolist())
         rollout["mobility_old_log_probs"].append(float(mobility_log_prob.item()))
+        rollout["mobility_decisions"].append(float(mobility_decision))
+        rollout["uav_masks"].append([bool(x) for x in uav_mask])
+        rollout["mode_masks"].append([bool(x) for x in mode_mask])
         rollout["mobility_reused"].append(float(reused))
         rollout["mobility_energy_j"].append(float(info.get("mobility_energy_j", 0.0)))
         rollout["arrival_delay_s"].append(float(info.get("arrival_delay_s", 0.0)))
@@ -937,13 +962,42 @@ def _collect_two_timescale_episode(
 
     returns = _discounted_returns([float(x) for x in rollout["rewards"]], [bool(x) for x in rollout["dones"]], cfg.gamma)
     advantages = [float(ret) - float(value) for ret, value in zip(returns, rollout["values"])]
-    if len(advantages) > 1:
-        avg = _mean(advantages)
-        std = _std(advantages, avg)
-        advantages = [(value - avg) / (std + 1e-8) for value in advantages]
     rollout["returns"] = returns
-    rollout["advantages"] = advantages
+    rollout["advantages"] = _normalize_advantages(advantages)
     return rollout
+
+
+def _two_timescale_step_semantic_reward(obs: dict[str, Any], info: dict[str, Any], raw_reward: float, cfg: PPOTrainConfig) -> float:
+    """Per-step controller reward for the two-timescale collector.
+
+    P0 double-count fix: every semantic reward mode except ``env`` already folds
+    ``mobility_cost`` (flight energy, arrival delay, edge queue, coverage gain)
+    into :func:`_semantic_controller_reward`; the previous unconditional
+    ``+ _mobility_reward_adjustment`` billed those terms twice, so the old
+    two-timescale-vs-monolithic ablation partly compared reward definitions.
+    The adjustment is kept only for the raw ``env`` reward mode, which does not
+    include mobility terms.
+    """
+    semantic_reward = float(_semantic_controller_reward(obs, info, raw_reward, cfg))
+    if cfg.semantic_reward_mode == "env":
+        semantic_reward += float(_mobility_reward_adjustment(info, cfg))
+    return semantic_reward
+
+
+def _normalize_advantages(advantages: list[float]) -> list[float]:
+    """Scale-only advantage normalization (P1 fix N2).
+
+    The previous per-episode mean subtraction cancelled any near-constant
+    per-step term -- in particular the dual lambda penalties, which are constant
+    within an episode once a constraint is active -- neutralizing the primal
+    effect of the Lagrangian machinery.  We keep the division by the standard
+    deviation for gradient conditioning but no longer re-center, so a uniform
+    penalty still shifts every advantage (and thus the policy gradient) down.
+    """
+    if len(advantages) <= 1:
+        return [float(value) for value in advantages]
+    std = _std(advantages)
+    return [float(value) / (std + 1e-8) for value in advantages]
 
 
 def _empty_rollout() -> dict[str, list[Any]]:
@@ -1126,7 +1180,7 @@ def _ppo_update(
         value_loss = (returns - values).pow(2).mean()
         entropy_weight = _scheduled_entropy_weight(cfg, episode)
         loss = policy_loss + cfg.value_weight * value_loss - entropy_weight * entropy.mean()
-        prior_weight = float(cfg.bc_aux_weight) + _scheduled_service_prior_weight(cfg, episode)
+        prior_weight = _scheduled_bc_aux_weight(cfg, episode) + _scheduled_service_prior_weight(cfg, episode)
         if demos and prior_weight > 0.0:
             loss = loss + prior_weight * _bc_loss(model, demos, cfg)
         optimizer.zero_grad()
@@ -1134,6 +1188,69 @@ def _ppo_update(
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         _sanitize_model_parameters(model)
+
+
+def _two_timescale_rollout_tensors(rollout: dict[str, Any], device: Any) -> dict[str, Any]:
+    """Rollout tensors shared by the PPO update and the correctness unit test."""
+    return {
+        "observations": torch.as_tensor(rollout["observations"], dtype=torch.float32, device=device),
+        "service_actions": torch.as_tensor(rollout["service_actions"], dtype=torch.int64, device=device),
+        "service_masks": torch.as_tensor(rollout["service_masks"], dtype=torch.bool, device=device),
+        "resource_raw_actions": torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32, device=device),
+        "uav_actions": torch.as_tensor(rollout["uav_actions"], dtype=torch.int64, device=device),
+        "mode_actions": torch.as_tensor(rollout["mobility_mode_actions"], dtype=torch.int64, device=device),
+        "mobility_raw_actions": torch.as_tensor(rollout["mobility_raw_actions"], dtype=torch.float32, device=device),
+        "mobility_decisions": torch.as_tensor(rollout["mobility_decisions"], dtype=torch.float32, device=device),
+        "uav_masks": torch.as_tensor(rollout["uav_masks"], dtype=torch.bool, device=device),
+        "mode_masks": torch.as_tensor(rollout["mode_masks"], dtype=torch.bool, device=device),
+        "old_log_probs": torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32, device=device),
+        "returns": torch.as_tensor(rollout["returns"], dtype=torch.float32, device=device),
+        "advantages": torch.as_tensor(rollout["advantages"], dtype=torch.float32, device=device),
+    }
+
+
+def _two_timescale_log_probs_entropy_values(
+    model: TwoTimescaleMobilitySemanticActorCritic,
+    tensors: dict[str, Any],
+    cfg: PPOTrainConfig,
+) -> tuple[Any, Any, Any]:
+    """Joint log-prob/entropy under the current model for a stored rollout.
+
+    P0 slow-head fix: the sampling-time uav/mode masks are replayed onto the
+    logits, and every mobility term (log-prob AND entropy) is multiplied by the
+    per-step decision mask, so slow decisions are credited exactly once and
+    epoch-0 ratios are identically 1.  Used by both `_two_timescale_ppo_update`
+    and tests/test_v19_correctness.py (same code path by construction).
+    """
+    (
+        uav_logits,
+        mode_logits,
+        mobility_mean,
+        mobility_log_std,
+        service_logits,
+        resource_mean,
+        resource_log_std,
+        values,
+    ) = model(tensors["observations"])
+    service_logits = _apply_service_mask(service_logits, tensors["service_masks"])
+    service_dist = Categorical(logits=service_logits)
+    resource_dist = Normal(resource_mean, resource_log_std.exp())
+    log_probs = service_dist.log_prob(tensors["service_actions"]) + resource_dist.log_prob(tensors["resource_raw_actions"]).sum(dim=-1)
+    entropy = service_dist.entropy() + resource_dist.entropy().sum(dim=-1)
+    if not cfg.no_mobility_actor:
+        uav_logits = _apply_service_mask(uav_logits, tensors["uav_masks"])
+        mode_logits = _apply_service_mask(mode_logits, tensors["mode_masks"])
+        uav_dist = Categorical(logits=uav_logits)
+        mode_dist = Categorical(logits=mode_logits)
+        mobility_dist = Normal(mobility_mean, mobility_log_std.exp())
+        decisions = tensors["mobility_decisions"]
+        log_probs = log_probs + decisions * (
+            uav_dist.log_prob(tensors["uav_actions"])
+            + mode_dist.log_prob(tensors["mode_actions"])
+            + mobility_dist.log_prob(tensors["mobility_raw_actions"]).sum(dim=-1)
+        )
+        entropy = entropy + decisions * (uav_dist.entropy() + mode_dist.entropy() + mobility_dist.entropy().sum(dim=-1))
+    return log_probs, entropy, values
 
 
 def _two_timescale_ppo_update(
@@ -1145,49 +1262,18 @@ def _two_timescale_ppo_update(
     episode: int,
 ) -> None:
     device = _model_device(model)
-    obs = torch.as_tensor(rollout["observations"], dtype=torch.float32, device=device)
-    service_actions = torch.as_tensor(rollout["service_actions"], dtype=torch.int64, device=device)
-    service_masks = torch.as_tensor(rollout["service_masks"], dtype=torch.bool, device=device)
-    resource_raw_actions = torch.as_tensor(rollout["resource_raw_actions"], dtype=torch.float32, device=device)
-    uav_actions = torch.as_tensor(rollout["uav_actions"], dtype=torch.int64, device=device)
-    mode_actions = torch.as_tensor(rollout["mobility_mode_actions"], dtype=torch.int64, device=device)
-    mobility_raw_actions = torch.as_tensor(rollout["mobility_raw_actions"], dtype=torch.float32, device=device)
-    old_log_probs = torch.as_tensor(rollout["old_log_probs"], dtype=torch.float32, device=device)
-    returns = torch.as_tensor(rollout["returns"], dtype=torch.float32, device=device)
-    advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32, device=device)
+    tensors = _two_timescale_rollout_tensors(rollout, device)
+    old_log_probs = tensors["old_log_probs"]
+    returns = tensors["returns"]
+    advantages = tensors["advantages"]
     for _ in range(cfg.update_epochs):
-        (
-            uav_logits,
-            mode_logits,
-            mobility_mean,
-            mobility_log_std,
-            service_logits,
-            resource_mean,
-            resource_log_std,
-            values,
-        ) = model(obs)
-        service_logits = _apply_service_mask(service_logits, service_masks)
-        service_dist = Categorical(logits=service_logits)
-        resource_dist = Normal(resource_mean, resource_log_std.exp())
-        log_probs = service_dist.log_prob(service_actions) + resource_dist.log_prob(resource_raw_actions).sum(dim=-1)
-        entropy = service_dist.entropy() + resource_dist.entropy().sum(dim=-1)
-        if not cfg.no_mobility_actor:
-            uav_dist = Categorical(logits=uav_logits)
-            mode_dist = Categorical(logits=mode_logits)
-            mobility_dist = Normal(mobility_mean, mobility_log_std.exp())
-            log_probs = (
-                log_probs
-                + uav_dist.log_prob(uav_actions)
-                + mode_dist.log_prob(mode_actions)
-                + mobility_dist.log_prob(mobility_raw_actions).sum(dim=-1)
-            )
-            entropy = entropy + uav_dist.entropy() + mode_dist.entropy() + mobility_dist.entropy().sum(dim=-1)
+        log_probs, entropy, values = _two_timescale_log_probs_entropy_values(model, tensors, cfg)
         ratio = torch.exp(log_probs - old_log_probs)
         clipped = torch.clamp(ratio, 1.0 - cfg.clip_ratio, 1.0 + cfg.clip_ratio) * advantages
         policy_loss = -torch.min(ratio * advantages, clipped).mean()
         value_loss = (returns - values).pow(2).mean()
         loss = policy_loss + cfg.value_weight * value_loss - _scheduled_entropy_weight(cfg, episode) * entropy.mean()
-        prior_weight = float(cfg.bc_aux_weight) + _scheduled_service_prior_weight(cfg, episode)
+        prior_weight = _scheduled_bc_aux_weight(cfg, episode) + _scheduled_service_prior_weight(cfg, episode)
         if demos and prior_weight > 0.0:
             loss = loss + prior_weight * _bc_loss_two_timescale(model, demos, cfg)
         optimizer.zero_grad()
@@ -1328,27 +1414,40 @@ def _prefer_nearest_uav_mobility(obs: dict[str, Any], cfg: PPOTrainConfig) -> bo
     return scenario == "disaster_hotspot" and (risk == "critical" or queue_len >= 2)
 
 
-def _apply_uav_mask(logits: Any, obs: dict[str, Any]) -> Any:
+def _uav_mask_bools(obs: dict[str, Any], num_uavs: int) -> list[bool]:
+    """Boolean UAV feasibility mask; all-True when unrestricted.
+
+    Stored in the rollout at decision steps so the update end replays exactly
+    the mask distribution the action was sampled from (P0 slow-head fix).
+    """
     feasible = set(_feasible_uav_ids(obs))
-    if not feasible:
-        return logits
-    mask = torch.zeros_like(logits, dtype=torch.bool)
+    mask = [False for _ in range(int(num_uavs))]
     for uid in feasible:
-        if 0 <= int(uid) < mask.shape[-1]:
-            mask[..., int(uid)] = True
-    if not bool(mask.any()):
-        return logits
+        if 0 <= int(uid) < int(num_uavs):
+            mask[int(uid)] = True
+    if not feasible or not any(mask):
+        return [True for _ in range(int(num_uavs))]
+    return mask
+
+
+def _mobility_mode_mask_bools(obs: dict[str, Any]) -> list[bool]:
+    """Boolean mobility-mode mask; all-True when unrestricted."""
+    mask_data = obs.get("action_mask", {}).get("mobility_mode_allowed", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
+    if not mask_data:
+        return [True for _ in MOBILITY_MODES]
+    mask_values = [bool(mask_data.get(mode, True)) for mode in MOBILITY_MODES]
+    if not any(mask_values):
+        return [True for _ in MOBILITY_MODES]
+    return mask_values
+
+
+def _apply_uav_mask(logits: Any, obs: dict[str, Any]) -> Any:
+    mask = torch.as_tensor(_uav_mask_bools(obs, int(logits.shape[-1])), dtype=torch.bool, device=logits.device).unsqueeze(0)
     return logits.masked_fill(~mask, -1.0e9)
 
 
 def _apply_mobility_mode_mask(logits: Any, obs: dict[str, Any]) -> Any:
-    mask_data = obs.get("action_mask", {}).get("mobility_mode_allowed", {}) if isinstance(obs.get("action_mask", {}), dict) else {}
-    if not mask_data:
-        return logits
-    mask_values = [bool(mask_data.get(mode, True)) for mode in MOBILITY_MODES]
-    if not any(mask_values):
-        return logits
-    mask = torch.as_tensor(mask_values, dtype=torch.bool, device=logits.device).unsqueeze(0)
+    mask = torch.as_tensor(_mobility_mode_mask_bools(obs), dtype=torch.bool, device=logits.device).unsqueeze(0)
     return logits.masked_fill(~mask, -1.0e9)
 
 
@@ -1834,8 +1933,13 @@ def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_r
             cfg.queue_quality_weight * float(info.get("q_quality", 0.0)) * max(0.0, -margin)
             + cfg.queue_deadline_weight * float(info.get("q_deadline", 0.0)) * max(0.0, delay_norm - 1.0)
             + cfg.queue_energy_weight * float(info.get("q_energy", 0.0)) / max(1.0, float(cfg.energy_budget_j))
-            + cfg.queue_risk_weight * float(info.get("q_risk", 0.0))
-            + cfg.queue_utm_weight * float(info.get("q_utm", 0.0))
+            # P1 dedup: risk/utm queue terms use per-step increments rather than
+            # the water level.  The queues only ever grow under violations, so a
+            # level-based penalty kept charging every later step for old events
+            # (a second/third bill for the same conflict on top of the shaped
+            # weight and the dual lambda).  Increments charge each event once.
+            + cfg.queue_risk_weight * float(info.get("q_risk_increment", 0.0))
+            + cfg.queue_utm_weight * float(info.get("q_utm_increment", 0.0))
         )
         utility -= queue_penalty
     if cfg.lyapunov_reward:
@@ -1874,7 +1978,9 @@ def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig)
         dual.quality_critical = quality
         dual.deadline_normal = deadline
         dual.deadline_critical = deadline
-    dual.conflict = _dual_update(dual.conflict, _mean(rollout["conflict_costs"]), cfg.conflict_cost_limit, cfg)
+    dual.conflict = _dual_update(
+        dual.conflict, _mean(rollout["conflict_costs"]), cfg.conflict_cost_limit, cfg, lambda_max=cfg.lambda_max_conflict
+    )
     dual.battery = _dual_update(dual.battery, _mean(rollout["battery_costs"]), cfg.battery_cost_limit, cfg)
     dual.gpu = _dual_update(dual.gpu, _mean(rollout["gpu_costs"]), cfg.gpu_cost_limit, cfg)
 
@@ -2049,6 +2155,19 @@ def _scheduled_entropy_weight(cfg: PPOTrainConfig, episode: int) -> float:
     return float(cfg.entropy_weight_start) + progress * (float(cfg.entropy_weight_end) - float(cfg.entropy_weight_start))
 
 
+def _scheduled_bc_aux_weight(cfg: PPOTrainConfig, episode: int) -> float:
+    """Linearly decay the BC auxiliary weight to 0 (P1 fix).
+
+    Previously ``bc_aux_weight`` never decayed (only the service prior did), so
+    the policy stayed glued to the teacher for the whole run.  It now follows
+    the same horizon as the service prior (``service_prior_decay_episodes``).
+    """
+    if int(cfg.service_prior_decay_episodes) <= 0:
+        return float(cfg.bc_aux_weight)
+    progress = max(0.0, min(1.0, float(episode) / max(1.0, float(cfg.service_prior_decay_episodes))))
+    return float(cfg.bc_aux_weight) * (1.0 - progress)
+
+
 def _scheduled_service_prior_weight(cfg: PPOTrainConfig, episode: int) -> float:
     if int(cfg.service_prior_decay_episodes) <= 0:
         return 0.0
@@ -2132,9 +2251,20 @@ def _default_resource_values() -> list[float]:
     return [1.0, 1.0, 0.5, 0.5]
 
 
-def _dual_update(current: float, observed_cost: float, limit: float, cfg: PPOTrainConfig) -> float:
-    updated = float(current) + float(cfg.lambda_lr) * (float(observed_cost) - float(limit))
-    return max(0.0, min(float(cfg.lambda_max), updated))
+def _dual_update(
+    current: float,
+    observed_cost: float,
+    limit: float,
+    cfg: PPOTrainConfig,
+    lambda_max: float | None = None,
+) -> float:
+    # Leaky projected sub-gradient ascent: lambda <- (1-decay)*lambda + lr*(cost-limit).
+    # The decay term breaks the one-way ratchet observed in the 2026-07 review
+    # (lambda monotone non-decreasing whenever limit=0), letting lambda relax
+    # once the observed cost stays below the limit.
+    ceiling = float(cfg.lambda_max if lambda_max is None else lambda_max)
+    updated = (1.0 - float(cfg.lambda_decay)) * float(current) + float(cfg.lambda_lr) * (float(observed_cost) - float(limit))
+    return max(0.0, min(ceiling, updated))
 
 
 def _discounted_returns(rewards: list[float], dones: list[bool], gamma: float) -> list[float]:
