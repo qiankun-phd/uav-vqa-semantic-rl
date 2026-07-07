@@ -54,7 +54,7 @@ def extract_count(text: str) -> int | None:
 
 
 def check_answer(question_type: str, prediction: str, ground_truth: str, tolerance_ratio: float = 0.10) -> AnswerCheck:
-    if question_type in {"presence", "risk"}:
+    if question_type in {"presence", "risk", "comparison", "co_presence", "threshold"}:
         normalized = normalize_yes_no(prediction)
         return AnswerCheck(normalized_prediction=normalized, correct=normalized == ground_truth.strip().lower())
     if question_type == "counting":

@@ -184,7 +184,37 @@ def _stable_score(*parts: str) -> float:
     return int(digest[:8], 16) / 0xFFFFFFFF
 
 
+def _degrade_detections_ldpc(records: Iterable[DetectionRecord], channel_bin: str, cfg: dict, image_id: str) -> list[DetectionRecord]:
+    """Token transmission over the LDPC-coded fading link: lost frames (prob=FER)
+    are dropped (header lost) or garbled (payload lost: class -> unknown, box jitter)."""
+    from vqa_semcom.degradation.digital_link import fer_for
+
+    fer = fer_for(cfg, channel_bin)
+    out: list[DetectionRecord] = []
+    for idx, record in enumerate(records):
+        if _stable_score(image_id, channel_bin, record.category, str(idx), "frame") >= fer:
+            out.append(record)
+            continue
+        if _stable_score(image_id, channel_bin, record.category, str(idx), "mode") < 0.5:
+            continue  # frame header lost -> detection dropped
+        jx = 0.7 + 0.6 * _stable_score(image_id, channel_bin, str(idx), "jx")
+        jy = 0.7 + 0.6 * _stable_score(image_id, channel_bin, str(idx), "jy")
+        out.append(
+            DetectionRecord(
+                category="unknown",
+                bbox_x=int(record.bbox_x * jx),
+                bbox_y=int(record.bbox_y * jy),
+                bbox_w=max(1, int(record.bbox_w * jx)),
+                bbox_h=max(1, int(record.bbox_h * jy)),
+                confidence=record.confidence,
+            )
+        )
+    return out
+
+
 def degrade_detections_for_channel(records: Iterable[DetectionRecord], channel_bin: str, cfg: dict, image_id: str) -> list[DetectionRecord]:
+    if (cfg.get("vlm", {}) or {}).get("channel_model") == "ldpc_fading":
+        return _degrade_detections_ldpc(records, channel_bin, cfg, image_id)
     deg_cfg = degradation_config("light", channel_bin, cfg)
     drop_rate = float(deg_cfg.get("drop_rate", 0.0))
     corrupt_rate = float(deg_cfg.get("class_corrupt_rate", 0.0))

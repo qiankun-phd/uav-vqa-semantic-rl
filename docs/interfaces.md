@@ -35,10 +35,15 @@ Each observation must contain these fields or a documented numeric encoding of t
 | uav_state | dict/vector | UAV position, velocity/heading, battery, remaining compute or flight budget. |
 | edge_load | float/vector | Edge/server compute congestion or queue load. |
 | cache_state | dict/vector | Whether cache answer exists, age/freshness, cache confidence if available. |
+| candidate_path_metrics | dict | Per-path feasibility and cost estimates for `cache`, `token`, `image`, `defer`, and `cache_update`. |
 
 Recommended additional fields:
 
 - deadline_s
+- task_status
+- remaining_deadline_s
+- defer_count
+- expired
 - payload_kb_estimates_by_service
 - task_id
 - episode_step
@@ -59,6 +64,7 @@ Algorithm thread outputs an action with these fields:
 
 | field | type | notes |
 |---|---|---|
+| semantic_path | str | Preferred V2 semantic service route: `cache`, `token`, `image`, `defer`, or `cache_update`. Backward compatible with `service_level`: cache=0, token=1, image=2. |
 | service_level | int | 0 cache answer, 1 semantic token / compact evidence, 2 image evidence. Backward-compatible aliases: 1 detector semantic tokens, 2 raw image evidence. Service 3 ROI is reserved and currently not active in V1.9. |
 | bandwidth | float | Hz or normalized share; unit must be written in info. |
 | power | float | Watts or normalized share; unit must be written in info. |
@@ -74,6 +80,7 @@ Minimal V1.9-compatible action:
 
 ```python
 action = {
+    'semantic_path': 'cache',
     'service_level': 0,
     'bandwidth': 1_000_000.0,
     'power': 0.1,
@@ -86,6 +93,57 @@ action = {
     'waypoint': None,
 }
 ```
+
+Semantic path semantics:
+
+| semantic_path | compatible service_level | behavior |
+|---|---:|---|
+| cache | 0 | Reuse an eligible semantic cache entry. It is SNR-invariant and only succeeds when exact/nearby cache quality LCB clears `epsilon_k` and freshness is not expired. |
+| token | 1 | Use semantic token / detector compact evidence for the current task. |
+| image | 2 | Use image evidence for the current task. |
+| defer | none | Keep the task in the queue, increment `defer_count`, age cache state, and consume deadline; it must not mark the task completed. |
+| cache_update | 1 | V1 maps to token evidence and, when successful, writes or refreshes the semantic cache entry. |
+
+Task queue status:
+
+```text
+task_status in {pending, served, deferred, expired}
+remaining_deadline_s = max(0, deadline_s - elapsed_slots * slot_duration_s)
+expired = remaining_deadline_s <= 0 before service completion
+```
+
+Cache eligibility fields exposed in observations and step info:
+
+```text
+cache_exact_match
+cache_nearby_match
+cache_eligible
+cache_quality_lcb
+cache_age
+cache_freshness_bin
+cache_hit_probability
+```
+
+The environment defines `cache_eligible=True` only when there is an exact or nearby same-type semantic cache entry, the cache freshness is not expired, and `cache_quality_lcb >= epsilon_k`.
+
+Candidate path metrics:
+
+```text
+candidate_path_metrics[path] = {
+  feasible,
+  accuracy_lcb,
+  accuracy_mean,
+  quality_gap,
+  payload_kb,
+  delay_s,
+  energy_j,
+  deadline_slack_s,
+  cache_eligible,
+  utm_constraint_violation,
+}
+```
+
+These metrics are diagnostic estimates for action selection and projection. They should not mutate the task queue or cache store.
 
 ## Semantic Utility Interface
 
@@ -173,7 +231,7 @@ Candidate-service usage for mobility-aware RL/env:
 candidates = utility.get_service_candidates(obs)
 ```
 
-Each candidate keeps the same semantic utility LUT key and returns `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
+Each candidate keeps the same semantic utility LUT key and returns `semantic_path`, `accuracy_mean`, `accuracy_lcb`, `uncertainty`, `payload_kb`, `semantic_quality_gap`, `semantic_efficiency`, `estimated_delay_s`, `estimated_delay_feasible`, `semantic_feasible`, `deadline_feasible`, `joint_feasible`, `cache_accuracy_mean`, `cache_accuracy_lcb`, `cache_uncertainty`, `cache_quality_gap`, `cache_recommended`, `cache_eligible`, `candidate_path_metrics`, `is_snr_sensitive`, `recommended_for_low_snr`, and `recommended_for_critical`.
 
 The helper does not add a LUT dimension. It evaluates the same task condition across service levels and computes:
 
@@ -186,6 +244,37 @@ semantic_efficiency = quality-adjusted conservative utility per payload unit
 ```
 
 The candidate helper reads deadline from `deadline_s`, `tau_k`, or `deadline`. It reads per-service delay estimates from `estimated_delay_by_service`, `delay_by_service`, `service_delay_s`, `service_delay_by_level`, or `estimated_delay_s_by_service`. If no delay estimate is provided, it uses a small conservative fallback based on service level and payload.
+
+Cache/path helper usage for semantic path control:
+
+```python
+cache_lcb = utility.cache_quality_lcb(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level)
+cache = utility.cache_quality_metrics(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level, epsilon_k)
+path = utility.path_utility("token", task_type, snr_bin, view_quality_bin, freshness_bin, risk_level, epsilon_k)
+```
+
+Path names are paper-facing control choices:
+
+| semantic_path | service level | meaning |
+|---|---:|---|
+| `cache` | 0 | Reuse cached answer or cached semantic result. Cache is SNR-invariant; quality depends on freshness and cached answer reliability. |
+| `token` | 1 | Send compact semantic tokens such as detector tags, boxes, counts, and confidence summaries. |
+| `image` | 2 | Send image evidence for visual reasoning. Payload and deadline pressure are high under weak links. |
+| `cache_update` | default 1 | Serve with fresh evidence and refresh the cache for future requests. Defaults to token update, but callers may request image update if needed. |
+
+Cache semantics:
+
+```text
+cache_quality_gap = max(0, epsilon_k - cache_accuracy_lcb)
+cache_eligible = cache_recommended
+```
+
+- `cache_accuracy_mean`, `cache_accuracy_lcb`, and `cache_uncertainty` are always derived from service level 0.
+- Cache quality is not driven by current SNR; `freshness_bin` is the main cache-state dimension.
+- `expired` cache is not recommended for critical tasks.
+- Critical tasks can use cache only when `freshness_bin == fresh`, `cache_accuracy_lcb >= epsilon_k`, sample support exists, and uncertainty is acceptable.
+- `candidate_path_metrics` is a compact per-candidate dictionary for environment logging and policy debugging. It includes at least `semantic_path`, candidate `accuracy_lcb`, `semantic_quality_gap`, `payload_kb`, `cache_accuracy_lcb`, `cache_quality_gap`, and `cache_recommended`.
+- The semantic utility layer does not estimate future cache reuse value. Therefore `cache_update` must not be treated as actively recommended solely because the cache is missing or stale. Environment/Algorithm should provide a separate `future_reuse_value`, `cache_update_value`, or `expected_future_cache_hits` signal before preferring cache update over token/image service.
 
 Paper-facing service semantics:
 
@@ -220,6 +309,18 @@ info = {
     'delay_s': float,
     'energy_j': float,
     'payload_kb': float,
+    'semantic_path': str,
+    'task_status': str,
+    'remaining_deadline_s': float,
+    'defer_count': int,
+    'expired': bool,
+    'cache_exact_match': bool,
+    'cache_nearby_match': bool,
+    'cache_eligible': bool,
+    'cache_quality_lcb': float,
+    'cache_age': float,
+    'cache_freshness_bin': str,
+    'cache_hit_probability': float,
     'quality_violation': bool,
     'deadline_violation': bool,
     'risk_violation': bool,

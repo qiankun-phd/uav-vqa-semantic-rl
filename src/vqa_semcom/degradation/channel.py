@@ -23,6 +23,9 @@ def _deterministic_mask_boxes(width: int, height: int, rate: float) -> list[tupl
 
 
 def degrade_image(image_path: Path, out_dir: Path, channel_bin: str, cfg: dict) -> Path:
+    if (cfg.get("vlm", {}) or {}).get("channel_model") == "ldpc_fading":
+        from vqa_semcom.degradation.digital_link import transmit_image_to_path
+        return transmit_image_to_path(image_path, out_dir, channel_bin, cfg)
     deg_cfg = degradation_config("image", channel_bin, cfg)
     quality = int(deg_cfg.get("jpeg_quality", 90))
     resize_scale = float(deg_cfg.get("resize_scale", 1.0))

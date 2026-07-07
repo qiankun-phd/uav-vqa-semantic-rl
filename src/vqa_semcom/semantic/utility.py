@@ -47,9 +47,43 @@ class SemanticUtilityEstimate:
 
 
 @dataclass(frozen=True)
+class CacheQualityMetrics:
+    accuracy_mean: float
+    accuracy_lcb: float
+    uncertainty: float
+    sample_count: int
+    payload_kb: float
+    quality_gap: float
+    recommended: bool
+    eligible: bool
+
+
+@dataclass(frozen=True)
+class SemanticPathUtility:
+    semantic_path: str
+    service_level: int
+    service_name: str
+    accuracy_mean: float
+    accuracy_lcb: float
+    uncertainty: float
+    sample_count: int
+    payload_kb: float
+    semantic_quality_gap: float
+    semantic_efficiency: float
+    cache_accuracy_mean: float
+    cache_accuracy_lcb: float
+    cache_uncertainty: float
+    cache_quality_gap: float
+    cache_recommended: bool
+    cache_eligible: bool
+    cache_update: bool
+
+
+@dataclass(frozen=True)
 class ServiceCandidateUtility:
     service_level: int
     service_name: str
+    semantic_path: str
     accuracy_mean: float
     accuracy_lcb: float
     uncertainty: float
@@ -62,6 +96,13 @@ class ServiceCandidateUtility:
     deadline_feasible: bool
     estimated_delay_feasible: bool
     joint_feasible: bool
+    cache_accuracy_mean: float
+    cache_accuracy_lcb: float
+    cache_uncertainty: float
+    cache_quality_gap: float
+    cache_recommended: bool
+    cache_eligible: bool
+    candidate_path_metrics: dict[str, Any]
     is_snr_sensitive: bool
     recommended_for_low_snr: bool
     recommended_for_critical: bool
@@ -380,6 +421,91 @@ class SemanticUtilityModel:
             sample_count=0,
         )
 
+    def cache_quality_lcb(
+        self,
+        task_type: str,
+        snr_bin: str | int | float,
+        view_quality_bin: str,
+        freshness_bin: str,
+        risk_level: str,
+    ) -> float:
+        """Return cache-answer LCB while keeping cache SNR-invariant.
+
+        The stable LUT key still contains ``snr_bin`` for compatibility, but
+        calibrated cache cells are treated as SNR-invariant.  This helper uses
+        service level 0 and ignores SNR if an equivalent cache cell exists.
+        """
+
+        return self._cache_estimate(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level).accuracy_lcb
+
+    def cache_quality_metrics(
+        self,
+        task_type: str,
+        snr_bin: str | int | float,
+        view_quality_bin: str,
+        freshness_bin: str,
+        risk_level: str,
+        epsilon_k: float = 0.0,
+    ) -> CacheQualityMetrics:
+        estimate = self._cache_estimate(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level)
+        quality_gap = max(0.0, float(epsilon_k) - estimate.accuracy_lcb)
+        recommended = self._cache_recommended(estimate, quality_gap, freshness_bin, risk_level)
+        return CacheQualityMetrics(
+            accuracy_mean=estimate.accuracy_mean,
+            accuracy_lcb=estimate.accuracy_lcb,
+            uncertainty=estimate.uncertainty,
+            sample_count=estimate.sample_count,
+            payload_kb=estimate.payload_kb,
+            quality_gap=round(quality_gap, 6),
+            recommended=recommended,
+            eligible=recommended,
+        )
+
+    def path_utility(
+        self,
+        semantic_path: str,
+        task_type: str,
+        snr_bin: str | int | float,
+        view_quality_bin: str,
+        freshness_bin: str,
+        risk_level: str,
+        epsilon_k: float = 0.0,
+        cache_update_service_level: int | str = 1,
+    ) -> SemanticPathUtility:
+        """Return utility for cache/token/image/cache_update paths.
+
+        ``cache_update`` is a control path that serves the current task with a
+        fresh-evidence service and refreshes cache state for future tasks.  By
+        default it uses semantic tokens to preserve the lightweight path, but
+        callers can override it with service level 2 when image refresh is
+        needed.
+        """
+
+        path = _normalize_semantic_path(semantic_path)
+        service_level = _service_level_for_path(path, cache_update_service_level)
+        estimate = self.U_sem(task_type, service_level, snr_bin, view_quality_bin, freshness_bin, risk_level)
+        quality_gap = max(0.0, float(epsilon_k) - estimate.accuracy_lcb)
+        cache = self.cache_quality_metrics(task_type, snr_bin, view_quality_bin, freshness_bin, risk_level, epsilon_k)
+        return SemanticPathUtility(
+            semantic_path=path,
+            service_level=service_level,
+            service_name=service_level_name(service_level),
+            accuracy_mean=estimate.accuracy_mean,
+            accuracy_lcb=estimate.accuracy_lcb,
+            uncertainty=estimate.uncertainty,
+            sample_count=estimate.sample_count,
+            payload_kb=estimate.payload_kb,
+            semantic_quality_gap=round(quality_gap, 6),
+            semantic_efficiency=self._semantic_efficiency(estimate, quality_gap),
+            cache_accuracy_mean=cache.accuracy_mean,
+            cache_accuracy_lcb=cache.accuracy_lcb,
+            cache_uncertainty=cache.uncertainty,
+            cache_quality_gap=cache.quality_gap,
+            cache_recommended=cache.recommended,
+            cache_eligible=cache.eligible,
+            cache_update=path == "cache_update",
+        )
+
     def get_service_candidates(
         self,
         obs: dict[str, Any],
@@ -408,6 +534,7 @@ class SemanticUtilityModel:
         epsilon = _float_value(obs.get("epsilon_k", obs.get("epsilon", 0.0)), 0.0)
         deadline_s = _float_value(obs.get("deadline_s", obs.get("tau_k", obs.get("deadline", 0.0))), 0.0)
         levels = list(service_levels) if service_levels is not None else sorted({cell.service_level for cell in self.cells})
+        cache = self.cache_quality_metrics(task_type, snr_value, view_quality, freshness, risk, epsilon)
 
         candidates: list[ServiceCandidateUtility] = []
         for level in levels:
@@ -422,6 +549,7 @@ class SemanticUtilityModel:
                 ServiceCandidateUtility(
                     service_level=int(level),
                     service_name=service_level_name(int(level)),
+                    semantic_path=semantic_path_name(int(level)),
                     accuracy_mean=estimate.accuracy_mean,
                     accuracy_lcb=estimate.accuracy_lcb,
                     uncertainty=estimate.uncertainty,
@@ -434,12 +562,68 @@ class SemanticUtilityModel:
                     deadline_feasible=deadline_feasible,
                     estimated_delay_feasible=deadline_feasible,
                     joint_feasible=semantic_feasible and deadline_feasible,
+                    cache_accuracy_mean=cache.accuracy_mean,
+                    cache_accuracy_lcb=cache.accuracy_lcb,
+                    cache_uncertainty=cache.uncertainty,
+                    cache_quality_gap=cache.quality_gap,
+                    cache_recommended=cache.recommended,
+                    cache_eligible=cache.eligible,
+                    candidate_path_metrics={
+                        "semantic_path": semantic_path_name(int(level)),
+                        "accuracy_lcb": estimate.accuracy_lcb,
+                        "semantic_quality_gap": round(gap, 6),
+                        "payload_kb": estimate.payload_kb,
+                        "cache_accuracy_lcb": cache.accuracy_lcb,
+                        "cache_quality_gap": cache.quality_gap,
+                        "cache_recommended": cache.recommended,
+                    },
                     is_snr_sensitive=snr_sensitive,
                     recommended_for_low_snr=self._recommended_for_low_snr(int(level), estimate, gap, freshness),
                     recommended_for_critical=self._recommended_for_critical(int(level), estimate, gap, risk, freshness),
                 )
             )
         return candidates
+
+    def _cache_estimate(
+        self,
+        task_type: str,
+        snr_bin: str | int | float,
+        view_quality_bin: str,
+        freshness_bin: str,
+        risk_level: str,
+    ) -> SemanticUtilityEstimate:
+        label = snr_bin_label(snr_bin) if isinstance(snr_bin, (int, float)) else str(snr_bin)
+        cell = self.table.get((task_type, 0, label, view_quality_bin, freshness_bin, risk_level))
+        if cell is None:
+            matching = [
+                item
+                for item in self.cells
+                if item.question_type == task_type
+                and item.service_level == 0
+                and item.view_quality_bin == view_quality_bin
+                and item.freshness_bin == freshness_bin
+                and item.risk_level == risk_level
+            ]
+            if matching:
+                cell = sorted(matching, key=lambda item: snr_db_from_label(item.snr_bin))[0]
+        if cell is not None:
+            return cell.estimate()
+        return self.U_sem(task_type, 0, label, view_quality_bin, freshness_bin, risk_level)
+
+    @staticmethod
+    def _cache_recommended(
+        estimate: SemanticUtilityEstimate,
+        semantic_quality_gap: float,
+        freshness_bin: str,
+        risk_level: str,
+    ) -> bool:
+        if estimate.sample_count <= 0 or semantic_quality_gap > 0.0:
+            return False
+        if freshness_bin == "expired":
+            return False
+        if risk_level == "critical":
+            return freshness_bin == "fresh" and estimate.uncertainty <= 0.40
+        return True
 
     def _nearest_snr_cell(
         self,
@@ -535,6 +719,53 @@ def service_level_name(service_level: int) -> str:
         3: "roi_crop_image",
     }
     return names.get(int(service_level), f"service_{int(service_level)}")
+
+
+def semantic_path_name(service_level: int) -> str:
+    paths = {
+        0: "cache",
+        1: "token",
+        2: "image",
+        3: "image",
+    }
+    return paths.get(int(service_level), f"service_{int(service_level)}")
+
+
+def _normalize_semantic_path(path: str) -> str:
+    value = str(path).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "cache_answer": "cache",
+        "semantic_cache": "cache",
+        "semantic_token": "token",
+        "compact_evidence": "token",
+        "light": "token",
+        "lightweight": "token",
+        "image_evidence": "image",
+        "raw_image": "image",
+        "full_image": "image",
+        "roi": "image",
+        "roi_crop": "image",
+        "cache_refresh": "cache_update",
+        "update_cache": "cache_update",
+    }
+    normalized = aliases.get(value, value)
+    if normalized not in {"cache", "token", "image", "cache_update"}:
+        raise ValueError(f"unsupported semantic path: {path}")
+    return normalized
+
+
+def _service_level_for_path(path: str, cache_update_service_level: int | str = 1) -> int:
+    if path == "cache":
+        return 0
+    if path == "token":
+        return 1
+    if path == "image":
+        return 2
+    if path == "cache_update":
+        if isinstance(cache_update_service_level, str):
+            return _service_level_for_path(_normalize_semantic_path(cache_update_service_level), 1)
+        return int(cache_update_service_level)
+    raise ValueError(f"unsupported semantic path: {path}")
 
 
 def _lookup_service_value(value: Any, service_level: int) -> float | None:

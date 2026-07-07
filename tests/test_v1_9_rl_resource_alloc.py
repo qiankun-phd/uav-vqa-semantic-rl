@@ -20,12 +20,15 @@ from vqa_semcom.rl.v19_ppo import (
     _project_semantic_feasible_action,
     _resource_floor_for_obs,
     _semantic_controller_reward,
+    _semantic_path_allowed,
+    expert_mobility_mode,
+    expert_semantic_path,
     normalize_hidden_layers,
     resolve_torch_device,
     train_ppo,
     train_two_timescale_ppo,
 )
-from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv
+from vqa_semcom.rl.v19_resource_env import V19LUTResourceEnv, V19StepRecord
 from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
 from run_v1_9_resource_alloc import SCENARIO_BENCHMARK_POLICIES, SCENARIO_BENCHMARK_SCENARIOS, choose_baseline_action
 
@@ -55,7 +58,7 @@ class V19RLResourceAllocTest(unittest.TestCase):
         ]:
             self.assertIn(key, obs)
         self.assertIn("lyapunov_queues", obs)
-        self.assertEqual(set(obs["lyapunov_queues"]), {"quality", "deadline", "energy", "risk", "utm"})
+        self.assertEqual(set(obs["lyapunov_queues"]), {"quality", "deadline", "energy", "risk", "utm", "defer", "cache_stale"})
         action = env.candidate_action(1, obs)
         next_obs, reward, done, info = env.step(action)
         self.assertIn("answer_accuracy_est", info)
@@ -75,6 +78,11 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn("q_energy", info)
         self.assertIn("q_risk", info)
         self.assertIn("q_utm", info)
+        self.assertIn("q_defer", info)
+        self.assertIn("q_cache_stale", info)
+        self.assertIn("semantic_path", info)
+        self.assertIn("defer_count", info)
+        self.assertIn("cache_eligible", info)
         self.assertIn("delay_s", info)
         self.assertIn("fly_delay_s", info)
         self.assertIn("sense_delay_s", info)
@@ -311,6 +319,37 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertIn(action["mobility_mode"], {"stay", "serve_task", "reposition", "avoid_conflict", "return_base"})
         self.assertEqual(len(action["waypoint_delta"]), 2)
 
+
+    def test_semantic_path_two_timescale_ppo_outputs_path_action(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=18, tasks_per_episode=3, state_version="v2")
+        try:
+            model, trace = train_two_timescale_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=1,
+                    update_epochs=1,
+                    hidden_size=32,
+                    semantic_reward_mode="semantic_utility",
+                    lyapunov_reward=True,
+                    semantic_path_actions=True,
+                    mobility_update_interval=3,
+                    device="cpu",
+                ),
+                seed=18,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 1)
+        self.assertIn("path_defer_ratio", trace[0])
+        obs = env.reset(seed=28)
+        action = TwoTimescalePPOPolicy(
+            env,
+            model,
+            PPOTrainConfig(hidden_size=32, semantic_path_actions=True, mobility_update_interval=3),
+        ).act(obs)
+        self.assertIn(action["semantic_path"], {"cache", "token", "image", "defer", "cache_update", "reject"})
+        self.assertIn("service_level", action)
+
     def test_tiny_proposed_semantic_controller_runs(self) -> None:
         env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=3, tasks_per_episode=3)
         try:
@@ -365,6 +404,85 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertGreater(cfg.deadline_overrun_penalty_weight, 0.0)
         self.assertGreater(cfg.token_fast_bandwidth_floor, cfg.semantic_token_bandwidth_floor)
         self.assertGreater(cfg.token_cache_fallback_overrun_ratio, 1.0)
+        self.assertFalse(cfg.semantic_path_actions)
+        self.assertGreater(cfg.defer_penalty_weight, 0.0)
+        self.assertGreater(cfg.cache_update_success_bonus, 0.0)
+        self.assertTrue(cfg.semantic_path_joint_feasible_mask)
+        self.assertTrue(cfg.cache_update_gate_enabled)
+        self.assertGreater(cfg.cache_update_overuse_penalty_weight, 0.0)
+        self.assertGreater(cfg.utm_violation_strong_penalty_weight, 0.0)
+        self.assertGreater(cfg.edge_overload_deadline_queue_boost, 1.0)
+
+
+    def test_semantic_path_mask_blocks_edge_overload_deadline_negative_paths(self) -> None:
+        obs = {
+            "scenario": "edge_overload",
+            "epsilon_k": 0.7,
+            "remaining_deadline_s": 1.0,
+            "cache_eligible": True,
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {"cache": True, "token": True, "image": True, "defer": True, "cache_update": True},
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.02, "joint_feasible": True},
+                "token": {"deadline_feasible": False, "deadline_slack_s": -0.2, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "cache_update": {"deadline_feasible": False, "deadline_slack_s": -0.1, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "defer": {"feasible": True, "deadline_feasible": True},
+            },
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertFalse(_semantic_path_allowed(obs, "token", cfg))
+        self.assertFalse(_semantic_path_allowed(obs, "cache_update", cfg))
+        self.assertTrue(_semantic_path_allowed(obs, "cache", cfg))
+
+    def test_cache_update_gate_requires_refresh_value_and_slack(self) -> None:
+        obs = {
+            "scenario": "nominal_patrol",
+            "epsilon_k": 0.7,
+            "remaining_deadline_s": 5.0,
+            "task_id": "t0",
+            "task_queue": [{"task_id": "t0", "area_id": "a", "task_type": "search"}],
+            "action_mask": {"service_level_allowed": {0: True, 1: True, 2: True}, "semantic_path_allowed": {"cache_update": True}},
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.01},
+                "cache_update": {"deadline_slack_s": 1.0, "utm_feasible": True, "joint_feasible": True, "resource_feasible": True},
+            },
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertFalse(_semantic_path_allowed(obs, "cache_update", cfg))
+        obs["candidate_path_metrics"]["cache"]["quality_gap"] = 0.2
+        obs["task_queue"].append({"task_id": "t1", "area_id": "a", "task_type": "search"})
+        self.assertTrue(_semantic_path_allowed(obs, "cache_update", cfg))
+
+    def test_projected_deadline_infeasible_cache_update_downgrades_to_cache(self) -> None:
+        env = _ProjectionEnv()
+        obs = {
+            "epsilon_k": 0.4,
+            "deadline_s": 0.8,
+            "scenario": "edge_overload",
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {"cache": True, "token": True, "image": True, "defer": True, "cache_update": True},
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.0, "joint_feasible": True},
+                "token": {"deadline_feasible": False, "deadline_slack_s": -0.2, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "cache_update": {"deadline_feasible": False, "deadline_slack_s": -0.4, "utm_feasible": True, "resource_feasible": True, "joint_feasible": False},
+                "defer": {"feasible": True, "deadline_feasible": True},
+            },
+            "uav_state": [{"uav_id": 0, "x_m": 0.0, "y_m": 0.0}],
+        }
+        current = env.candidate_action(1, obs)
+        current["semantic_path"] = "cache_update"
+        projected = _project_semantic_feasible_action(
+            env,
+            obs,
+            current,
+            PPOTrainConfig(semantic_path_actions=True, projected_deadline_downgrade=True),
+        )
+        self.assertEqual(projected.get("semantic_path"), "cache")
+        self.assertEqual(projected["service_level"], 0)
 
     def test_deadline_slack_reward_penalizes_low_snr_overrun(self) -> None:
         obs = {"epsilon_k": 0.6, "deadline_s": 1.0, "sensed_snr_db": -9.0, "snr_bin": "low"}
@@ -653,3 +771,126 @@ class _ProjectionEnv:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class V19SelectedPathMetricsTest(unittest.TestCase):
+    def test_step_record_exposes_selected_path_feasibility_fields(self):
+        fields = set(V19StepRecord.__dataclass_fields__)
+        self.assertIn("selected_path_joint_feasible", fields)
+        self.assertIn("selected_path_deadline_feasible", fields)
+        self.assertIn("selected_path_utm_feasible", fields)
+        self.assertIn("selected_path_deadline_slack_s", fields)
+        self.assertIn("selected_path_bottleneck_type", fields)
+        self.assertIn("oracle_mobility_joint_feasible", fields)
+        self.assertIn("rejected", fields)
+        self.assertIn("reject_feasible", fields)
+        self.assertIn("correct_reject", fields)
+        self.assertIn("wrong_reject", fields)
+
+
+class V19SemanticPathExpertTest(unittest.TestCase):
+    def _obs(self, **overrides):
+        obs = {
+            "epsilon_k": 0.70,
+            "remaining_deadline_s": 2.0,
+            "deadline_s": 2.0,
+            "defer_count": 0,
+            "cache_eligible": True,
+            "action_mask": {
+                "service_level_allowed": {0: True, 1: True, 2: True},
+                "semantic_path_allowed": {
+                    "cache": True,
+                    "token": True,
+                    "image": True,
+                    "defer": True,
+                    "cache_update": True,
+                    "reject": False,
+                },
+            },
+            "candidate_path_metrics": {
+                "cache": {"cache_eligible": True, "quality_gap": 0.02, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "token": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "image": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "bottleneck_type": "none"},
+                "cache_update": {"quality_gap": 0.0, "deadline_feasible": True, "semantic_feasible": True, "joint_feasible": True, "utm_feasible": True, "resource_feasible": True, "future_reuse_value": 1, "deadline_slack_s": 1.0, "bottleneck_type": "none"},
+                "defer": {"deadline_feasible": True, "joint_feasible": True, "feasible": True, "bottleneck_type": "none"},
+                "reject": {"feasible": False, "reject_feasible": False, "joint_feasible": False, "bottleneck_type": "none"},
+            },
+            "candidate_mobility_metrics": {
+                "token": {
+                    "serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+                    "avoid_conflict": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+                    "stay": {"joint_feasible": False, "deadline_feasible": True, "utm_feasible": True},
+                },
+                "image": {"serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True}},
+                "cache_update": {"serve_task": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True}},
+            },
+        }
+        obs.update(overrides)
+        return obs
+
+    def test_expert_prefers_joint_feasible_token_over_cache(self):
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(self._obs(), cfg), "token")
+
+    def test_expert_defer_is_last_resort(self):
+        obs = self._obs(cache_eligible=False)
+        for path in ["cache", "token", "image", "cache_update"]:
+            obs["candidate_path_metrics"][path]["joint_feasible"] = False
+            obs["candidate_path_metrics"][path]["deadline_feasible"] = False
+            obs["candidate_path_metrics"][path]["semantic_feasible"] = False
+        obs["candidate_path_metrics"]["cache"]["cache_eligible"] = False
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "defer")
+
+    def test_expert_rejects_when_all_service_paths_infeasible(self):
+        obs = self._obs(cache_eligible=False, scenario="edge_overload")
+        obs["action_mask"]["semantic_path_allowed"]["reject"] = True
+        obs["candidate_mobility_metrics"] = {}
+        for path in ["cache", "token", "image", "cache_update"]:
+            obs["candidate_path_metrics"][path].update(
+                joint_feasible=False,
+                deadline_feasible=False,
+                semantic_feasible=False,
+                resource_feasible=False,
+            )
+        obs["candidate_path_metrics"]["cache"]["cache_eligible"] = False
+        obs["candidate_path_metrics"]["reject"].update(feasible=True, reject_feasible=True, joint_feasible=True)
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "reject")
+
+    def test_expert_does_not_reject_joint_feasible_service(self):
+        obs = self._obs()
+        obs["action_mask"]["semantic_path_allowed"]["reject"] = True
+        obs["candidate_path_metrics"]["reject"].update(feasible=True, reject_feasible=True, joint_feasible=True)
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertEqual(expert_semantic_path(obs, cfg), "token")
+
+    def test_utm_infeasible_token_is_not_selected(self):
+        obs = self._obs(scenario="utm_conflict")
+        obs["candidate_path_metrics"]["token"]["utm_feasible"] = False
+        cfg = PPOTrainConfig(semantic_path_actions=True)
+        self.assertNotEqual(expert_semantic_path(obs, cfg), "token")
+
+    def test_bottleneck_queue_prefers_cache_or_defer_over_token(self):
+        obs = self._obs()
+        obs["candidate_path_metrics"]["cache"]["joint_feasible"] = False
+        obs["candidate_path_metrics"]["token"].update(
+            joint_feasible=False,
+            deadline_feasible=False,
+            semantic_feasible=True,
+            bottleneck_type="queue_delay",
+        )
+        obs["candidate_path_metrics"]["cache_update"].update(joint_feasible=False, deadline_feasible=False)
+        obs["candidate_path_metrics"]["image"].update(joint_feasible=False, deadline_feasible=False)
+        cfg = PPOTrainConfig(semantic_path_actions=True, bottleneck_aware_control=True)
+        self.assertIn(expert_semantic_path(obs, cfg), {"cache", "defer"})
+
+    def test_expert_mobility_prefers_avoid_conflict_when_utm_safe(self):
+        obs = self._obs(scenario="utm_conflict")
+        obs["candidate_mobility_metrics"]["token"] = {
+            "serve_task": {"joint_feasible": False, "deadline_feasible": True, "utm_feasible": False},
+            "avoid_conflict": {"joint_feasible": True, "deadline_feasible": True, "utm_feasible": True},
+            "stay": {"joint_feasible": False, "deadline_feasible": False, "utm_feasible": True},
+        }
+        cfg = PPOTrainConfig(semantic_path_actions=True, bottleneck_aware_control=True)
+        self.assertEqual(expert_mobility_mode(obs, "token", cfg), "avoid_conflict")

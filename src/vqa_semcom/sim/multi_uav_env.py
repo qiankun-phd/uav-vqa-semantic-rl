@@ -72,6 +72,11 @@ class SemanticCacheEntry:
     y_m: float
     cache_age: int
     updated_step: int
+    area_id: int = -1
+    question_type: str = ""
+    quality_lcb: float = 0.0
+    uncertainty: float = 0.0
+    reuse_count: int = 0
 
 
 @dataclass
@@ -89,6 +94,10 @@ class EnvTask:
     area_id: int
     area4d: Area4D
     completed: bool = False
+    task_status: str = "pending"
+    defer_count: int = 0
+    expired: bool = False
+    rejected: bool = False
     cache_age: int = 0
     last_sensed_snr_db: float = 0.0
     last_sinr_db: float = 0.0
@@ -337,6 +346,52 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "cache_age": 0,
         },
     },
+    "low_snr_soft": {
+        "description": "Paper preset: moderate weak-link scenario calibrated so path-greedy/oracle policies retain a non-trivial feasible region.",
+        "env": {
+            "num_uavs": 3,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 20,
+            "episode_steps": 12,
+            "area_spacing_m": 380.0,
+            "area_radius_m": 75.0,
+            "uav_altitude_m": 80.0,
+            "uav_speed_mps": 34.0,
+            "bandwidth_hz": 1_000_000.0,
+            "semantic_cache_capacity": 80,
+            "semantic_cache_radius_m": 220.0,
+            "semantic_cache_reuse_boost": 0.20,
+            "cache_hit_probability": {"fresh": 0.96, "stale": 0.72, "expired": 0.30},
+            "semantic_threshold_by_risk": {"normal": 0.48, "critical": 0.70, "high": 0.70},
+            "a2g": {
+                "path_loss_exponent": 2.65,
+                "excess_loss_db": 12.0,
+                "los_excess_loss_db": 4.0,
+                "nlos_excess_loss_db": 22.0,
+                "fading_mode": "slow_fading",
+                "slow_fading_std_db": 3.0,
+                "fading_correlation": 0.75,
+                "interference_overlap_scale": 0.04,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.14,
+            "risk_cycle": ["normal", "critical", "normal", "normal"],
+            "freshness_cycle": ["fresh", "stale", "fresh", "expired"],
+            "view_quality_cycle": ["medium", "medium", "good", "medium"],
+            "tau_scale": 1.55,
+            "tau_floor_s": 8.5,
+            "epsilon_scale": 0.85,
+            "epsilon_cap_by_risk": {"normal": 0.52, "critical": 0.70, "high": 0.70},
+        },
+        "semantic_cache_seed": {
+            "enabled": True,
+            "entries_per_area": 1,
+            "cache_age": 0,
+        },
+    },
     "edge_overload": {
         "description": "Paper preset: high edge CPU/GPU load and model-cache pressure for queue/resource-projection tests.",
         "env": {
@@ -367,6 +422,41 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "freshness_cycle": ["fresh", "fresh", "fresh", "stale"],
             "view_quality_cycle": ["good", "good", "medium", "good"],
             "tau_scale": 1.55,
+        },
+    },
+    "edge_overload_soft": {
+        "description": "Calibrated soft edge-overload preset with a non-zero feasible region while preserving edge pressure.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 22,
+            "episode_steps": 12,
+            "area_spacing_m": 150.0,
+            "area_radius_m": 75.0,
+            "uav_speed_mps": 26.0,
+            "edge_load_range": [0.38, 0.58],
+            "gpu_load_range": [0.34, 0.54],
+            "queue_delay_scale_s": 0.42,
+            "gpu_queue_delay_scale_s": 0.30,
+            "model_load_delay_s": 0.42,
+            "model_cache_hit_delay_s": 0.06,
+            "model_cache_capacity": 2,
+            "gpu_memory_capacity_mb": 6144.0,
+            "gpu_memory_load": 0.34,
+            "semantic_threshold_by_risk": {"normal": 0.50, "critical": 0.60, "high": 0.60},
+            "semantic_threshold_cap_by_risk": {"normal": 0.58, "critical": 0.60, "high": 0.60},
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "jitter_ratio": 0.10,
+            "risk_cycle": ["normal", "normal", "normal", "critical", "normal"],
+            "freshness_cycle": ["fresh", "fresh", "stale", "fresh"],
+            "view_quality_cycle": ["good", "medium", "good", "good"],
+            "tau_scale": 1.45,
+            "tau_floor_s": 6.5,
+            "epsilon_scale": 0.92,
+            "epsilon_cap_by_risk": {"normal": 0.56, "critical": 0.60, "high": 0.60},
         },
     },
     "utm_conflict": {
@@ -407,15 +497,65 @@ SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             "tau_scale": 0.85,
         },
     },
+    "utm_conflict_soft": {
+        "description": "Calibrated soft UTM preset with lower background conflict density and observable safe service routes.",
+        "env": {
+            "num_uavs": 4,
+            "num_edges": 1,
+            "num_areas": 4,
+            "tasks_per_episode": 20,
+            "episode_steps": 12,
+            "area_spacing_m": 280.0,
+            "area_radius_m": 70.0,
+            "area_altitude_min_m": 45.0,
+            "area_altitude_max_m": 120.0,
+            "reward_conflict": 2.0,
+            "semantic_threshold_by_risk": {"normal": 0.52, "critical": 0.70, "high": 0.70},
+            "semantic_threshold_cap_by_risk": {"normal": 0.58, "critical": 0.70, "high": 0.70},
+            "utm": {
+                "enabled": True,
+                "mode": "flight_intent_validation",
+                "background_operational_intents": True,
+                "background_operational_intent_density": 0.12,
+                "dss_available": True,
+                "dss_delay_s": 0.08,
+                "subscription_notification_delay_s": 0.22,
+                "spatial_buffer_m": 16.0,
+                "altitude_buffer_m": 4.0,
+                "temporal_buffer_steps": 0,
+            },
+        },
+        "task_layout": {
+            "generation_mode": "wave",
+            "force_same_area": False,
+            "jitter_ratio": 0.08,
+            "risk_cycle": ["normal", "normal", "critical", "normal"],
+            "freshness_cycle": ["fresh", "fresh", "stale", "fresh"],
+            "view_quality_cycle": ["good", "medium", "good", "medium"],
+            "operational_state_cycle": ["accepted", "activated", "accepted", "activated"],
+            "tau_scale": 1.35,
+            "tau_floor_s": 7.0,
+            "epsilon_scale": 0.90,
+            "epsilon_cap_by_risk": {"normal": 0.56, "critical": 0.70, "high": 0.70},
+        },
+        "semantic_cache_seed": {
+            "enabled": True,
+            "entries_per_area": 1,
+            "cache_age": 0,
+        },
+    },
 }
 
 
 SEMANTIC_SCENARIO_PRESET_NAMES = (
     "nominal_patrol",
     "disaster_hotspot",
+    "low_snr_soft",
     "low_snr_blockage",
     "edge_overload",
+    "edge_overload_soft",
     "utm_conflict",
+    "utm_conflict_soft",
 )
 
 
@@ -458,6 +598,9 @@ SERVICE_LEVELS: dict[int, dict[str, Any]] = {
 
 OPERATIONAL_INTENT_STATES = ("accepted", "activated", "nonconforming", "contingent")
 MOBILITY_MODES = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
+SEMANTIC_PATHS = ("cache", "token", "image", "defer", "cache_update", "reject")
+SEMANTIC_PATH_TO_SERVICE_LEVEL = {"cache": 0, "token": 1, "image": 2, "cache_update": 1}
+SERVICE_LEVEL_TO_SEMANTIC_PATH = {0: "cache", 1: "token", 2: "image", 3: "image"}
 
 
 FORMAL_SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
@@ -681,6 +824,10 @@ def scalability_presets() -> dict[str, dict[str, dict[str, Any]]]:
 def _normalize_scenario_name(name: str | None) -> str:
     if not name or name in {"default", "base"}:
         return "nominal"
+    aliases = {
+        "normal_patrol": "nominal_patrol",
+    }
+    name = aliases.get(name, name)
     if name not in SCENARIO_PRESETS:
         raise ValueError(f"unknown multi_uav_env scenario: {name}")
     return name
@@ -975,6 +1122,38 @@ class MultiUAVVQAEnv:
 
         parsed = self.parse_action(action, task)
         info = self.evaluate_action(parsed, task_id=task.task_id, mutate=False)
+        if str(parsed["semantic_path"]) == "reject":
+            task.rejected = True
+            task.task_status = "rejected"
+            self._advance_cache_ages()
+            self.step_count += 1
+            info["task_status"] = "rejected"
+            info["rejected"] = True
+            info["remaining_deadline_s"] = round(float(self._remaining_deadline_s(task)), 6)
+            reward = self._reject_reward(task, info)
+            info["reward"] = round(reward, 6)
+            self.last_info = info
+            done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+                t.completed or t.expired or t.rejected for t in self.tasks
+            )
+            return self._observation(), round(reward, 6), done, info
+        if str(parsed["semantic_path"]) == "defer":
+            task.defer_count += 1
+            task.task_status = "deferred"
+            self._advance_cache_ages()
+            self.step_count += 1
+            self._expire_overdue_tasks()
+            info["defer_count"] = int(task.defer_count)
+            info["remaining_deadline_s"] = round(float(self._remaining_deadline_s(task)), 6)
+            info["expired"] = bool(task.expired)
+            info["task_status"] = task.task_status
+            reward = self._reward(task, info)
+            info["reward"] = round(reward, 6)
+            self.last_info = info
+            done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+                t.completed or t.expired or t.rejected for t in self.tasks
+            )
+            return self._observation(), round(reward, 6), done, info
         success = bool(info["success"])
         uav = self.uavs[int(parsed["uav_assignment"]) % len(self.uavs)]
         edge = self.edges[int(parsed["edge_id"]) % len(self.edges)]
@@ -985,6 +1164,7 @@ class MultiUAVVQAEnv:
         task.operational_intent_state = str(info.get("operational_intent_state", task.operational_intent_state))
         if success:
             task.completed = True
+            task.task_status = "served"
             task.cache_age = 0
             task.freshness_bin = "fresh"
 
@@ -1002,13 +1182,27 @@ class MultiUAVVQAEnv:
         info["reward"] = round(reward, 6)
         self.last_info = info
         self.step_count += 1
-        done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(t.completed for t in self.tasks)
+        self._expire_overdue_tasks()
+        done = self.step_count >= int(self.env_cfg["episode_steps"]) or all(
+            t.completed or t.expired or t.rejected for t in self.tasks
+        )
         return self._observation(), round(reward, 6), done, info
 
     def parse_action(self, action: dict[str, Any], task: EnvTask | None = None) -> dict[str, Any]:
         task = task or self._front_task()
+        semantic_path = self._semantic_path(action)
         service_level = self._service_level(action)
+        if semantic_path in SEMANTIC_PATH_TO_SERVICE_LEVEL:
+            service_level = self._nearest_service_level(SEMANTIC_PATH_TO_SERVICE_LEVEL[semantic_path])
+        elif semantic_path == "reject":
+            service_level = -1
         sensing_default = "reuse_cache" if service_level == 0 else "observe"
+        if semantic_path == "defer":
+            sensing_default = "defer"
+        elif semantic_path == "reject":
+            sensing_default = "reject"
+        elif semantic_path == "cache_update":
+            sensing_default = "observe"
         assignment = action.get("uav_assignment", action.get("assigned_uav", None))
         if isinstance(assignment, list) and assignment:
             assignment = assignment[0]
@@ -1021,6 +1215,7 @@ class MultiUAVVQAEnv:
         mobility_mode = self._mobility_mode(action, service_level)
         return {
             "task_id": action.get("task_id", task.task_id if task else ""),
+            "semantic_path": semantic_path,
             "service_level": service_level,
             "sensing_decision": str(action.get("sensing_decision", sensing_default)),
             "bandwidth": self._bandwidth_hz(action),
@@ -1045,6 +1240,7 @@ class MultiUAVVQAEnv:
         }
         action = dict(presets.get(int(service_level), presets[max(self.service_levels())]))
         action["service_level"] = int(service_level)
+        action["semantic_path"] = SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(service_level), "image")
         action["mobility_mode"] = "stay" if int(service_level) == 0 else "serve_task"
         action["waypoint"] = None
         action["waypoint_delta"] = [0.0, 0.0]
@@ -1073,6 +1269,351 @@ class MultiUAVVQAEnv:
             "success": float(bool(info["success"])),
         }
 
+    def candidate_path_metrics(self, task: EnvTask | None = None) -> dict[str, dict[str, Any]]:
+        task = task or self._front_task()
+        if task is None:
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for path in SEMANTIC_PATHS:
+            out[path] = self._candidate_path_metric(task, path)
+        return out
+
+    def candidate_mobility_metrics(self, task: EnvTask | None = None) -> dict[str, dict[str, dict[str, Any]]]:
+        task = task or self._front_task()
+        if task is None:
+            return {}
+        out: dict[str, dict[str, dict[str, Any]]] = {}
+        for path in SEMANTIC_PATHS:
+            out[path] = {}
+            if path in {"defer", "reject"}:
+                continue
+            for mode in ("stay", "serve_task", "avoid_conflict", "reposition"):
+                action = self._path_action(path, task)
+                action["mobility_mode"] = mode
+                if mode == "reposition":
+                    nearest = self._nearest_uav(task)
+                    dx = task.x_m - nearest.x_m
+                    dy = task.y_m - nearest.y_m
+                    norm = max(1.0, math.hypot(dx, dy))
+                    step = min(norm, nearest.speed_mps * float(self.env_cfg["slot_s"]))
+                    action["waypoint_delta"] = [dx / norm * step, dy / norm * step]
+                info = self.evaluate_action(action, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+                accuracy_lcb = float(info.get("semantic_accuracy_lcb", 0.0))
+                semantic_feasible = bool(info.get("semantic_success", False)) and not bool(info.get("quality_violation", False))
+                if path == "cache":
+                    semantic_feasible = bool(info.get("cache_eligible", False)) and semantic_feasible
+                deadline_feasible = not bool(info.get("deadline_violation", False))
+                energy_feasible = not bool(info.get("battery_violation", False))
+                utm_feasible = not bool(info.get("utm_conflict_violation", info.get("utm_constraint_violation", False)))
+                resource_feasible = not bool(info.get("resource_violation", False))
+                out[path][mode] = {
+                    "utm_feasible": bool(utm_feasible),
+                    "arrival_delay_s": float(info.get("arrival_delay_s", 0.0)),
+                    "tx_delay_s": float(info.get("tx_delay_s", 0.0)),
+                    "total_delay_s": float(info.get("delay_s", 0.0)),
+                    "deadline_slack_s": float(info.get("remaining_deadline_s", self._remaining_deadline_s(task)))
+                    - float(info.get("delay_s", 0.0)),
+                    "semantic_feasible": bool(semantic_feasible),
+                    "deadline_feasible": bool(deadline_feasible),
+                    "energy_feasible": bool(energy_feasible),
+                    "resource_feasible": bool(resource_feasible),
+                    "joint_feasible": bool(
+                        not task.expired
+                        and semantic_feasible
+                        and deadline_feasible
+                        and energy_feasible
+                        and utm_feasible
+                        and resource_feasible
+                    ),
+                    "semantic_accuracy_lcb": accuracy_lcb,
+                    "utm_conflict_risk": float(info.get("utm_conflict_risk", 0.0)),
+                }
+        return out
+
+    def _candidate_path_metric(self, task: EnvTask, semantic_path: str) -> dict[str, Any]:
+        action = self._path_action(semantic_path, task)
+        info = self.evaluate_action(action, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+        if semantic_path == "reject":
+            reject_feasible = bool(info.get("reject_feasible", False))
+            return {
+                "feasible": reject_feasible,
+                "deadline_feasible": True,
+                "semantic_feasible": False,
+                "energy_feasible": True,
+                "utm_feasible": True,
+                "joint_feasible": reject_feasible,
+                "reject_feasible": reject_feasible,
+                "resource_feasible": True,
+                "accuracy_lcb": 0.0,
+                "accuracy_mean": 0.0,
+                "quality_gap": max(0.0, float(task.epsilon_k)),
+                "payload_kb": 0.0,
+                "delay_s": 0.0,
+                "energy_j": 0.0,
+                "deadline_slack_s": self._remaining_deadline_s(task),
+                "tx_delay_s": 0.0,
+                "queue_delay_s": 0.0,
+                "infer_delay_s": 0.0,
+                "load_delay_s": 0.0,
+                "arrival_delay_s": 0.0,
+                "bottleneck_type": str(info.get("reject_reason", "")),
+                "required_deadline_reduction_s": 0.0,
+                "required_rate_mbps": 0.0,
+                "required_bandwidth_hz": 0.0,
+                "edge_queue_pressure": 0.0,
+                "model_cache_hit": False,
+                "cache_eligible": False,
+                "utm_constraint_violation": False,
+                "utm_conflict_violation": False,
+                "service_level": -1,
+                "semantic_path": "reject",
+                "reject_reason": str(info.get("reject_reason", "")),
+                "expected_saved_energy_j": float(info.get("expected_saved_energy_j", 0.0)),
+                "expected_saved_delay_s": float(info.get("expected_saved_delay_s", 0.0)),
+                "avoided_utm_violation": bool(info.get("avoided_utm_violation", False)),
+                "avoided_deadline_violation": bool(info.get("avoided_deadline_violation", False)),
+                "task_success": False,
+                "semantic_success": False,
+            }
+        accuracy_lcb = float(info.get("semantic_accuracy_lcb", 0.0))
+        delay_s = float(info.get("delay_s", 0.0))
+        remaining = self._remaining_deadline_s(task)
+        expired = bool(task.expired or remaining <= 0.0)
+        semantic_feasible = bool(info.get("semantic_success", False)) and not bool(info.get("quality_violation", False))
+        if semantic_path == "cache":
+            semantic_feasible = bool(info.get("cache_eligible", False)) and semantic_feasible
+        deadline_feasible = (delay_s <= remaining) and not bool(info.get("deadline_violation", False))
+        energy_feasible = not bool(info.get("battery_violation", False))
+        utm_feasible = not bool(info.get("utm_conflict_violation", info.get("utm_constraint_violation", False)))
+        resource_feasible = not bool(info.get("resource_violation", False))
+        if semantic_path == "defer":
+            semantic_feasible = True
+            deadline_feasible, energy_feasible, utm_feasible = self._defer_feasibility(task)
+            resource_feasible = True
+        joint_feasible = bool(
+            not expired
+            and semantic_feasible
+            and deadline_feasible
+            and energy_feasible
+            and utm_feasible
+            and resource_feasible
+        )
+        tx_delay_s = float(info.get("tx_delay_s", 0.0))
+        queue_delay_s = float(info.get("queue_delay_s", 0.0))
+        infer_delay_s = float(info.get("infer_delay_s", 0.0))
+        load_delay_s = float(info.get("load_delay_s", 0.0))
+        arrival_delay_s = float(info.get("arrival_delay_s", info.get("fly_delay_s", 0.0)))
+        required = self._required_link_for_deadline(info, task)
+        edge_id = int(info.get("edge_id", action.get("edge_id", 0))) % max(1, len(self.edges))
+        edge = self.edges[edge_id]
+        model_cache_hit = load_delay_s <= float(self.env_cfg.get("model_cache_hit_delay_s", 0.0)) + 1e-9
+        return {
+            "feasible": joint_feasible,
+            "deadline_feasible": bool(deadline_feasible),
+            "semantic_feasible": bool(semantic_feasible),
+            "energy_feasible": bool(energy_feasible),
+            "utm_feasible": bool(utm_feasible),
+            "joint_feasible": bool(joint_feasible),
+            "resource_feasible": bool(resource_feasible),
+            "accuracy_lcb": accuracy_lcb,
+            "accuracy_mean": float(info.get("semantic_accuracy_mean", 0.0)),
+            "quality_gap": max(0.0, float(task.epsilon_k) - accuracy_lcb),
+            "payload_kb": float(info.get("payload_kb", 0.0)),
+            "delay_s": delay_s,
+            "energy_j": float(info.get("energy_j", 0.0)),
+            "deadline_slack_s": remaining - delay_s,
+            "tx_delay_s": tx_delay_s,
+            "queue_delay_s": queue_delay_s,
+            "infer_delay_s": infer_delay_s,
+            "load_delay_s": load_delay_s,
+            "arrival_delay_s": arrival_delay_s,
+            "bottleneck_type": self._candidate_bottleneck_type(
+                expired=expired,
+                semantic_feasible=semantic_feasible,
+                deadline_feasible=deadline_feasible,
+                energy_feasible=energy_feasible,
+                utm_feasible=utm_feasible,
+                resource_feasible=resource_feasible,
+                tx_delay_s=tx_delay_s,
+                queue_delay_s=queue_delay_s,
+                infer_delay_s=infer_delay_s,
+                load_delay_s=load_delay_s,
+                arrival_delay_s=arrival_delay_s,
+            ),
+            "required_deadline_reduction_s": max(0.0, delay_s - remaining),
+            "required_rate_mbps": required["required_rate_mbps"],
+            "required_bandwidth_hz": required["required_bandwidth_hz"],
+            "edge_queue_pressure": min(1.0, 0.5 * float(edge.load) + 0.5 * float(edge.gpu_load)),
+            "model_cache_hit": bool(model_cache_hit),
+            "cache_eligible": bool(info.get("cache_eligible", False)),
+            "utm_constraint_violation": bool(info.get("utm_constraint_violation", False)),
+            "utm_conflict_violation": bool(info.get("utm_conflict_violation", False)),
+            "service_level": int(info.get("service_level", action.get("service_level", 0))),
+            "semantic_path": semantic_path,
+            "reject_reason": "",
+            "expected_saved_energy_j": 0.0,
+            "expected_saved_delay_s": 0.0,
+            "avoided_utm_violation": False,
+            "avoided_deadline_violation": False,
+            "task_success": bool(info.get("success", False)),
+        }
+
+    @staticmethod
+    def _candidate_bottleneck_type(
+        *,
+        expired: bool,
+        semantic_feasible: bool,
+        deadline_feasible: bool,
+        energy_feasible: bool,
+        utm_feasible: bool,
+        resource_feasible: bool,
+        tx_delay_s: float,
+        queue_delay_s: float,
+        infer_delay_s: float,
+        load_delay_s: float,
+        arrival_delay_s: float,
+    ) -> str:
+        if expired:
+            return "expired"
+        if not semantic_feasible:
+            return "semantic_quality"
+        if not utm_feasible:
+            return "utm"
+        if not energy_feasible:
+            return "energy"
+        if not resource_feasible:
+            return "resource"
+        if not deadline_feasible:
+            parts = {
+                "tx_delay": tx_delay_s,
+                "queue_delay": queue_delay_s,
+                "mobility": arrival_delay_s,
+                "resource": infer_delay_s + load_delay_s,
+            }
+            return max(parts, key=parts.get)
+        return "none"
+
+    def _required_link_for_deadline(self, info: dict[str, Any], task: EnvTask) -> dict[str, float]:
+        remaining = float(info.get("remaining_deadline_s", self._remaining_deadline_s(task)))
+        payload_kb = float(info.get("payload_kb", 0.0))
+        tx_delay_s = float(info.get("tx_delay_s", 0.0))
+        delay_s = float(info.get("delay_s", 0.0))
+        current_rate_mbps = max(1e-9, float(info.get("rate_mbps", 0.0)))
+        current_bandwidth_hz = max(1.0, float(info.get("bandwidth_hz", self.env_cfg["bandwidth_hz"])))
+        non_tx_delay_s = max(0.0, delay_s - tx_delay_s)
+        tx_budget_s = max(1e-9, remaining - non_tx_delay_s)
+        required_rate_mbps = (payload_kb * 8.0 / 1000.0) / tx_budget_s if payload_kb > 0.0 else 0.0
+        spectral_efficiency_mbps_per_hz = current_rate_mbps / current_bandwidth_hz
+        if required_rate_mbps <= current_rate_mbps:
+            required_bandwidth_hz = current_bandwidth_hz
+        elif spectral_efficiency_mbps_per_hz > 0.0:
+            required_bandwidth_hz = required_rate_mbps / spectral_efficiency_mbps_per_hz
+        else:
+            required_bandwidth_hz = float("inf")
+        return {
+            "required_rate_mbps": required_rate_mbps,
+            "required_bandwidth_hz": required_bandwidth_hz,
+        }
+
+    def _path_action(self, semantic_path: str, task: EnvTask) -> dict[str, Any]:
+        if semantic_path == "reject":
+            return {"task_id": task.task_id, "semantic_path": "reject", "service_level": -1, "mobility_mode": "stay"}
+        if semantic_path == "defer":
+            return {"task_id": task.task_id, "semantic_path": "defer", "service_level": 0, "mobility_mode": "stay"}
+        service_level = SEMANTIC_PATH_TO_SERVICE_LEVEL.get(semantic_path, 0)
+        action = self.candidate_action(service_level, {"task_id": task.task_id, "risk_level": task.risk_level})
+        action["semantic_path"] = semantic_path
+        if semantic_path == "cache_update":
+            action["sensing_decision"] = "observe"
+        return action
+
+    def _defer_feasibility(self, task: EnvTask) -> tuple[bool, bool, bool]:
+        remaining_after_defer = self._remaining_deadline_s(task) - float(self.env_cfg["slot_s"])
+        if task.expired or remaining_after_defer <= 0.0:
+            return False, True, True
+        service_infos = [
+            self.evaluate_action(self._path_action(path, task), task_id=task.task_id, obs={"task_id": task.task_id})
+            for path in ("cache", "token", "image", "cache_update")
+        ]
+        if any(
+            not bool(info.get("quality_violation", False))
+            and not bool(info.get("deadline_violation", False))
+            and not bool(info.get("battery_violation", False))
+            and not bool(info.get("resource_violation", False))
+            and not bool(info.get("utm_conflict_violation", False))
+            for info in service_infos
+        ):
+            return False, True, True
+        edge_decay = float(self.env_cfg.get("edge_load_decay", 1.0))
+        edge_improvement = max(0.0, 1.0 - edge_decay)
+        for info in service_infos:
+            if bool(info.get("quality_violation", False)):
+                continue
+            if bool(info.get("battery_violation", False)) or bool(info.get("resource_violation", False)):
+                continue
+            if bool(info.get("utm_conflict_violation", False)):
+                continue
+            delay_s = float(info.get("delay_s", 0.0))
+            fly_delay_s = float(info.get("fly_delay_s", 0.0))
+            queue_delay_s = float(info.get("queue_delay_s", 0.0))
+            expected_delay_after_defer = max(
+                0.0,
+                delay_s
+                - min(fly_delay_s, float(self.env_cfg["slot_s"]))
+                - edge_improvement * queue_delay_s,
+            )
+            if expected_delay_after_defer <= remaining_after_defer:
+                return True, True, True
+        return False, True, True
+
+    def _remaining_deadline_s(self, task: EnvTask) -> float:
+        elapsed = max(0, self.step_count - int(task.generation_time)) * float(self.env_cfg["slot_s"])
+        return max(0.0, float(task.tau_k) - elapsed)
+
+    def _cache_freshness_from_age(self, cache_age: int) -> str:
+        return self._freshness_from_age(int(cache_age))
+
+    def _cache_status(self, task: EnvTask) -> dict[str, Any]:
+        exact_entries: list[SemanticCacheEntry] = []
+        nearby_entries: list[SemanticCacheEntry] = []
+        radius = float(self.env_cfg["semantic_cache_radius_m"])
+        for entry in self.semantic_cache_entries:
+            same_type = (entry.question_type or entry.task_type) == task.task_type
+            if not same_type:
+                continue
+            exact = entry.task_id == task.task_id or int(entry.area_id) == int(task.area_id)
+            nearby = math.hypot(entry.x_m - task.x_m, entry.y_m - task.y_m) <= radius
+            if exact:
+                exact_entries.append(entry)
+            elif nearby:
+                nearby_entries.append(entry)
+        candidates = [*exact_entries, *nearby_entries]
+        if candidates:
+            best = max(candidates, key=lambda item: (float(item.quality_lcb), -int(item.cache_age), float(item.priority)))
+            quality_lcb = float(best.quality_lcb)
+            cache_age = int(best.cache_age)
+            freshness = self._cache_freshness_from_age(cache_age)
+            uncertainty = float(best.uncertainty)
+        else:
+            best = None
+            quality_lcb = 0.0
+            cache_age = int(task.cache_age)
+            freshness = self._freshness_from_age(cache_age)
+            uncertainty = 1.0
+        exact_match = bool(exact_entries)
+        nearby_match = bool(nearby_entries)
+        eligible = bool(candidates) and freshness != "expired" and quality_lcb >= float(task.epsilon_k)
+        return {
+            "cache_exact_match": exact_match,
+            "cache_nearby_match": nearby_match,
+            "cache_eligible": eligible,
+            "cache_quality_lcb": quality_lcb,
+            "cache_uncertainty": uncertainty,
+            "cache_age": cache_age,
+            "cache_freshness_bin": freshness,
+            "cache_entry_task_id": best.task_id if best else "",
+        }
+
     def evaluate_action(
         self,
         action: dict[str, Any],
@@ -1084,6 +1625,12 @@ class MultiUAVVQAEnv:
         if task is None:
             return self._empty_info()
         parsed = self.parse_action(action, task)
+        if str(parsed["semantic_path"]) == "reject":
+            return self._reject_info(task, parsed)
+        if str(parsed["semantic_path"]) == "defer":
+            return self._defer_info(task, parsed)
+        if task.expired or self._remaining_deadline_s(task) <= 0.0:
+            return self._expired_task_info(task, parsed)
         uav = self.uavs[int(parsed["uav_assignment"]) % len(self.uavs)]
         edge = self.edges[int(parsed["edge_id"]) % len(self.edges)]
         link = self._link_budget(task, uav, parsed, interference_dbm=None)
@@ -1098,6 +1645,10 @@ class MultiUAVVQAEnv:
         if int(parsed["service_level"]) == 0:
             accuracy *= 0.85 + 0.15 * cache_probability
         semantic_lcb = float(semantic_estimate.accuracy_lcb)
+        cache_status = self._cache_status(task)
+        if str(parsed["semantic_path"]) == "cache":
+            semantic_lcb = float(cache_status["cache_quality_lcb"]) if bool(cache_status["cache_eligible"]) else 0.0
+            accuracy = max(accuracy, semantic_lcb) if bool(cache_status["cache_eligible"]) else 0.0
         semantic_payload_kb = float(semantic_estimate.payload_kb)
         payload_bytes = semantic_payload_kb * 1024.0
         delay = self._delay_parts(task, uav, edge, parsed, payload_bytes, link)
@@ -1108,10 +1659,14 @@ class MultiUAVVQAEnv:
         delay["utm_notification_delay_s"] = float(utm["subscription_notification_delay_s"])
         delay["total_delay_s"] += delay["utm_dss_delay_s"] + delay["utm_notification_delay_s"]
         energy = self._energy_parts(delay, parsed)
+        remaining_deadline_s = self._remaining_deadline_s(task)
         semantic_quality_gap = max(0.0, task.epsilon_k - semantic_lcb)
         semantic_success = semantic_lcb >= task.epsilon_k
         quality_violation = not semantic_success
-        deadline_violation = delay["total_delay_s"] > task.tau_k
+        if str(parsed["semantic_path"]) == "cache" and not bool(cache_status["cache_eligible"]):
+            quality_violation = True
+            semantic_success = False
+        deadline_violation = delay["total_delay_s"] > remaining_deadline_s
         battery_violation = energy["total_energy_j"] > uav.battery_j - float(self.env_cfg["return_energy_reserve_j"])
         gpu_memory_ok = self._gpu_memory_ok(edge, int(parsed["service_level"]))
         utm_constraint_violation = bool(utm["utm_constraint_violation"])
@@ -1144,6 +1699,10 @@ class MultiUAVVQAEnv:
             "task_type": task.task_type,
             "question_type": task.task_type,
             "risk_level": task.risk_level,
+            "task_status": task.task_status,
+            "remaining_deadline_s": round(float(remaining_deadline_s), 6),
+            "defer_count": int(task.defer_count),
+            "expired": bool(task.expired),
             "view_quality_bin": task.view_quality_bin,
             "freshness_bin": task.freshness_bin,
             "deadline_s": round(float(task.tau_k), 6),
@@ -1159,6 +1718,7 @@ class MultiUAVVQAEnv:
             "semantic_payload_kb": round(semantic_payload_kb, 6),
             "semantic_quality_gap": round(semantic_quality_gap, 6),
             "semantic_success": bool(semantic_success),
+            "semantic_path": str(parsed["semantic_path"]),
             "delay_s": round(delay["total_delay_s"], 6),
             "energy_j": round(energy["total_energy_j"], 6),
             "payload_kb": round(payload_kb, 6),
@@ -1216,6 +1776,7 @@ class MultiUAVVQAEnv:
             "interference_dbm": round(float(link["interference_dbm"]), 6),
             "fading_db": round(float(link["fading_db"]), 6),
             "cache_hit_probability": round(cache_probability, 6),
+            **cache_status,
             "semantic_cache_hit": bool(cache_probability >= 0.5 and int(parsed["service_level"]) == 0),
             "gpu_memory_ok": bool(gpu_memory_ok),
             "gpu_memory_used_mb": round(edge.gpu_memory_used_mb, 6),
@@ -1228,6 +1789,177 @@ class MultiUAVVQAEnv:
         info.update({key: round(value, 6) for key, value in energy.items()})
         if mutate:
             self.last_info = info
+        return info
+
+    def _reject_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
+        service_paths = ("cache", "token", "image", "cache_update")
+        if task.expired or self._remaining_deadline_s(task) <= 0.0:
+            service_infos: list[dict[str, Any]] = []
+            reject_feasible = True
+            reject_reason = "expired"
+        else:
+            service_infos = [
+                self.evaluate_action(self._path_action(path, task), task_id=task.task_id, obs={"task_id": task.task_id})
+                for path in service_paths
+            ]
+            feasible_infos = [
+                info
+                for info in service_infos
+                if not bool(info.get("quality_violation", False))
+                and not bool(info.get("deadline_violation", False))
+                and not bool(info.get("battery_violation", False))
+                and not bool(info.get("resource_violation", False))
+                and not bool(info.get("utm_conflict_violation", False))
+            ]
+            reject_feasible = not feasible_infos
+            reject_reason = self._reject_reason(service_infos)
+        expected_saved_delay_s = min((float(info.get("delay_s", 0.0)) for info in service_infos), default=0.0)
+        expected_saved_energy_j = min((float(info.get("energy_j", 0.0)) for info in service_infos), default=0.0)
+        cache_status = self._cache_status(task)
+        info = self._empty_info()
+        info.update(
+            {
+                "episode": self.episode,
+                "episode_step": self.step_count,
+                "scenario": self.scenario_name,
+                "formal_scenario": self.formal_scenario_name,
+                "benchmark_split": self.benchmark_split,
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "question_type": task.task_type,
+                "risk_level": task.risk_level,
+                "view_quality_bin": task.view_quality_bin,
+                "freshness_bin": task.freshness_bin,
+                "deadline_s": round(float(task.tau_k), 6),
+                "remaining_deadline_s": round(float(self._remaining_deadline_s(task)), 6),
+                "epsilon_k": round(float(task.epsilon_k), 6),
+                "priority": round(float(task.priority), 6),
+                "task_status": "rejected",
+                "defer_count": int(task.defer_count),
+                "expired": bool(task.expired),
+                "rejected": True,
+                "semantic_path": "reject",
+                "service_level": -1,
+                "sensing_decision": str(action.get("sensing_decision", "reject")),
+                "answer_accuracy_est": 0.0,
+                "semantic_accuracy_mean": 0.0,
+                "semantic_accuracy_lcb": 0.0,
+                "semantic_success": False,
+                "success": False,
+                "quality_violation": False,
+                "deadline_violation": False,
+                "risk_violation": False,
+                "resource_violation": False,
+                "utm_constraint_violation": False,
+                "utm_conflict_violation": False,
+                "reject_feasible": bool(reject_feasible),
+                "reject_reason": reject_reason,
+                "expected_saved_energy_j": round(expected_saved_energy_j, 6),
+                "expected_saved_delay_s": round(expected_saved_delay_s, 6),
+                "avoided_utm_violation": any(bool(item.get("utm_conflict_violation", False)) for item in service_infos),
+                "avoided_deadline_violation": any(bool(item.get("deadline_violation", False)) for item in service_infos),
+                "reject_penalty": round(abs(self._reject_reward(task, {"reject_feasible": reject_feasible})), 6),
+                "delay_s": 0.0,
+                "energy_j": 0.0,
+                "payload_kb": 0.0,
+                "tx_delay_s": 0.0,
+                "fly_delay_s": 0.0,
+                "arrival_delay_s": 0.0,
+                "semantic_payload_kb": 0.0,
+                "cache_hit_probability": round(self._semantic_cache_hit_probability(task), 6),
+                **cache_status,
+            }
+        )
+        return info
+
+    @staticmethod
+    def _reject_reason(service_infos: list[dict[str, Any]]) -> str:
+        reasons: set[str] = set()
+        for info in service_infos:
+            if bool(info.get("quality_violation", False)):
+                reasons.add("semantic_quality")
+            if bool(info.get("deadline_violation", False)):
+                reasons.add("deadline")
+            if bool(info.get("utm_conflict_violation", False)):
+                reasons.add("utm")
+            if bool(info.get("battery_violation", False)):
+                reasons.add("energy")
+            if bool(info.get("resource_violation", False)):
+                reasons.add("resource")
+        if not reasons:
+            return "mixed"
+        return next(iter(reasons)) if len(reasons) == 1 else "mixed"
+
+    def _expired_task_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
+        cache_status = self._cache_status(task)
+        info = self._empty_info()
+        info.update(
+            {
+                "episode": self.episode,
+                "episode_step": self.step_count,
+                "scenario": self.scenario_name,
+                "formal_scenario": self.formal_scenario_name,
+                "benchmark_split": self.benchmark_split,
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "question_type": task.task_type,
+                "risk_level": task.risk_level,
+                "view_quality_bin": task.view_quality_bin,
+                "freshness_bin": task.freshness_bin,
+                "deadline_s": round(float(task.tau_k), 6),
+                "remaining_deadline_s": 0.0,
+                "epsilon_k": round(float(task.epsilon_k), 6),
+                "priority": round(float(task.priority), 6),
+                "task_status": "expired",
+                "defer_count": int(task.defer_count),
+                "expired": True,
+                "semantic_path": str(action.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(action.get("service_level", 0)), "cache"))),
+                "service_level": int(action.get("service_level", 0)),
+                "quality_violation": True,
+                "deadline_violation": True,
+                "risk_violation": bool(task.risk_level == "critical"),
+                "success": False,
+                "cache_hit_probability": round(self._semantic_cache_hit_probability(task), 6),
+                **cache_status,
+            }
+        )
+        return info
+
+    def _defer_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
+        remaining = self._remaining_deadline_s(task)
+        expired = remaining <= 0.0 or bool(task.expired)
+        cache_status = self._cache_status(task)
+        info = self._empty_info()
+        info.update(
+            {
+                "episode": self.episode,
+                "episode_step": self.step_count,
+                "scenario": self.scenario_name,
+                "formal_scenario": self.formal_scenario_name,
+                "benchmark_split": self.benchmark_split,
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "question_type": task.task_type,
+                "risk_level": task.risk_level,
+                "view_quality_bin": task.view_quality_bin,
+                "freshness_bin": task.freshness_bin,
+                "deadline_s": round(float(task.tau_k), 6),
+                "remaining_deadline_s": round(float(remaining), 6),
+                "epsilon_k": round(float(task.epsilon_k), 6),
+                "priority": round(float(task.priority), 6),
+                "task_status": "expired" if expired else "deferred",
+                "defer_count": int(task.defer_count),
+                "expired": bool(expired),
+                "semantic_path": "defer",
+                "service_level": 0,
+                "sensing_decision": str(action.get("sensing_decision", "defer")),
+                "quality_violation": False,
+                "deadline_violation": bool(expired),
+                "success": False,
+                "cache_hit_probability": round(self._semantic_cache_hit_probability(task), 6),
+                **cache_status,
+            }
+        )
         return info
 
     def semantic_service_route(
@@ -1306,11 +2038,13 @@ class MultiUAVVQAEnv:
         return {
             "type": "hybrid",
             "service_levels": self.service_levels(),
+            "semantic_paths": list(SEMANTIC_PATHS),
+            "semantic_path_to_service_level": dict(SEMANTIC_PATH_TO_SERVICE_LEVEL),
             "mobility_modes": list(MOBILITY_MODES),
             "num_uavs": len(self.uavs),
             "num_edges": len(self.edges),
-            "high_level": ["task_id", "uav_assignment", "edge_id", "sensing_decision", "mobility_mode"],
-            "low_level_discrete": ["service_level", "mobility_mode"],
+            "high_level": ["task_id", "semantic_path", "uav_assignment", "edge_id", "sensing_decision", "mobility_mode"],
+            "low_level_discrete": ["semantic_path", "service_level", "mobility_mode"],
             "low_level_continuous": ["bandwidth", "power", "cpu_share", "gpu_share", "waypoint_delta", "altitude_delta"],
             "constraint_mask": "action_mask",
         }
@@ -1335,6 +2069,7 @@ class MultiUAVVQAEnv:
             "active_task_ids": [task.task_id for task in active],
             "active_task_mask": [1.0 for _ in active],
             "service_level_allowed": service_allowed,
+            "semantic_path_allowed": {path: True for path in SEMANTIC_PATHS},
             "mobility_mode_allowed": {mode: True for mode in MOBILITY_MODES},
             "feasible_mobility_mask": self._feasible_mobility_mask(active),
             "uav_battery_ok": {
@@ -1420,6 +2155,8 @@ class MultiUAVVQAEnv:
             risk = self._cycled_value(layout.get("risk_cycle"), idx, row.get("risk_level", "normal"))
             generation = self._generation_step(idx, area_id, layout)
             tau = float(row.get("tau_k", 3.0 if risk == "critical" else 5.0)) * float(layout.get("tau_scale", 1.0))
+            if "tau_floor_s" in layout:
+                tau = max(tau, float(layout["tau_floor_s"]))
             freshness = self._cycled_value(layout.get("freshness_cycle"), idx, row.get("freshness_bin") or "")
             if freshness:
                 cache_age = self._cache_age_for_freshness(freshness)
@@ -1469,6 +2206,14 @@ class MultiUAVVQAEnv:
             epsilon = min(epsilon, float(caps[risk]))
         elif "normal" in caps:
             epsilon = min(epsilon, float(caps["normal"]))
+        layout = self.scenario_cfg.get("task_layout", {})
+        epsilon *= float(layout.get("epsilon_scale", 1.0))
+        layout_caps = layout.get("epsilon_cap_by_risk", {})
+        if isinstance(layout_caps, dict):
+            if risk in layout_caps:
+                epsilon = min(epsilon, float(layout_caps[risk]))
+            elif "normal" in layout_caps:
+                epsilon = min(epsilon, float(layout_caps["normal"]))
         return epsilon
 
     def _initial_operational_intent_state(self, idx: int, risk: str) -> str:
@@ -1537,6 +2282,10 @@ class MultiUAVVQAEnv:
                     y_m=task.y_m,
                     cache_age=cache_age,
                     updated_step=-1,
+                    area_id=task.area_id,
+                    question_type=task.task_type,
+                    quality_lcb=max(float(task.epsilon_k), 0.75),
+                    uncertainty=0.05,
                 )
             )
         entries.sort(key=lambda item: (-item.priority, item.cache_age, item.task_id))
@@ -1552,13 +2301,17 @@ class MultiUAVVQAEnv:
         return sorted(dict.fromkeys(bins))
 
     def _active_tasks(self) -> list[EnvTask]:
-        return [task for task in self.tasks if not task.completed and task.generation_time <= self.step_count]
+        return [
+            task
+            for task in self.tasks
+            if not task.completed and not task.expired and not task.rejected and task.generation_time <= self.step_count
+        ]
 
     def _front_task(self) -> EnvTask | None:
         active = self._active_tasks()
         if active:
             return min(active, key=lambda task: (-(task.priority / max(0.1, task.tau_k)), task.generation_time))
-        pending = [task for task in self.tasks if not task.completed]
+        pending = [task for task in self.tasks if not task.completed and not task.expired and not task.rejected]
         return min(pending, key=lambda task: task.generation_time) if pending else None
 
     def _select_task(self, action: dict[str, Any]) -> EnvTask | None:
@@ -1591,6 +2344,24 @@ class MultiUAVVQAEnv:
         if requested in levels:
             return requested
         return min(levels, key=lambda level: abs(level - requested))
+
+    def _nearest_service_level(self, requested: int) -> int:
+        levels = self.service_levels()
+        if requested in levels:
+            return requested
+        return min(levels, key=lambda level: abs(level - requested))
+
+    @staticmethod
+    def _semantic_path(action: dict[str, Any]) -> str:
+        raw = action.get("semantic_path", action.get("path", None))
+        if raw is None:
+            try:
+                service_level = int(action.get("service_level", 0))
+            except (TypeError, ValueError):
+                service_level = 0
+            return SERVICE_LEVEL_TO_SEMANTIC_PATH.get(service_level, "image")
+        path = str(raw)
+        return path if path in SEMANTIC_PATHS else SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(action.get("service_level", 0)), "cache")
 
     def _bandwidth_hz(self, action: dict[str, Any]) -> float:
         value = float(action.get("bandwidth", action.get("bandwidth_hz", self.env_cfg["bandwidth_hz"])))
@@ -2031,7 +2802,7 @@ class MultiUAVVQAEnv:
         base = float(self.env_cfg["cache_hit_probability"].get(task.freshness_bin, 0.0))
         reusable = any(
             entry.task_id != task.task_id
-            and entry.task_type == task.task_type
+            and (entry.question_type or entry.task_type) == task.task_type
             and math.hypot(entry.x_m - task.x_m, entry.y_m - task.y_m) <= float(self.env_cfg["semantic_cache_radius_m"])
             for entry in self.semantic_cache_entries
         )
@@ -2179,6 +2950,10 @@ class MultiUAVVQAEnv:
                     y_m=task.y_m,
                     cache_age=0,
                     updated_step=self.step_count,
+                    area_id=task.area_id,
+                    question_type=task.task_type,
+                    quality_lcb=float(info.get("semantic_accuracy_lcb", 0.0)),
+                    uncertainty=float(info.get("semantic_uncertainty", 0.0)),
                 )
             )
         dedup: dict[tuple[str, str], SemanticCacheEntry] = {}
@@ -2198,6 +2973,14 @@ class MultiUAVVQAEnv:
             task.cache_age += 1
             task.freshness_bin = self._freshness_from_age(task.cache_age)
 
+    def _expire_overdue_tasks(self) -> None:
+        for task in self.tasks:
+            if task.completed or task.expired:
+                continue
+            if self._remaining_deadline_s(task) <= 0.0:
+                task.expired = True
+                task.task_status = "expired"
+
     def _freshness_from_age(self, cache_age: int) -> str:
         thresholds = self.env_cfg["freshness_slots"]
         if cache_age <= int(thresholds["fresh"]):
@@ -2216,6 +2999,11 @@ class MultiUAVVQAEnv:
             - float(self.env_cfg["reward_conflict"]) * float(bool(info["airspace_conflict"]))
         )
 
+    def _reject_reward(self, task: EnvTask, info: dict[str, Any]) -> float:
+        feasible = bool(info.get("reject_feasible", False))
+        base = 0.25 if feasible else 2.0 * float(self.env_cfg["reward_violation"])
+        return -base * float(task.priority)
+
     def _observation(self) -> dict[str, Any]:
         task = self._front_task()
         if task is None:
@@ -2231,6 +3019,13 @@ class MultiUAVVQAEnv:
                 "risk_level": "",
                 "view_quality_bin": "",
                 "freshness_bin": "",
+                "task_status": "",
+                "remaining_deadline_s": 0.0,
+                "defer_count": 0,
+                "expired": False,
+                "rejected": False,
+                "reject_feasible": False,
+                "reject_reason": "",
                 "operational_intent_id": "",
                 "operational_intent_state": "",
                 "sensed_snr_db": 0.0,
@@ -2238,6 +3033,8 @@ class MultiUAVVQAEnv:
                 "uav_state": [asdict(uav) for uav in self.uavs],
                 "edge_load": [edge.load for edge in self.edges],
                 "cache_state": self._cache_state(None),
+                "candidate_path_metrics": {},
+                "candidate_mobility_metrics": {},
                 "task_queue": [],
                 "pending_tasks": 0,
                 "feasible_uavs": [],
@@ -2281,6 +3078,11 @@ class MultiUAVVQAEnv:
             "risk_level": task.risk_level,
             "view_quality_bin": task.view_quality_bin,
             "freshness_bin": task.freshness_bin,
+            "task_status": task.task_status,
+            "remaining_deadline_s": round(float(self._remaining_deadline_s(task)), 6),
+            "defer_count": int(task.defer_count),
+            "expired": bool(task.expired),
+            "rejected": bool(task.rejected),
             "operational_intent_id": task.operational_intent_id,
             "operational_intent_state": task.operational_intent_state,
             "sensed_snr_db": round(float(link["snr_db"]), 6),
@@ -2295,11 +3097,16 @@ class MultiUAVVQAEnv:
             "uav_state": [asdict(uav) for uav in self.uavs],
             "edge_load": [edge.load for edge in self.edges],
             "cache_state": self._cache_state(task),
+            "candidate_path_metrics": self.candidate_path_metrics(task),
+            "candidate_mobility_metrics": self.candidate_mobility_metrics(task),
             "task_queue": [self._task_obs(item) for item in self._active_tasks()],
-            "pending_tasks": sum(1 for item in self.tasks if not item.completed),
+            "pending_tasks": sum(1 for item in self.tasks if not item.completed and not item.expired and not item.rejected),
             "feasible_uavs": [uav.uav_id for uav in self.uavs if uav.battery_j > float(self.env_cfg["return_energy_reserve_j"])],
             "action_mask": self.action_mask(),
         }
+        reject_metric = obs["candidate_path_metrics"].get("reject", {})
+        obs["reject_feasible"] = bool(reject_metric.get("reject_feasible", reject_metric.get("joint_feasible", False)))
+        obs["reject_reason"] = str(reject_metric.get("reject_reason", ""))
         obs.update(self._mobility_observation(task))
         obs["vector"] = self._observation_vector(obs)
         obs["graph"] = self.graph_observation()
@@ -2436,15 +3243,28 @@ class MultiUAVVQAEnv:
     def _task_obs(self, task: EnvTask) -> dict[str, Any]:
         data = asdict(task)
         data["area4d"] = asdict(task.area4d)
+        data["task_status"] = task.task_status
+        data["remaining_deadline_s"] = round(float(self._remaining_deadline_s(task)), 6)
+        data["defer_count"] = int(task.defer_count)
+        data["expired"] = bool(task.expired)
+        data["rejected"] = bool(task.rejected)
         return data
 
     def _cache_state(self, task: EnvTask | None) -> dict[str, Any]:
+        status = self._cache_status(task) if task else {}
         return {
             "cached_completed_tasks": sum(1 for item in self.tasks if item.completed),
             "semantic_cache_entries": len(self.semantic_cache_entries),
             "front_task_cache_age": task.cache_age if task else 0,
             "front_task_freshness_bin": task.freshness_bin if task else "",
             "front_task_hit_probability": self._semantic_cache_hit_probability(task) if task else 0.0,
+            "cache_exact_match": bool(status.get("cache_exact_match", False)),
+            "cache_nearby_match": bool(status.get("cache_nearby_match", False)),
+            "cache_eligible": bool(status.get("cache_eligible", False)),
+            "cache_quality_lcb": float(status.get("cache_quality_lcb", 0.0)),
+            "cache_age": int(status.get("cache_age", task.cache_age if task else 0)),
+            "cache_freshness_bin": str(status.get("cache_freshness_bin", task.freshness_bin if task else "")),
+            "cache_hit_probability": self._semantic_cache_hit_probability(task) if task else 0.0,
         }
 
     def _mobility_observation(self, task: EnvTask) -> dict[str, Any]:
@@ -2564,6 +3384,18 @@ class MultiUAVVQAEnv:
             "scenario": "",
             "formal_scenario": "",
             "benchmark_split": "",
+            "task_status": "",
+            "remaining_deadline_s": 0.0,
+            "defer_count": 0,
+            "expired": False,
+            "rejected": False,
+            "reject_feasible": False,
+            "reject_reason": "",
+            "expected_saved_energy_j": 0.0,
+            "expected_saved_delay_s": 0.0,
+            "avoided_utm_violation": False,
+            "avoided_deadline_violation": False,
+            "reject_penalty": 0.0,
             "deadline_s": 0.0,
             "epsilon_k": 0.0,
             "priority": 0.0,
@@ -2574,6 +3406,7 @@ class MultiUAVVQAEnv:
             "semantic_payload_kb": 0.0,
             "semantic_quality_gap": 0.0,
             "semantic_success": False,
+            "semantic_path": "",
             "delay_s": 0.0,
             "energy_j": 0.0,
             "payload_kb": 0.0,
@@ -2586,6 +3419,14 @@ class MultiUAVVQAEnv:
             "operational_intent_id": "",
             "operational_intent_state": "",
             "airspace_state": "",
+            "cache_exact_match": False,
+            "cache_nearby_match": False,
+            "cache_eligible": False,
+            "cache_quality_lcb": 0.0,
+            "cache_uncertainty": 1.0,
+            "cache_age": 0,
+            "cache_freshness_bin": "",
+            "cache_hit_probability": 0.0,
             "operational_priority": 0.0,
             "strategic_conflict": False,
             "strategic_conflict_count": 0,

@@ -392,6 +392,221 @@ class MultiUAVEnvTest(unittest.TestCase):
         hit = env.evaluate_action({"service_level": 2, "gpu_share": 0.8}, task_id=task.task_id)
         self.assertLess(hit["load_delay_s"], miss["load_delay_s"])
 
+    def test_expired_cache_is_not_eligible(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env.tasks[0]
+        env.semantic_cache_entries.append(
+            SemanticCacheEntry(
+                task_id="expired_cache",
+                task_type=task.task_type,
+                risk_level=task.risk_level,
+                priority=task.priority,
+                x_m=task.x_m,
+                y_m=task.y_m,
+                cache_age=10,
+                updated_step=0,
+                area_id=task.area_id,
+                question_type=task.task_type,
+                quality_lcb=0.95,
+                uncertainty=0.01,
+            )
+        )
+        info = env.evaluate_action({"semantic_path": "cache"}, task_id=task.task_id)
+        self.assertTrue(info["cache_exact_match"])
+        self.assertEqual(info["cache_freshness_bin"], "expired")
+        self.assertFalse(info["cache_eligible"])
+
+    def test_low_quality_cache_is_not_eligible(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env.tasks[0]
+        env.semantic_cache_entries.append(
+            SemanticCacheEntry(
+                task_id="weak_cache",
+                task_type=task.task_type,
+                risk_level=task.risk_level,
+                priority=task.priority,
+                x_m=task.x_m,
+                y_m=task.y_m,
+                cache_age=0,
+                updated_step=0,
+                area_id=task.area_id,
+                question_type=task.task_type,
+                quality_lcb=task.epsilon_k - 0.1,
+                uncertainty=0.2,
+            )
+        )
+        info = env.evaluate_action({"semantic_path": "cache"}, task_id=task.task_id)
+        self.assertTrue(info["cache_exact_match"])
+        self.assertFalse(info["cache_eligible"])
+        self.assertTrue(info["quality_violation"])
+
+    def test_nearby_same_type_cache_can_be_eligible(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env.tasks[0]
+        env.semantic_cache_entries.append(
+            SemanticCacheEntry(
+                task_id="nearby_cache",
+                task_type=task.task_type,
+                risk_level=task.risk_level,
+                priority=task.priority,
+                x_m=task.x_m + 5.0,
+                y_m=task.y_m + 5.0,
+                cache_age=0,
+                updated_step=0,
+                area_id=task.area_id + 99,
+                question_type=task.task_type,
+                quality_lcb=task.epsilon_k + 0.1,
+                uncertainty=0.05,
+            )
+        )
+        info = env.evaluate_action({"semantic_path": "cache"}, task_id=task.task_id)
+        self.assertFalse(info["cache_exact_match"])
+        self.assertTrue(info["cache_nearby_match"])
+        self.assertTrue(info["cache_eligible"])
+        self.assertGreaterEqual(info["semantic_accuracy_lcb"], task.epsilon_k)
+
+    def test_defer_keeps_task_in_queue_without_completion(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env.tasks[0]
+        _obs, _reward, _done, info = env.step({"task_id": task.task_id, "semantic_path": "defer"})
+        self.assertFalse(task.completed)
+        self.assertFalse(info["success"])
+        self.assertEqual(task.task_status, "deferred")
+        self.assertEqual(task.defer_count, 1)
+        self.assertLess(info["remaining_deadline_s"], info["deadline_s"])
+
+    def test_token_image_and_cache_update_refresh_semantic_cache(self) -> None:
+        for action in [
+            {"semantic_path": "token", "bandwidth": 1_000_000.0, "power": 1.0, "cpu_share": 1.0, "gpu_share": 1.0},
+            {"semantic_path": "image", "bandwidth": 1_000_000.0, "power": 1.0, "cpu_share": 1.0, "gpu_share": 1.0},
+            {"semantic_path": "cache_update", "bandwidth": 1_000_000.0, "power": 1.0, "cpu_share": 1.0, "gpu_share": 1.0},
+        ]:
+            env = self._env()
+            env.reset(seed=5)
+            task = env.tasks[0]
+            before = len(env.semantic_cache_entries)
+            _obs, _reward, _done, info = env.step({"task_id": task.task_id, **action})
+            self.assertTrue(info["success"])
+            self.assertGreater(len(env.semantic_cache_entries), before)
+            entry = env.semantic_cache_entries[0]
+            self.assertEqual(entry.area_id, task.area_id)
+            self.assertEqual(entry.question_type, task.task_type)
+            self.assertGreaterEqual(entry.quality_lcb, task.epsilon_k)
+
+    def test_candidate_path_metrics_contains_all_semantic_paths(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5)
+        metrics = obs["candidate_path_metrics"]
+        self.assertEqual(set(metrics), {"cache", "token", "image", "defer", "cache_update", "reject"})
+        for path, data in metrics.items():
+            self.assertIn("feasible", data)
+            self.assertIn("accuracy_lcb", data)
+            self.assertIn("accuracy_mean", data)
+            self.assertIn("quality_gap", data)
+            self.assertIn("payload_kb", data)
+            self.assertIn("delay_s", data)
+            self.assertIn("energy_j", data)
+            self.assertIn("deadline_slack_s", data)
+            self.assertIn("cache_eligible", data)
+            self.assertIn("utm_constraint_violation", data)
+            self.assertIn("deadline_feasible", data)
+            self.assertIn("semantic_feasible", data)
+            self.assertIn("energy_feasible", data)
+            self.assertIn("utm_feasible", data)
+            self.assertIn("joint_feasible", data)
+            self.assertIn("tx_delay_s", data)
+            self.assertIn("queue_delay_s", data)
+            self.assertIn("infer_delay_s", data)
+            self.assertIn("load_delay_s", data)
+            self.assertIn("arrival_delay_s", data)
+            self.assertIn("bottleneck_type", data)
+            self.assertIn("required_deadline_reduction_s", data)
+            self.assertIn("required_rate_mbps", data)
+            self.assertIn("required_bandwidth_hz", data)
+            self.assertIn("edge_queue_pressure", data)
+            self.assertIn("model_cache_hit", data)
+            self.assertIn("reject_reason", data)
+            self.assertIn("expected_saved_energy_j", data)
+            self.assertIn("expected_saved_delay_s", data)
+            self.assertIn("avoided_utm_violation", data)
+            self.assertIn("avoided_deadline_violation", data)
+            self.assertIn("task_success", data)
+            self.assertEqual(data["feasible"], data["joint_feasible"])
+            self.assertEqual(data["semantic_path"], path)
+            if path == "reject":
+                self.assertIn("reject_feasible", data)
+        self.assertIn("reject_feasible", obs)
+        self.assertIn("reject_reason", obs)
+
+    def test_candidate_mobility_metrics_contains_path_mode_diagnostics(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5, options={"scenario": "utm_conflict"})
+        metrics = obs["candidate_mobility_metrics"]
+        self.assertIn("token", metrics)
+        for mode in ("stay", "serve_task", "avoid_conflict", "reposition"):
+            self.assertIn(mode, metrics["token"])
+            data = metrics["token"][mode]
+            for field in [
+                "utm_feasible",
+                "arrival_delay_s",
+                "tx_delay_s",
+                "total_delay_s",
+                "deadline_slack_s",
+                "semantic_feasible",
+                "joint_feasible",
+                "utm_conflict_risk",
+            ]:
+                self.assertIn(field, data)
+        self.assertLessEqual(
+            metrics["token"]["avoid_conflict"]["utm_conflict_risk"],
+            metrics["token"]["serve_task"]["utm_conflict_risk"] + 1e-9,
+        )
+
+    def test_expired_task_paths_are_not_feasible_or_served(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.expired = True
+        task.task_status = "expired"
+        metrics = env.candidate_path_metrics(task)
+        for path in ("cache", "token", "image", "cache_update"):
+            self.assertFalse(metrics[path]["joint_feasible"])
+        info = env.evaluate_action({"task_id": task.task_id, "semantic_path": "token"}, task_id=task.task_id)
+        self.assertFalse(info["success"])
+        self.assertTrue(info["expired"])
+        self.assertEqual(info["task_status"], "expired")
+
+    def test_defer_is_infeasible_when_deadline_would_expire(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.tau_k = 0.5 * float(env.env_cfg["slot_s"])
+        metrics = env.candidate_path_metrics(task)
+        self.assertFalse(metrics["defer"]["deadline_feasible"])
+        self.assertFalse(metrics["defer"]["joint_feasible"])
+
+    def test_utm_conflict_paths_report_not_joint_feasible(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        task = next(
+            item
+            for item in env._active_tasks()
+            if env.evaluate_action({"task_id": item.task_id, "semantic_path": "token"}, task_id=item.task_id)[
+                "utm_conflict_violation"
+            ]
+        )
+        metrics = env.candidate_path_metrics(task)
+        self.assertFalse(metrics["token"]["utm_feasible"])
+        self.assertFalse(metrics["token"]["joint_feasible"])
+        self.assertFalse(metrics["cache_update"]["utm_feasible"])
+        self.assertFalse(metrics["cache_update"]["joint_feasible"])
+
     def test_action_contract_keeps_service_three_disabled_by_default(self) -> None:
         env = self._env()
         env.reset(seed=5)
@@ -413,9 +628,12 @@ class MultiUAVEnvTest(unittest.TestCase):
         expected = {
             "nominal_patrol",
             "disaster_hotspot",
+            "low_snr_soft",
             "low_snr_blockage",
             "edge_overload",
+            "edge_overload_soft",
             "utm_conflict",
+            "utm_conflict_soft",
         }
         self.assertEqual(set(semantic_scenario_preset_names()), expected)
         self.assertTrue(expected.issubset(set(available_scenarios())))
@@ -446,6 +664,102 @@ class MultiUAVEnvTest(unittest.TestCase):
                 places=6,
             )
             self.assertNotIn(3, env.service_levels())
+
+    def test_low_snr_soft_is_distinct_from_hard_blockage(self) -> None:
+        env = self._env()
+        soft = env.reset(seed=5, options={"scenario": "low_snr_soft"})
+        soft_cfg = dict(env.env_cfg)
+        hard = env.reset(seed=5, options={"scenario": "low_snr_blockage"})
+        hard_cfg = dict(env.env_cfg)
+        self.assertEqual(soft["scenario"], "low_snr_soft")
+        self.assertNotEqual(soft_cfg["area_spacing_m"], hard_cfg["area_spacing_m"])
+        self.assertGreater(soft_cfg["bandwidth_hz"], hard_cfg["bandwidth_hz"])
+        self.assertLess(soft_cfg["a2g"]["excess_loss_db"], hard_cfg["a2g"]["excess_loss_db"])
+        self.assertLess(soft_cfg["a2g"]["nlos_excess_loss_db"], hard_cfg["a2g"]["nlos_excess_loss_db"])
+
+    def test_soft_edge_and_utm_presets_are_distinct_from_hard_versions(self) -> None:
+        env = self._env()
+        env.reset(seed=5, options={"scenario": "edge_overload"})
+        hard_edge = dict(env.env_cfg)
+        env.reset(seed=5, options={"scenario": "edge_overload_soft"})
+        soft_edge = dict(env.env_cfg)
+        self.assertLess(soft_edge["edge_load_range"][0], hard_edge["edge_load_range"][0])
+        self.assertLess(soft_edge["gpu_load_range"][0], hard_edge["gpu_load_range"][0])
+        self.assertGreater(soft_edge["model_cache_capacity"], hard_edge["model_cache_capacity"])
+        self.assertLess(soft_edge["queue_delay_scale_s"], hard_edge["queue_delay_scale_s"])
+
+        env.reset(seed=5, options={"scenario": "utm_conflict"})
+        hard_utm = dict(env.env_cfg)
+        hard_tau = float(env.scenario_cfg["task_layout"]["tau_scale"])
+        env.reset(seed=5, options={"scenario": "utm_conflict_soft"})
+        soft_utm = dict(env.env_cfg)
+        soft_tau = float(env.scenario_cfg["task_layout"]["tau_scale"])
+        self.assertLess(
+            soft_utm["utm"]["background_operational_intent_density"],
+            hard_utm["utm"]["background_operational_intent_density"],
+        )
+        self.assertLess(soft_utm["utm"]["spatial_buffer_m"], hard_utm["utm"]["spatial_buffer_m"])
+        self.assertGreater(soft_tau, hard_tau)
+
+    def test_reject_is_feasible_when_all_service_paths_are_infeasible(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.epsilon_k = 1.5
+        metrics = env.candidate_path_metrics(task)
+        self.assertTrue(metrics["reject"]["joint_feasible"])
+        self.assertEqual(metrics["reject"]["reject_reason"], "semantic_quality")
+        self.assertTrue(env._observation()["reject_feasible"])
+
+    def test_reject_is_not_recommended_when_service_is_feasible(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        env.semantic_cache_entries.append(
+            SemanticCacheEntry(
+                task_id="good_cache",
+                task_type=task.task_type,
+                risk_level=task.risk_level,
+                priority=task.priority,
+                x_m=task.x_m,
+                y_m=task.y_m,
+                cache_age=0,
+                updated_step=0,
+                area_id=task.area_id,
+                question_type=task.task_type,
+                quality_lcb=task.epsilon_k + 0.2,
+                uncertainty=0.02,
+            )
+        )
+        metrics = env.candidate_path_metrics(task)
+        self.assertTrue(metrics["cache"]["joint_feasible"])
+        self.assertFalse(metrics["reject"]["joint_feasible"])
+
+    def test_reject_action_has_no_tx_or_fly_delay_and_is_not_success(self) -> None:
+        env = self._env()
+        env.reset(seed=5)
+        task = env._front_task()
+        self.assertIsNotNone(task)
+        task.epsilon_k = 1.5
+        _obs, reward, _done, info = env.step({"task_id": task.task_id, "semantic_path": "reject"})
+        self.assertEqual(info["semantic_path"], "reject")
+        self.assertEqual(info["task_status"], "rejected")
+        self.assertTrue(task.rejected)
+        self.assertFalse(info["success"])
+        self.assertFalse(info["semantic_success"])
+        self.assertEqual(info["tx_delay_s"], 0.0)
+        self.assertEqual(info["fly_delay_s"], 0.0)
+        self.assertEqual(info["arrival_delay_s"], 0.0)
+        self.assertEqual(info["delay_s"], 0.0)
+        self.assertEqual(info["energy_j"], 0.0)
+        self.assertLess(reward, 0.0)
+
+    def test_normal_patrol_alias_maps_to_nominal_patrol(self) -> None:
+        env = self._env()
+        obs = env.reset(seed=5, options={"scenario": "normal_patrol"})
+        self.assertEqual(obs["scenario"], "nominal_patrol")
 
     def test_paper_scenario_presets_have_distinct_stress_knobs(self) -> None:
         disaster = self._env()

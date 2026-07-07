@@ -914,3 +914,161 @@ Next steps:
 2. Do not expect large speedups for the current small MLP/small-batch benchmark; environment rollout remains the bottleneck.
 3. If GPU acceleration is needed for wall-clock speed, increase vectorized rollout/batch size or move to larger model/batched scenario collection rather than only moving the tiny network to CUDA.
 4. Continue the low-SNR deadline-control fix before running a 300-episode v2 formal claim.
+
+## Semantic Path Cache/Defer PPO Follow-Up 2026-06-24
+
+Completed short 300-episode semantic-path two-timescale PPO benchmark on branch `codex/semantic-path-cache-defer`.
+
+Next algorithm items:
+
+- `low_snr_soft` is now distinct after Environment fix and runner alias removal; keep it in future benchmarks as an easier low-SNR preset.
+- Fix edge-overload regression: semantic path PPO uses token/cache_update but deadline violation rises to 0.569; projection should account for edge queue/cache-update refresh cost.
+- Fix UTM-conflict feasibility: semantic success remains 0.0 even though payload is low; need conflict-aware mobility/assignment and stricter action mask for risky serve/reposition.
+- Tune cache_update usage: it helps low-SNR/edge freshness but can increase edge queue delay when overload is high.
+- After these fixes, rerun 1000-episode final candidate with semantic-path actor enabled.
+
+Short benchmark artifacts:
+
+```text
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_summary.csv
+outputs/rl/semantic_path_cache_defer_short_20260624/scenario_comparison_report.md
+outputs/rl/semantic_path_cache_defer_short_20260624/cache_collapse_analysis.md
+```
+
+## Environment Bottleneck Diagnostics Follow-Up 2026-06-24
+
+- Use `scripts/diagnose_semantic_path_feasibility.py` before changing PPO when a scenario has low task success.
+- For `edge_overload`, inspect `candidate_path_metrics[token/cache_update].bottleneck_type`, queue/load delays, and required bandwidth/rate before adding algorithm-side projection rules.
+- For `utm_conflict`, inspect `candidate_mobility_metrics[token][avoid_conflict]` versus `serve_task` to distinguish UTM-risk reduction from semantic/deadline infeasibility.
+- If oracle/path-candidate feasible ratios are near zero, keep the hard scenario as stress and introduce a separate soft preset instead of silently relaxing constraints.
+
+## RL Semantic Path Fix2 TODO 2026-06-24
+
+Fix1 stabilized semantic-path action feasibility but did not fully recover edge_overload or utm_conflict. Next Algorithm tasks:
+
+1. Edge-overload fix2:
+   - learn/hand-code token-first projection with stricter positive deadline slack, not just cache_update suppression;
+   - add edge queue/load features directly to fast actor reward normalization;
+   - calibrate token resource floors for edge_overload so token can satisfy deadline when feasible;
+   - compare against B_state_v2 edge result (`task_success=0.649`, `deadline_vio=0.000`).
+2. UTM conflict fix2:
+   - make slow mobility actor consume operational intent / UTM feasibility more directly;
+   - forbid token/image/cache_update when candidate path is UTM infeasible unless mobility mode is `avoid_conflict` and projected delay remains feasible;
+   - add explicit UAV assignment selection among UTM-feasible intents rather than relying on nearest UAV.
+3. Scenario cleanup:
+   - completed: `low_snr_soft` now uses the distinct Environment preset; future comparisons should report soft and blockage separately.
+4. Experiment hygiene:
+   - do not treat `semantic_path_cache_defer_fix1_20260624` as final paper result;
+   - commit only root CSV/MD reports, not `.pt`, rollout CSVs, per-seed logs, or large traces.
+
+## RL Semantic Path Fix2 Follow-up 2026-06-24
+
+Completed fix2 benchmark at `outputs/rl/semantic_path_cache_defer_fix2_20260624/`.
+
+Outcome:
+
+- `low_snr_soft` preset is now distinct from `low_snr_blockage` and verified in benchmark output.
+- UTM violation for proposed PPO in `utm_conflict` is reduced to 0.000, but task/semantic success remains 0.000 because safe actions mostly defer or fail semantic QoS.
+- edge-overload cache_update overuse is controlled, but task success remains low and deadline violation remains high.
+
+Next tasks:
+
+1. Edge-overload targeted policy:
+   - train/distill against candidate `joint_feasible` path labels;
+   - add feasible-token preference when token has positive deadline slack;
+   - tune token resource floors/projection under edge queue pressure;
+   - avoid deferring all hard tasks without a recovery/cache-refresh plan.
+2. UTM targeted policy:
+   - separate safe deferral reward from ordinary failure;
+   - add UTM-feasible UAV/intent assignment target for slow actor;
+   - report whether zero success is caused by semantic QoS shortage or UTM feasibility constraints.
+3. Reporting hygiene:
+   - keep `fix2_comparison.md` as diagnostic, not final paper evidence;
+   - commit only root summary/report CSV/MD files, not per-seed `.pt`, rollout CSVs, logs, or traces.
+
+
+
+## RL Semantic Path Fix3 Follow-up 2026-06-24
+
+Completed fix3 benchmark at `outputs/rl/semantic_path_cache_defer_fix3_20260624/`.
+
+Outcome:
+
+1. Over-defer is fixed for normal/low-SNR/UTM scenarios: `normal_patrol`, `low_snr_blockage`, and `utm_conflict` have defer ratio 0; `low_snr_soft` defer ratio is 0.002.
+2. UTM safety remains controlled: `utm_conflict` UTM violation is 0.000 and UTM-infeasible selection is 0.000.
+3. `low_snr_soft` improves over fix2 in task success (`0.217 -> 0.318`) with moderate deadline violation (`0.145`).
+4. `edge_overload` remains the primary blocker: deadline violation falls (`0.657 -> 0.297`) and cache_update is 0.000, but task success is only 0.082 and defer ratio is 0.426.
+5. `normal_patrol` narrowly misses the target (`task_success=0.274` vs required 0.275) while deadline violation is 0.000.
+
+Next tasks:
+
+1. Edge-overload service construction:
+   - increase token resource floors only when `candidate_path_metrics.token.deadline_feasible=true` or slack is near-feasible;
+   - add edge-queue-aware token scheduling instead of allowing large defer ratio;
+   - report why `deadline_infeasible_selection_ratio` remains high even after fix3.
+2. UTM semantic feasibility:
+   - separate semantic infeasibility from UTM infeasibility in the report;
+   - test whether any UTM-safe token/cache candidate can satisfy epsilon under current preset.
+3. Expert target refinement:
+   - add expert labels for UAV/mobility mode, not only semantic path;
+   - consider BC on `avoid_conflict`/`stay` mobility for UTM scenarios.
+4. Experiment hygiene:
+   - commit only root summary/report CSV/MD and code/tests/docs;
+   - do not commit `.pt`, per-scenario rollout CSV, `run_config.json`, logs, or full traces.
+
+## RL Semantic Path Fix4 Follow-up 2026-06-24
+
+Completed fix4 benchmark at `outputs/rl/semantic_path_cache_defer_fix4_20260624/`.
+
+Outcome:
+
+1. `normal_patrol` is stable again: task success `0.275`, deadline violation `0.000`, no cache/defer collapse.
+2. `low_snr_soft` remains meaningfully easier than `low_snr_blockage`: task success `0.318` vs `0.276`, deadline violation `0.145` vs `0.610`.
+3. `utm_conflict` is safe but infeasible: UTM violation `0.000`, task success `0.000`, oracle infeasible ratio `0.751`.
+4. `edge_overload` is still the main blocker: task success improves to `0.103`, but deadline violation rises to `0.517`; bottleneck/oracle diagnostics indicate hard scenario infeasibility rather than cache_update overuse.
+5. New reports include bottleneck distribution, mobility mode distribution, UTM-safe service ratio, oracle infeasible ratio, and selected mobility feasibility.
+
+Next tasks:
+
+1. Do not keep tightening generic PPO penalties for hard infeasible scenarios.
+2. Add or request calibrated soft presets: `edge_overload_soft` and `utm_conflict_soft`, then run the same fix4 controller there.
+3. Add an explicit skip/fail/reject action for hard-infeasible tasks so the controller can avoid manufacturing deadline violations when oracle feasibility is near zero.
+4. Keep hard `edge_overload` and `utm_conflict` as stress-test diagnostics, not paper headline success scenarios unless Environment feasibility improves.
+5. Commit only code/tests/docs and root-level summary/report CSV/MD files; exclude `.pt`, rollout CSVs, traces, `run_config.json`, and logs.
+
+## Environment Soft Scenario + Reject Follow-up 2026-06-24
+
+Completed environment-side interface work:
+
+1. Added calibrated soft presets `edge_overload_soft` and `utm_conflict_soft`; hard `edge_overload` and `utm_conflict` remain unchanged as stress diagnostics.
+2. Added `semantic_path=reject` so controllers can reject oracle-infeasible tasks without consuming UAV/edge/link resources or fabricating deadline/UTM violations.
+3. Candidate metrics now expose reject feasibility and rejection reasons alongside service-path feasibility diagnostics.
+
+Next Algorithm-side use:
+
+1. Include the soft presets in benchmark tables next to the hard stress scenarios.
+2. Treat reject as an admission-control/fail-safe action: not task success, but a lower-cost choice when all service paths are infeasible.
+3. Report reject ratio and reject reason distribution separately from cache/token/image/defer/cache-update ratios.
+
+## RL Semantic Path Reject Fix5 Follow-up 2026-06-25
+
+Completed Algorithm-side reject integration at:
+
+```text
+outputs/rl/semantic_path_cache_defer_reject_fix5_20260624/
+```
+
+Outcome:
+
+1. `reject` is now a first-class semantic path in two-timescale PPO and behavior-cloning warm start.
+2. `normal_patrol`, `low_snr_soft`, and `low_snr_blockage` have reject ratio `0.000`, so admission control does not collapse into always-reject on ordinary or low-SNR tasks.
+3. hard `utm_conflict` uses correct reject for all evaluated tasks (`correct_reject=1.000`, `wrong_reject=0.000`) and eliminates UTM/deadline violation.
+4. `utm_conflict_soft` recovers nonzero service (`task_success=0.196`, admitted-task success `0.458`) while keeping UTM/deadline violation at 0.
+5. hard `edge_overload` is now treated as mostly infeasible admission (`reject=0.818`) with low deadline violation (`0.034`), while `edge_overload_soft` recovers more service (`task_success=0.152`) with no wrong reject.
+
+Next tasks:
+
+1. For paper tables, report both task success and admission success/admitted-task success. Hard infeasible scenarios should be interpreted as safety/admission diagnostics, not pure service-throughput benchmarks.
+2. Add reject reason distribution to the root report if Environment exposes stable reason bins beyond `mixed`.
+3. For final paper-scale runs, keep fix5 reject logic and run longer seeds only on calibrated soft stress scenarios plus nominal/disaster/low-SNR.
+4. Do not commit `.pt`, rollout CSVs, per-seed traces, `run_config.json`, or logs; keep only root-level CSV/MD summaries.
