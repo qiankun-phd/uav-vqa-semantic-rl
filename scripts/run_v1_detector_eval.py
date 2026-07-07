@@ -40,7 +40,7 @@ PREDICTION_FIELDNAMES = [
     "evidence_type", "evidence_source", "evidence_repr", "payload_bytes", "image_path", "predicted_answer",
     "normalized_prediction", "correct", "latency_sec", "model_name", "detector_model", "detector_conf",
     "detector_latency_sec", "detector_object_count", "presence_polarity", "decoder_mode", "raw_detector_count",
-    "transmitted_detector_count", "calibrated_detector_count", "raw_decoder_correct",
+    "transmitted_detector_count", "calibrated_detector_count", "raw_decoder_correct", "roi_mode",
 ]
 
 
@@ -107,35 +107,102 @@ def _link_quality_fields(link_quality: str, use_snr: bool) -> tuple[str, str, st
     return channel_bin_from_snr(snr_db), f"{snr_db:g}", snr_bin_label(snr_db)
 
 
-def _roi_box_for_task(records: list[DetectionRecord], task: dict[str, str], image_width: int, image_height: int) -> tuple[int, int, int, int, str]:
+def _union_box(records: list[DetectionRecord]) -> tuple[int, int, int, int]:
+    x1 = min(r.bbox_x for r in records)
+    y1 = min(r.bbox_y for r in records)
+    x2 = max(r.bbox_x + r.bbox_w for r in records)
+    y2 = max(r.bbox_y + r.bbox_h for r in records)
+    return x1, y1, x2, y2
+
+
+def _expand_clip(box: tuple[int, int, int, int], scale: float, width: int, height: int, min_side: int = 48) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = box
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    w = max(x2 - x1, min_side) * scale
+    h = max(y2 - y1, min_side) * scale
+    nx1, ny1 = int(max(0, cx - w / 2)), int(max(0, cy - h / 2))
+    nx2, ny2 = int(min(width, cx + w / 2)), int(min(height, cy + h / 2))
+    return nx1, ny1, max(nx1 + 1, nx2), max(ny1 + 1, ny2)
+
+
+def _collage(rgb: Image.Image, boxes: list[tuple[int, int, int, int]], tile_height: int = 224, gap: int = 4) -> Image.Image:
+    tiles = []
+    for box in boxes:
+        crop = rgb.crop(box)
+        scale = tile_height / max(1, crop.height)
+        tiles.append(crop.resize((max(1, int(crop.width * scale)), tile_height)))
+    total_w = sum(t.width for t in tiles) + gap * (len(tiles) - 1)
+    canvas = Image.new("RGB", (max(1, total_w), tile_height), (0, 0, 0))
+    x = 0
+    for tile in tiles:
+        canvas.paste(tile, (x, 0))
+        x += tile.width + gap
+    return canvas
+
+
+def _topk_by_conf(records: list[DetectionRecord], k: int) -> list[DetectionRecord]:
+    return sorted(records, key=lambda r: r.confidence, reverse=True)[:k]
+
+
+def _build_roi_image(source_image: Path, records: list[DetectionRecord], task: dict[str, str], channel_bin: str, out_dir: Path, cfg: dict) -> tuple[Path, str, str]:
+    """Detector-guided ROI evidence for service_level=3.
+
+    Modes:
+      * target_topk : >=tau detections of target_class -> union of top-k boxes, expanded 1.5x
+      * dual        : comparison/co_presence -> union of per-class boxes (>=tau, else suspect band)
+      * suspect     : no >=tau target detection but conf in [floor, tau) exists -> top-3 collage
+      * thumbnail   : no detection of the queried class(es) at all -> downscaled full image
+    """
+    det_cfg = cfg.get("detector", {}) or {}
+    tau = float(det_cfg.get("roi_conf_threshold", 0.25))
+    floor = float(det_cfg.get("roi_suspect_conf_floor", 0.05))
+    top_k = int(det_cfg.get("roi_top_k", 3))
+    expand = float(det_cfg.get("roi_expand_ratio", 1.5))
+    thumb_side = int(det_cfg.get("roi_thumbnail_max_side", 512))
+    qt = task.get("question_type", "")
     target = task.get("target_class", "")
-    target_records = [record for record in records if record.category == target]
-    if not target_records:
-        return 0, 0, image_width, image_height, "fallback_full_image_no_target_detection"
-    xs1 = [record.bbox_x for record in target_records]
-    ys1 = [record.bbox_y for record in target_records]
-    xs2 = [record.bbox_x + record.bbox_w for record in target_records]
-    ys2 = [record.bbox_y + record.bbox_h for record in target_records]
-    x1, y1, x2, y2 = min(xs1), min(ys1), max(xs2), max(ys2)
-    pad_ratio = float(task.get("roi_padding_ratio", "") or 0.18)
-    pad_x = int(max(16, (x2 - x1) * pad_ratio))
-    pad_y = int(max(16, (y2 - y1) * pad_ratio))
-    return (
-        max(0, x1 - pad_x),
-        max(0, y1 - pad_y),
-        min(image_width, x2 + pad_x),
-        min(image_height, y2 + pad_y),
-        "detector_target_roi",
-    )
+    target_b = task.get("target_class_b", "")
+    dual_classes = [c for c in (target, target_b) if c] if qt in ("comparison", "co_presence") else []
 
-
-def _build_roi_image(source_image: Path, records: list[DetectionRecord], task: dict[str, str], channel_bin: str, out_dir: Path, cfg: dict) -> tuple[Path, str]:
     with Image.open(source_image) as img:
         rgb = img.convert("RGB")
-        x1, y1, x2, y2, source = _roi_box_for_task(records, task, rgb.width, rgb.height)
-        crop = rgb.crop((x1, y1, max(x1 + 1, x2), max(y1 + 1, y2)))
-        out_path = out_dir / channel_bin / f"{source_image.stem}_{task.get('target_class', 'target')}_roi_{channel_bin}.jpg"
-        return degrade_pil_image(crop, out_path, channel_bin, cfg), f"{source}:x1={x1},y1={y1},x2={x2},y2={y2}"
+        width, height = rgb.width, rgb.height
+        mode = ""
+        meta_extra = ""
+        if dual_classes and len(dual_classes) > 1:
+            chosen: list[DetectionRecord] = []
+            for cls in dual_classes:
+                confident = [r for r in records if r.category == cls and r.confidence >= tau]
+                pool = confident or [r for r in records if r.category == cls and floor <= r.confidence < tau]
+                chosen.extend(_topk_by_conf(pool, top_k))
+            if chosen:
+                mode = "dual"
+                box = _expand_clip(_union_box(chosen), expand, width, height)
+                crop = rgb.crop(box)
+                meta_extra = f"boxes={len(chosen)};region={box[0]},{box[1]},{box[2]},{box[3]}"
+        if not mode and not dual_classes:
+            confident = [r for r in records if r.category == target and r.confidence >= tau]
+            suspect = [r for r in records if r.category == target and floor <= r.confidence < tau]
+            if confident:
+                mode = "target_topk"
+                chosen = _topk_by_conf(confident, top_k)
+                box = _expand_clip(_union_box(chosen), expand, width, height)
+                crop = rgb.crop(box)
+                meta_extra = f"boxes={len(chosen)};conf_top={chosen[0].confidence:.2f};region={box[0]},{box[1]},{box[2]},{box[3]}"
+            elif suspect:
+                mode = "suspect"
+                chosen = _topk_by_conf(suspect, top_k)
+                boxes = [_expand_clip((r.bbox_x, r.bbox_y, r.bbox_x + r.bbox_w, r.bbox_y + r.bbox_h), 2.0, width, height, min_side=64) for r in chosen]
+                crop = _collage(rgb, boxes)
+                meta_extra = f"boxes={len(chosen)};conf_top={chosen[0].confidence:.2f}"
+        if not mode:
+            mode = "thumbnail"
+            scale = min(1.0, thumb_side / max(width, height))
+            crop = rgb.resize((max(1, int(width * scale)), max(1, int(height * scale))))
+            meta_extra = f"scale={scale:.3f}"
+        stem_cls = f"{target}_{target_b}" if dual_classes and len(dual_classes) > 1 else (target or "target")
+        out_path = out_dir / channel_bin / f"{source_image.stem}_{stem_cls}_{mode}_roi_{channel_bin}.jpg"
+        return degrade_pil_image(crop, out_path, channel_bin, cfg), f"mode={mode};{meta_extra}", mode
 
 
 def _detector_target_count(records: list[DetectionRecord], task: dict[str, str]) -> int:
@@ -271,6 +338,7 @@ def main() -> int:
     evaluator = make_evaluator(args.evaluator, cfg) if needs_vlm else None
     detection_cache: dict[str, tuple[list[DetectionRecord], float, str]] = {}
     prediction_cache: dict[tuple[str, str, int, str], tuple[str, str, bool, float, str, str, str, int, float, str, int]] = {}
+    roi_mode_cache: dict[tuple[str, str, int, str], str] = {}
     detection_csv_rows: list[dict[str, str]] = _read_existing_rows(detections_path) if args.resume else []
     if any(level in service_levels for level in [1, 3]):
         for image_id in sorted({task["image_id"] for task in selected_tasks}):
@@ -311,6 +379,7 @@ def main() -> int:
                     transmitted_detector_count = 0
                     calibrated_detector_count = 0
                     raw_decoder_correct = ""
+                    roi_mode = ""
                     if service_level == 0:
                         cache_quality = "good" if use_snr and bool(vlm_cfg.get("cache_ignore_snr", True)) else link_quality
                         predicted, normalized, correct = _cache_prediction(task, cache_quality, freshness_bin, cfg)
@@ -402,12 +471,19 @@ def main() -> int:
                             elif service_level == 3:
                                 records, detector_latency, detector_model = detection_cache[image_id]
                                 detector_count = len(records)
-                                image_input, roi_meta = _build_roi_image(source_image, records, task, link_quality, degraded_dir / "roi", cfg)
+                                image_input, roi_meta, roi_mode_val = _build_roi_image(source_image, records, task, link_quality, degraded_dir / "roi", cfg)
+                                roi_mode_cache[cache_key] = roi_mode_val
                                 evidence_repr = str(image_input)
                                 prompt = build_vlm_prompt(task)
+                                mode_hint = {
+                                    "target_topk": "The image is a detector-guided crop around the highest-confidence target detections.",
+                                    "dual": "The image is a detector-guided crop covering the regions of both queried classes.",
+                                    "suspect": "The image is a collage of low-confidence candidate regions; verify carefully whether the target class is actually present.",
+                                    "thumbnail": "No candidate region was detected; the image is a downscaled full view of the scene.",
+                                }.get(roi_mode_val, "The image is a detector-guided crop of the target region.")
                                 prompt = (
                                     f"service_level=3 snr_bin={snr_bin or ''} channel={channel_bin} evidence_source=detector_roi_image {roi_meta}\n"
-                                    "The image is a detector-guided crop/zoom of the target region when detections are available.\n"
+                                    f"{mode_hint}\n"
                                     f"{prompt}"
                                 )
                             else:
@@ -427,6 +503,7 @@ def main() -> int:
                         ) = prediction_cache[cache_key]
                         if evidence_type in {"image", "roi_image"}:
                             image_path = evidence_repr
+                        roi_mode = roi_mode_cache.get(cache_key, "") if service_level == 3 else ""
                     rows.append({
                         "image_id": image_id,
                         "question_type": task["question_type"],
@@ -463,7 +540,10 @@ def main() -> int:
                         "transmitted_detector_count": str(transmitted_detector_count) if service_level == 1 else "",
                         "calibrated_detector_count": str(calibrated_detector_count) if service_level == 1 else "",
                         "raw_decoder_correct": raw_decoder_correct if service_level == 1 else "",
+                        "roi_mode": roi_mode,
                     })
+                    if len(rows) % 2000 == 0:
+                        _write_rows(rows, out_path)  # periodic checkpoint for --resume
     _write_rows(rows, out_path)
     if detection_csv_rows:
         detection_csv_rows = _dedupe_rows(

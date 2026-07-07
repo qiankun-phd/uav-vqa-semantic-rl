@@ -138,11 +138,7 @@ class QwenVLEvaluator:
             self._model.to(self._device)
         self._model.eval()
 
-    def predict(self, task: dict[str, str], prompt: str, image_path: Path | None = None) -> str:
-        if self._processor is None or self._model is None:
-            raise RuntimeError("Qwen evaluator is not loaded.")
-        import torch
-
+    def _prepare_inputs(self, prompt: str, image_path: Path | None):
         content = []
         if image_path is not None:
             content.append({"type": "image", "image": str(image_path)})
@@ -160,13 +156,45 @@ class QwenVLEvaluator:
 
                 images = [Image.open(image_path).convert("RGB")]
         inputs = self._processor(text=[text], images=images, padding=True, return_tensors="pt")
-        inputs = {k: v.to(self._model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        return {k: v.to(self._model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+    def predict(self, task: dict[str, str], prompt: str, image_path: Path | None = None) -> str:
+        if self._processor is None or self._model is None:
+            raise RuntimeError("Qwen evaluator is not loaded.")
+        import torch
+
+        inputs = self._prepare_inputs(prompt, image_path)
         with torch.inference_mode():
             generated_ids = self._model.generate(**inputs, max_new_tokens=self._max_new_tokens)
         input_len = inputs["input_ids"].shape[1]
         generated_ids = generated_ids[:, input_len:]
         answer = self._processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         return answer.strip()
+
+    def predict_with_confidence(self, task: dict[str, str], prompt: str, image_path: Path | None = None) -> tuple[str, float]:
+        """Greedy generation returning (answer, prob of the first generated answer token)."""
+        if self._processor is None or self._model is None:
+            raise RuntimeError("Qwen evaluator is not loaded.")
+        import torch
+
+        inputs = self._prepare_inputs(prompt, image_path)
+        with torch.inference_mode():
+            out = self._model.generate(
+                **inputs,
+                max_new_tokens=self._max_new_tokens,
+                output_scores=True,
+                return_dict_in_generate=True,
+            )
+        input_len = inputs["input_ids"].shape[1]
+        generated_ids = out.sequences[:, input_len:]
+        answer = self._processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        confidence = float("nan")
+        scores = getattr(out, "scores", None)
+        if scores:
+            first_logits = scores[0][0].float()
+            probs = torch.softmax(first_logits, dim=-1)
+            confidence = float(probs[int(generated_ids[0, 0])].item())
+        return answer.strip(), confidence
 
 
 def make_evaluator(kind: str, cfg: dict) -> Evaluator:
