@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -89,6 +90,7 @@ BASELINE_POLICIES = (
     "semantic_lcb_greedy",
     "lyapunov_greedy",
     "oracle_best_feasible_evidence",
+    "random",
 )
 
 
@@ -156,6 +158,7 @@ def make_env(
         formal_scenario=args.formal_scenario,
         policy_name=policy_name,
         state_version=args.state_version,
+        num_uavs=getattr(args, "num_uavs", None),
     )
 
 
@@ -178,6 +181,8 @@ def choose_baseline_action(policy: str, env: V19LUTResourceEnv, obs: dict[str, A
         return _with_action_defaults(env, env.candidate_action(_semantic_lcb_greedy_level(env, obs), obs))
     if policy == "lyapunov_greedy":
         return _with_action_defaults(env, _lyapunov_greedy_action(env, obs))
+    if policy == "random":
+        return _with_action_defaults(env, _random_action(env, obs))
     if policy == "oracle_best_feasible_evidence":
         candidates = []
         for level in env.service_levels:
@@ -378,6 +383,14 @@ def main() -> int:
     parser.add_argument("--lambda-max", type=float, default=20.0)
     parser.add_argument("--lambda-max-conflict", type=float, default=8.0, help="Per-channel dual ceiling for the conflict constraint (0 disables the channel).")
     parser.add_argument("--lambda-init-conflict", type=float, default=0.0, help="Warm-start value for lambda_conflict at episode 0 (clamped to --lambda-max-conflict). Puts the Lagrangian conflict price in the reward during the policy-formation phase instead of waiting for dual ascent.")
+    parser.add_argument("--freeze-lambda", action="store_true", help="Fixed-penalty baseline (Khairy-style comparison triple): skip dual ascent so every lambda channel stays at its --lambda-init-* value for the whole run.")
+    parser.add_argument("--lambda-init-quality-normal", type=float, default=0.0)
+    parser.add_argument("--lambda-init-quality-critical", type=float, default=0.0)
+    parser.add_argument("--lambda-init-deadline-normal", type=float, default=0.0)
+    parser.add_argument("--lambda-init-deadline-critical", type=float, default=0.0)
+    parser.add_argument("--lambda-init-battery", type=float, default=0.0)
+    parser.add_argument("--lambda-init-gpu", type=float, default=0.0)
+    parser.add_argument("--num-uavs", type=int, default=None, help="Override the scenario UAV count (scalability/zero-shot sweeps). Injected through the canonical env's scalability layer so it wins over scenario presets.")
     parser.add_argument("--conflict-cost-limit", type=float, default=0.08, help="Conflict-rate budget for the conflict dual channel (TLS exposure anchor).")
     parser.add_argument("--quality-cost-limit", type=float, default=0.0)
     parser.add_argument("--deadline-cost-limit", type=float, default=0.0)
@@ -476,6 +489,13 @@ def run_experiment(
             lambda_max=args.lambda_max,
             lambda_max_conflict=args.lambda_max_conflict,
             lambda_init_conflict=args.lambda_init_conflict,
+            lambda_freeze=args.freeze_lambda,
+            lambda_init_quality_normal=args.lambda_init_quality_normal,
+            lambda_init_quality_critical=args.lambda_init_quality_critical,
+            lambda_init_deadline_normal=args.lambda_init_deadline_normal,
+            lambda_init_deadline_critical=args.lambda_init_deadline_critical,
+            lambda_init_battery=args.lambda_init_battery,
+            lambda_init_gpu=args.lambda_init_gpu,
             conflict_cost_limit=args.conflict_cost_limit,
             quality_cost_limit=args.quality_cost_limit,
             deadline_cost_limit=args.deadline_cost_limit,
@@ -789,6 +809,36 @@ def _semantic_lcb_greedy_level(env: V19LUTResourceEnv, obs: dict[str, Any]) -> i
     if feasible:
         return min(feasible)[1]
     return max(env.service_levels, key=lambda level: env.candidate_metrics(level, obs)["accuracy"])
+
+
+def _random_action(env: V19LUTResourceEnv, obs: dict[str, Any]) -> dict[str, Any]:
+    """Uniform-random baseline.
+
+    Discrete head: uniform over the mask-legal service levels.  Continuous
+    heads: uniform between the level's candidate floor values and the resource
+    ceilings (bandwidth<=base_bandwidth_hz, power<=1.0 W, shares<=1.0).
+    Mobility stays at the candidate default (same treatment as the other
+    non-learning baselines).  Deterministic per --seed via a per-env RNG.
+    """
+    rng = getattr(env, "_random_baseline_rng", None)
+    if rng is None:
+        rng = random.Random(100_003 * int(getattr(env, "seed_value", 0)) + 17)
+        env._random_baseline_rng = rng
+    mask = env.action_mask() if hasattr(env, "action_mask") else {}
+    service_allowed = mask.get("service_allowed", {}) if isinstance(mask, dict) else {}
+    levels = [
+        level
+        for level in env.service_levels
+        if bool(service_allowed.get(level, service_allowed.get(str(level), True)))
+    ]
+    level = int(rng.choice(levels or list(env.service_levels)))
+    action = dict(env.candidate_action(level, obs))
+    if level > 0:
+        action["bandwidth"] = rng.uniform(min(float(action.get("bandwidth", 0.0)), env.base_bandwidth_hz), float(env.base_bandwidth_hz))
+        action["power"] = rng.uniform(min(float(action.get("power", 0.0)), 1.0), 1.0)
+        action["cpu_share"] = rng.uniform(min(float(action.get("cpu_share", 0.0)), 1.0), 1.0)
+        action["gpu_share"] = rng.uniform(min(float(action.get("gpu_share", 0.0)), 1.0), 1.0)
+    return action
 
 
 def _lyapunov_greedy_action(env: V19LUTResourceEnv, obs: dict[str, Any]) -> dict[str, Any]:

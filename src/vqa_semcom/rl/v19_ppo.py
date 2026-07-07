@@ -206,6 +206,21 @@ class PPOTrainConfig:
     # price in the reward from episode 0; the leaky dual update then self-
     # corrects it downward if the realized cost stays below the limit.
     lambda_init_conflict: float = 0.0
+    # Fixed-penalty baseline (Khairy et al., JSAC'21 comparison triple:
+    # constrained / unconstrained / fixed-penalty).  lambda_freeze=True skips
+    # dual ascent entirely so every channel stays at its lambda_init_* value
+    # for the whole run -- a hand-tuned static penalty method.  The per-channel
+    # init knobs default to 0; the matrix_v1 fixed-penalty arm sets them to the
+    # v3 A2 500-ep convergence-band terminal values (outputs/rl/ab_bubbles_v3,
+    # 3 seeds): quality_critical~9.74, deadline_critical~6.84, conflict~4.0
+    # (per-seed finals 3.7/4.3/4.7), battery~0.92, others 0.
+    lambda_freeze: bool = False
+    lambda_init_quality_normal: float = 0.0
+    lambda_init_quality_critical: float = 0.0
+    lambda_init_deadline_normal: float = 0.0
+    lambda_init_deadline_critical: float = 0.0
+    lambda_init_battery: float = 0.0
+    lambda_init_gpu: float = 0.0
     bandwidth_floor: float = 0.02
     share_floor: float = 0.01
     semantic_token_bandwidth_floor: float = 0.35
@@ -311,7 +326,19 @@ def _init_dual_state(cfg: PPOTrainConfig) -> DualState:
     therefore stays disabled regardless of the requested init.
     """
     conflict0 = max(0.0, min(float(cfg.lambda_init_conflict), float(cfg.lambda_max_conflict)))
-    return DualState(conflict=conflict0)
+
+    def _clamp(value: float) -> float:
+        return max(0.0, min(float(value), float(cfg.lambda_max)))
+
+    return DualState(
+        quality_normal=_clamp(cfg.lambda_init_quality_normal),
+        quality_critical=_clamp(cfg.lambda_init_quality_critical),
+        deadline_normal=_clamp(cfg.lambda_init_deadline_normal),
+        deadline_critical=_clamp(cfg.lambda_init_deadline_critical),
+        conflict=conflict0,
+        battery=_clamp(cfg.lambda_init_battery),
+        gpu=_clamp(cfg.lambda_init_gpu),
+    )
 
 
 class HybridActorCritic(nn.Module if nn is not None else object):
@@ -2001,6 +2028,9 @@ def _snr_scaled(obs: dict[str, Any]) -> float:
 
 def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig) -> None:
     if not cfg.constrained:
+        return
+    if cfg.lambda_freeze:
+        # Fixed-penalty baseline: dual variables stay at their init values.
         return
     if cfg.risk_aware_constraints:
         dual.quality_normal = _dual_update(dual.quality_normal, _mean(rollout["quality_costs_normal"]), cfg.quality_cost_limit_normal, cfg)

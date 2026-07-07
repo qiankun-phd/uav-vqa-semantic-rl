@@ -471,6 +471,117 @@ class V19RLResourceAllocTest(unittest.TestCase):
         self.assertEqual(action["altitude_delta"], 0.0)
 
 
+class MatrixV1NewArmsTest(unittest.TestCase):
+    """Smoke tests for the matrix_v1 comparison arms (random / fixed-penalty /
+    flat PPO / oracle evaluation channel)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.cfg = load_config(ROOT / "configs" / "v1_9_snr_lut.yaml")
+        cls.lut = load_lut(ROOT / "outputs" / "lut" / "v1_9_snr_semantic_quality_lut.csv")
+        tasks = read_csv(resolve_path(cls.cfg["paths"]["tasks_csv"]))
+        cls.tasks = filter_tasks_supported_by_lut(tasks, cls.lut)
+
+    def test_random_baseline_emits_legal_actions(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=5, tasks_per_episode=4)
+        obs = env.reset(seed=5)
+        seen_levels: set[int] = set()
+        for _ in range(24):
+            action = choose_baseline_action("random", env, obs)
+            level = int(action["service_level"])
+            seen_levels.add(level)
+            self.assertIn(level, env.service_levels)
+            # parse_action normalizes resources (cache actions are zeroed then
+            # re-normalized the same way as the always_cache baseline), so we
+            # only assert the shared legal bounds here.
+            self.assertGreaterEqual(float(action["bandwidth"]), 0.0)
+            self.assertLessEqual(float(action["bandwidth"]), env.base_bandwidth_hz)
+            self.assertLessEqual(float(action["power"]), 1.0)
+            self.assertLessEqual(float(action["cpu_share"]), 1.0)
+            self.assertLessEqual(float(action["gpu_share"]), 1.0)
+        self.assertGreater(len(seen_levels), 1, "random baseline should explore several service levels")
+
+    def test_random_baseline_is_deterministic_per_seed(self) -> None:
+        actions = []
+        for _ in range(2):
+            env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=9, tasks_per_episode=3)
+            obs = env.reset(seed=9)
+            actions.append([choose_baseline_action("random", env, obs)["service_level"] for _ in range(10)])
+        self.assertEqual(actions[0], actions[1])
+
+    def test_oracle_baseline_emits_legal_action(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=11, tasks_per_episode=3)
+        obs = env.reset(seed=11)
+        action = choose_baseline_action("oracle_best_feasible_evidence", env, obs)
+        self.assertIn(int(action["service_level"]), env.service_levels)
+
+    def test_lambda_freeze_keeps_duals_at_init_values(self) -> None:
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=13, tasks_per_episode=3)
+        try:
+            _model, trace = train_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=2,
+                    update_epochs=1,
+                    hidden_size=32,
+                    device="cpu",
+                    risk_aware_constraints=True,
+                    lambda_freeze=True,
+                    lambda_init_conflict=4.0,
+                    lambda_init_quality_critical=9.74,
+                    lambda_init_deadline_critical=6.84,
+                    lambda_init_battery=0.92,
+                ),
+                seed=13,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        for row in trace:
+            self.assertAlmostEqual(row["lambda_conflict"], 4.0, places=6)
+            self.assertAlmostEqual(row["lambda_quality_critical"], 9.74, places=6)
+            self.assertAlmostEqual(row["lambda_deadline_critical"], 6.84, places=6)
+            self.assertAlmostEqual(row["lambda_battery"], 0.92, places=6)
+            self.assertAlmostEqual(row["lambda_quality_normal"], 0.0, places=6)
+
+    def test_flat_ppo_arm_trains_without_structure(self) -> None:
+        """Flat/conventional PPO arm: bare hybrid multi-head PPO -- no duals,
+        no safety layer, no projections, no Lyapunov queues, env reward."""
+        env = V19LUTResourceEnv(self.tasks, self.lut, self.cfg, seed=19, tasks_per_episode=3)
+        try:
+            model, trace = train_ppo(
+                env,
+                PPOTrainConfig(
+                    train_episodes=2,
+                    update_epochs=1,
+                    hidden_size=32,
+                    device="cpu",
+                    hybrid_actions=True,
+                    constrained=False,
+                    safety_layer=False,
+                    semantic_projection=False,
+                    resource_projection=False,
+                    use_lyapunov_queues=False,
+                    semantic_reward_mode="env",
+                ),
+                seed=19,
+            )
+        except ModuleNotFoundError:
+            self.skipTest("torch is not installed")
+        self.assertEqual(len(trace), 2)
+        for row in trace:
+            self.assertAlmostEqual(row["lambda_conflict"], 0.0, places=6)
+        obs = env.reset(seed=29)
+        action = PPOServicePolicy(env, model, PPOTrainConfig(hidden_size=32, safety_layer=False)).act(obs)
+        self.assertIn("service_level", action)
+
+    def test_num_uavs_override_reaches_canonical_env(self) -> None:
+        env = V19LUTResourceEnv(
+            self.tasks, self.lut, self.cfg, seed=23, tasks_per_episode=3, num_uavs=2
+        )
+        env.reset(seed=23)
+        self.assertEqual(int(env.action_spec().get("num_uavs", 0)), 2)
+
+
 class _ProjectionEnv:
     service_levels = [0, 1, 2]
 

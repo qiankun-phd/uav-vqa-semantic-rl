@@ -105,6 +105,7 @@ class V19LUTResourceEnv:
         formal_scenario: str | None = None,
         policy_name: str = "policy",
         state_version: str | None = None,
+        num_uavs: int | None = None,
     ) -> None:
         if not tasks:
             raise ValueError("V19LUTResourceEnv needs at least one task")
@@ -122,6 +123,11 @@ class V19LUTResourceEnv:
             raise ValueError(f"unknown state_version: {self.state_version}")
         sim_cfg = cfg.get("simulation", {})
         self.tasks_per_episode = int(tasks_per_episode or sim_cfg.get("tasks_per_episode", 40))
+        # Optional UAV-count override for scalability/zero-shot sweeps.  It is
+        # injected via reset options so it lands in the canonical env's
+        # scalability layer, which is merged AFTER the scenario preset env
+        # overrides (scenario presets pin their own num_uavs otherwise).
+        self.num_uavs_override = int(num_uavs) if num_uavs else None
         self._env_cfg = self._cfg_with_overrides(cfg, snr_bins_db, service_levels)
         env_override = dict(self._env_cfg.get("multi_uav_env", {}))
         env_override["tasks_per_episode"] = self.tasks_per_episode
@@ -142,6 +148,7 @@ class V19LUTResourceEnv:
         self._state_v2_max_uavs = max(
             int(rl_cfg.get("state_v2_max_uavs", 8)),
             int(env_cfg.get("num_uavs", 1)),
+            int(self.num_uavs_override or 0),
             int(self.action_spec().get("num_uavs", 1)),
         )
         self._state_v2_mobility_modes = ("stay", "serve_task", "reposition", "avoid_conflict", "return_base")
@@ -162,6 +169,8 @@ class V19LUTResourceEnv:
         options = dict(options or {})
         self.policy_name = str(options.get("policy_name", self.policy_name))
         options.setdefault("tasks_per_episode", self.tasks_per_episode)
+        if self.num_uavs_override:
+            options.setdefault("num_uavs", self.num_uavs_override)
         if self.formal_scenario:
             options.setdefault("formal_scenario", self.formal_scenario)
         options["policy_name"] = self.policy_name

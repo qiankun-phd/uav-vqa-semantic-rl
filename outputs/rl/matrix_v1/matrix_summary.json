@@ -1,0 +1,402 @@
+{
+  "peak": {
+    "proposed": {
+      "average_accuracy": [
+        0.573527,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.0,
+        0.0
+      ],
+      "task_success_rate": [
+        0.0,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.296,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.748,
+        0.0
+      ],
+      "average_delay": [
+        16.454714,
+        0.0
+      ],
+      "average_payload_kb": [
+        0.710501,
+        0.0
+      ],
+      "average_reward": [
+        -5.863193,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_semantic_greedy": {
+      "average_accuracy": [
+        0.385949,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.0,
+        0.0
+      ],
+      "task_success_rate": [
+        0.0,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.654,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        1.0,
+        0.0
+      ],
+      "average_delay": [
+        12.209618,
+        0.0
+      ],
+      "average_payload_kb": [
+        198.930927,
+        0.0
+      ],
+      "average_reward": [
+        -6.382236,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_always_cache": {
+      "average_accuracy": [
+        0.312683,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.0,
+        0.0
+      ],
+      "task_success_rate": [
+        0.0,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.0,
+        0.0
+      ],
+      "average_delay": [
+        0.17824,
+        0.0
+      ],
+      "average_payload_kb": [
+        0.0,
+        0.0
+      ],
+      "average_reward": [
+        -0.943323,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_oracle_best_feasible_evidence": {
+      "average_accuracy": [
+        0.683512,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.0,
+        0.0
+      ],
+      "task_success_rate": [
+        0.0,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.402,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.642,
+        0.0
+      ],
+      "average_delay": [
+        6.157988,
+        0.0
+      ],
+      "average_payload_kb": [
+        0.762761,
+        0.0
+      ],
+      "average_reward": [
+        -3.345298,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_random": {
+      "average_accuracy": [
+        0.4580976666666667,
+        0.008617573343658504
+      ],
+      "semantic_success_rate": [
+        0.0,
+        0.0
+      ],
+      "task_success_rate": [
+        0.0,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.428,
+        0.026229754097208
+      ],
+      "deadline_violation_rate": [
+        0.6566666666666667,
+        0.02138535324312727
+      ],
+      "average_delay": [
+        7.950085333333333,
+        0.19479047140282116
+      ],
+      "average_payload_kb": [
+        61.575723333333336,
+        1.9515625020973182
+      ],
+      "average_reward": [
+        -4.317125,
+        0.1444405891257715
+      ],
+      "runs": [
+        3.0,
+        0.0
+      ]
+    }
+  },
+  "nominal": {
+    "proposed": {
+      "average_accuracy": [
+        0.632321,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.943,
+        0.0
+      ],
+      "task_success_rate": [
+        0.279,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.721,
+        0.0
+      ],
+      "average_delay": [
+        12.564732,
+        0.0
+      ],
+      "average_payload_kb": [
+        2.046565,
+        0.0
+      ],
+      "average_reward": [
+        -3.77614,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_semantic_greedy": {
+      "average_accuracy": [
+        0.624142,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.896,
+        0.0
+      ],
+      "task_success_rate": [
+        0.368,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.632,
+        0.0
+      ],
+      "average_delay": [
+        6.051382,
+        0.0
+      ],
+      "average_payload_kb": [
+        24.186081,
+        0.0
+      ],
+      "average_reward": [
+        -1.869972,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_always_cache": {
+      "average_accuracy": [
+        0.265511,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.297,
+        0.0
+      ],
+      "task_success_rate": [
+        0.297,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.0,
+        0.0
+      ],
+      "average_delay": [
+        0.125985,
+        0.0
+      ],
+      "average_payload_kb": [
+        0.0,
+        0.0
+      ],
+      "average_reward": [
+        -0.605062,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_oracle_best_feasible_evidence": {
+      "average_accuracy": [
+        0.655042,
+        0.0
+      ],
+      "semantic_success_rate": [
+        0.899,
+        0.0
+      ],
+      "task_success_rate": [
+        0.366,
+        0.0
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.613,
+        0.0
+      ],
+      "average_delay": [
+        7.207397,
+        0.0
+      ],
+      "average_payload_kb": [
+        106.196816,
+        0.0
+      ],
+      "average_reward": [
+        -2.278239,
+        0.0
+      ],
+      "runs": [
+        1.0,
+        0.0
+      ]
+    },
+    "bl_random": {
+      "average_accuracy": [
+        0.47215500000000005,
+        0.00461861970722856
+      ],
+      "semantic_success_rate": [
+        0.649,
+        0.005567764362830027
+      ],
+      "task_success_rate": [
+        0.317,
+        0.002645751311064593
+      ],
+      "airspace_conflict_rate": [
+        0.0,
+        0.0
+      ],
+      "deadline_violation_rate": [
+        0.47,
+        0.0026457513110645617
+      ],
+      "average_delay": [
+        4.82377,
+        0.0376512255975817
+      ],
+      "average_payload_kb": [
+        43.393437000000006,
+        0.9606816747435135
+      ],
+      "average_reward": [
+        -1.8606356666666668,
+        0.005643886722227198
+      ],
+      "runs": [
+        3.0,
+        0.0
+      ]
+    }
+  },
+  "summary": {
+    "convergence_ep": {
+      "proposed": 97.0
+    },
+    "multiscale_convergence_ep": {
+      "4 UAVs (default)": 97
+    },
+    "zeroshot": {},
+    "sample_efficiency": {
+      "proposed": {
+        "ep95": 97.0,
+        "final_return": -52.397101547200045,
+        "wall_min": 4.4
+      }
+    }
+  }
+}
