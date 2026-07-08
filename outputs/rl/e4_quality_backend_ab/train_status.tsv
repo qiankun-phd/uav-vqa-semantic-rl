@@ -1,0 +1,13 @@
+arm	seed	exit	start	end	dir
+lut	0	0	2026-07-08T08:06:31	2026-07-08T08:11:16	outputs/rl/e4_quality_backend_ab/lut_0
+lut_nom	0	0	2026-07-08T08:11:16	2026-07-08T08:11:44	outputs/rl/e4_quality_backend_ab/lut_0_nom
+persample	0	0	2026-07-08T08:11:44	2026-07-08T08:16:27	outputs/rl/e4_quality_backend_ab/persample_0
+persample_nom	0	0	2026-07-08T08:16:27	2026-07-08T08:16:56	outputs/rl/e4_quality_backend_ab/persample_0_nom
+lut	1	0	2026-07-08T08:16:56	2026-07-08T08:21:37	outputs/rl/e4_quality_backend_ab/lut_1
+lut_nom	1	0	2026-07-08T08:21:37	2026-07-08T08:22:06	outputs/rl/e4_quality_backend_ab/lut_1_nom
+persample	1	0	2026-07-08T08:22:06	2026-07-08T08:26:53	outputs/rl/e4_quality_backend_ab/persample_1
+persample_nom	1	0	2026-07-08T08:26:53	2026-07-08T08:27:21	outputs/rl/e4_quality_backend_ab/persample_1_nom
+lut	2	0	2026-07-08T08:27:21	2026-07-08T08:32:03	outputs/rl/e4_quality_backend_ab/lut_2
+lut_nom	2	0	2026-07-08T08:32:03	2026-07-08T08:32:32	outputs/rl/e4_quality_backend_ab/lut_2_nom
+persample	2	0	2026-07-08T08:32:32	2026-07-08T08:37:11	outputs/rl/e4_quality_backend_ab/persample_2
+persample_nom	2	0	2026-07-08T08:37:11	2026-07-08T08:37:40	outputs/rl/e4_quality_backend_ab/persample_2_nom
