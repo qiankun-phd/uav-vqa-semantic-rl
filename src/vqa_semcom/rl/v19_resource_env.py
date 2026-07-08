@@ -6,9 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from vqa_semcom.config import resolve_path
+from vqa_semcom.quality.persample_predictor import PersamplePredictor
 from vqa_semcom.semantic.utility import SemanticUtilityModel
 from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv
 from vqa_semcom.sim.resource_env import LUTEntry
+
+QUALITY_BACKENDS = ("lut", "persample")
+DEFAULT_PERSAMPLE_MODEL = Path("outputs") / "models" / "persample_predictor_v1.json"
 
 
 @dataclass(frozen=True)
@@ -139,6 +143,7 @@ class V19LUTResourceEnv:
         policy_name: str = "policy",
         state_version: str | None = None,
         num_uavs: int | None = None,
+        quality_backend: str | None = None,
     ) -> None:
         if not tasks:
             raise ValueError("V19LUTResourceEnv needs at least one task")
@@ -175,6 +180,28 @@ class V19LUTResourceEnv:
         self._last_obs: dict[str, Any] | None = None
         self._last_record: V19StepRecord | None = None
         self._semantic_utility = self._load_semantic_utility_model(cfg)
+        # W3c/E4: pluggable quality source for the transmit services (1/2).
+        # "lut" keeps the calibrated cell-table source; "persample" swaps the
+        # accuracy/LCB/uncertainty fields for the calibrated per-sample
+        # predictor (LCB = p - uncertainty), leaving payload estimates and the
+        # cache/defer machinery untouched.
+        self.quality_backend = str(quality_backend or rl_cfg.get("quality_backend", "lut")).lower()
+        if self.quality_backend not in QUALITY_BACKENDS:
+            raise ValueError(f"unknown quality_backend: {self.quality_backend} (expected {QUALITY_BACKENDS})")
+        self._persample: PersamplePredictor | None = None
+        self._persample_cache: dict[tuple[str, str, str, str, str], tuple[float, float]] = {}
+        if self.quality_backend == "persample":
+            model_path = resolve_path(
+                cfg.get("paths", {}).get("persample_model_json")
+                or rl_cfg.get("persample_model_path")
+                or DEFAULT_PERSAMPLE_MODEL
+            )
+            if not Path(model_path).exists():
+                raise FileNotFoundError(
+                    f"persample quality backend requested but model not found: {model_path} "
+                    "(run scripts/train_persample_predictor.py first)"
+                )
+            self._persample = PersamplePredictor.load(model_path)
         env_cfg = self._env_cfg.get("multi_uav_env", {}) if isinstance(self._env_cfg, dict) else {}
         self.energy_budget_j = float(rl_cfg.get("energy_budget_j", env_cfg.get("energy_budget_j", 500.0)))
         self._state_v2_service_levels = self._canonical_state_v2_service_levels(cfg)
@@ -489,6 +516,8 @@ class V19LUTResourceEnv:
             info["answer_accuracy_est"] = float(estimate.accuracy_lcb)
             info["payload_kb"] = float(estimate.payload_kb)
             info["semantic_payload_kb"] = float(estimate.payload_kb)
+        if self._persample is not None and semantic_path != "defer":
+            self._apply_persample_quality(info, obs, raw_accuracy)
 
         epsilon = self._epsilon_from_obs_or_info(info, obs)
         accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
@@ -583,6 +612,48 @@ class V19LUTResourceEnv:
             "freshness_bin": str(info.get("freshness_bin", obs.get("freshness_bin", "fresh"))),
             "risk_level": str(info.get("risk_level", obs.get("risk_level", "normal"))),
         }
+
+    def _apply_persample_quality(self, info: dict[str, Any], obs: dict[str, Any] | None,
+                                 raw_accuracy: float) -> None:
+        """E4: per-sample calibrated quality source for transmit services.
+
+        Replaces the LUT/utility-model accuracy fields with the calibrated
+        per-sample probability; the reliability-table uncertainty stands in
+        for the Wilson-LCB gap (LCB = p - u).  Cache (service 0) and defer
+        keep their existing sources so the cache-hit and risk-constraint
+        machinery is untouched; payload estimates are also left as-is.
+        """
+        assert self._persample is not None
+        service = str(int(info.get("service_level", 0)))
+        if service not in self._persample.heads:
+            return
+        query = self._semantic_query(info, obs)
+        snr_bin = str(query["snr_bin"])
+        sensed = float(info.get("sensed_snr_db", (obs or {}).get("sensed_snr_db", 0.0)) or 0.0)
+        snr_key = snr_bin if snr_bin else f"{round(sensed, 1)}snr"
+        key = (query["question_type"], service, snr_key,
+               query["view_quality_bin"], query["risk_level"])
+        cached = self._persample_cache.get(key)
+        if cached is None:
+            record = {
+                "question_type": query["question_type"],
+                "view_quality_bin": query["view_quality_bin"],
+                "risk_level": query["risk_level"],
+                "snr_bin": snr_bin,
+                "sensed_snr_db": sensed,
+            }
+            proba = float(self._persample.predict_proba([record], service)[0])
+            uncertainty = float(self._persample.uncertainty([record], service)[0])
+            cached = (proba, uncertainty)
+            self._persample_cache[key] = cached
+        proba, uncertainty = cached
+        lcb = max(0.0, min(1.0, proba - uncertainty))
+        info["semantic_accuracy_mean"] = proba
+        info["semantic_accuracy_lcb"] = lcb
+        info["semantic_uncertainty"] = uncertainty
+        info["answer_accuracy_raw"] = raw_accuracy
+        info["answer_accuracy_est"] = lcb
+        info["quality_backend"] = self.quality_backend
 
     @staticmethod
     def _epsilon_from_obs_or_info(info: dict[str, Any], obs: dict[str, Any] | None) -> float:

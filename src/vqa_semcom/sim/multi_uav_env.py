@@ -1020,6 +1020,12 @@ class MultiUAVVQAEnv:
             raise ValueError("MultiUAVVQAEnv needs a non-empty LUT")
         self.raw_tasks = list(tasks)
         self.lut = lut
+        # W3b: the per-service quality query key is (qtype, service, snr) only.
+        # The 6-D table stays loaded (service-level discovery, SNR bins, and
+        # the cache machinery still read it); the per-service lookup uses this
+        # marginalised 3-D index so sparse view/freshness/risk cells no longer
+        # fragment the quality estimate.
+        self.lut3 = self._marginalize_lut_3d(lut)
         self.semantic_utility_model = semantic_utility_model
         self.cfg = cfg
         self.env_cfg = _env_cfg(cfg)
@@ -2497,25 +2503,36 @@ class MultiUAVVQAEnv:
         u2 = rng.random()
         return math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
 
+    @staticmethod
+    def _marginalize_lut_3d(
+        lut: dict[tuple[str, int, str, str, str, str], LUTEntry],
+    ) -> dict[tuple[str, int, str], LUTEntry]:
+        """Collapse the 6-D LUT to (qtype, service, link) by mean pooling."""
+        pooled: dict[tuple[str, int, str], list[LUTEntry]] = {}
+        for (qtype, level, link, _view, _fresh, _risk), entry in lut.items():
+            pooled.setdefault((qtype, int(level), link), []).append(entry)
+        return {
+            key: LUTEntry(
+                accuracy=sum(entry.accuracy for entry in entries) / len(entries),
+                payload_bytes=sum(entry.payload_bytes for entry in entries) / len(entries),
+            )
+            for key, entries in pooled.items()
+        }
+
     def _lookup_entry(self, task: EnvTask, service_level: int, snr_bin: str) -> LUTEntry:
-        key = (task.task_type, int(service_level), snr_bin, task.view_quality_bin, task.freshness_bin, task.risk_level)
-        if key in self.lut:
-            return self.lut[key]
+        # W3b: 3-D query key -- view/freshness/risk dropped from the lookup.
+        key = (task.task_type, int(service_level), snr_bin)
+        if key in self.lut3:
+            return self.lut3[key]
         legacy = channel_bin_from_snr(snr_db_from_label(snr_bin))
-        legacy_key = (task.task_type, int(service_level), legacy, task.view_quality_bin, task.freshness_bin, task.risk_level)
-        if legacy_key in self.lut:
-            return self.lut[legacy_key]
+        legacy_key = (task.task_type, int(service_level), legacy)
+        if legacy_key in self.lut3:
+            return self.lut3[legacy_key]
         candidates = [
             entry
-            for (qtype, level, _link, view, _fresh, risk), entry in self.lut.items()
-            if qtype == task.task_type and level == int(service_level) and view == task.view_quality_bin and risk == task.risk_level
+            for (qtype, level, _link), entry in self.lut3.items()
+            if qtype == task.task_type and level == int(service_level)
         ]
-        if not candidates:
-            candidates = [
-                entry
-                for (qtype, level, _link, _view, _fresh, risk), entry in self.lut.items()
-                if qtype == task.task_type and level == int(service_level) and risk == task.risk_level
-            ]
         if candidates:
             return LUTEntry(
                 accuracy=min(entry.accuracy for entry in candidates),
