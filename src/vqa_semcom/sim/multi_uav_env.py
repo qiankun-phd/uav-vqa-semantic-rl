@@ -138,6 +138,24 @@ ATTAINABILITY_V1_EPSILON: dict[str, float] = {
 }
 
 
+# Attainability recalibration iteration 2 (task #28). See
+# docs/EPSILON_RECAL_V2.md.  Rule (1) quantile anchoring: eps_critical =
+# P10 of the peak (all-critical) best-feasible-service LCB distribution
+# (=0.504); eps_normal = P25 of the nominal normal-risk distribution
+# (=0.297).  Rule (2) cache-ceiling guardrail: eps_critical =
+# max(P10 anchor, cache_accuracy_P90 + 0.05) = max(0.504, 0.633) = 0.633
+# so the cache cannot become a critical-task compliance shortcut.
+# NOTE: the guardrail floor (0.633) binds ABOVE the attainability anchor
+# (0.504) -- flagged in the doc as a rule conflict for the counting-heavy
+# peak mix; the constants below are the literal output of the v2 rule.
+# Selected via env_cfg["epsilon_calibration"] == "attainability_v2".
+ATTAINABILITY_V2_EPSILON: dict[str, float] = {
+    "critical": 0.633,
+    "normal": 0.297,
+    "high": 0.633,
+}
+
+
 SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "nominal": {
         "description": "Default mixed task queue with calibrated physical constants.",
@@ -2220,6 +2238,9 @@ class MultiUAVVQAEnv:
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
         mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()
+        if mode == "attainability_v2":
+            table = ATTAINABILITY_V2_EPSILON
+            return float(table.get(risk, table["critical"]))
         if mode in ("attainability_v1", "attainability"):
             table = ATTAINABILITY_V1_EPSILON
             return float(table.get(risk, table["critical"]))

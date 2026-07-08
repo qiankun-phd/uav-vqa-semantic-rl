@@ -514,7 +514,7 @@ def main() -> int:
     parser.add_argument("--hidden-layers", default=None, help="Comma-separated PPO encoder widths. Defaults to --hidden-size,--hidden-size.")
     parser.add_argument("--state-version", default="v1", choices=["v1", "v2"], help="Observation state vector version.")
     parser.add_argument("--quality-backend", default=None, choices=["lut", "persample"], help="Semantic quality source for services 1/2: calibrated LUT cells (default) or the per-sample calibrated predictor (E4).")
-    parser.add_argument("--epsilon-calibration", default=None, choices=["legacy", "attainability_v1"], help="Semantic quality-constraint calibration (task #28): legacy=0.82/0.65 constants; attainability_v1=oracle-attainability-anchored 0.615/0.166. Overrides multi_uav_env.epsilon_calibration.")
+    parser.add_argument("--epsilon-calibration", default=None, choices=["legacy", "attainability_v1", "attainability_v2"], help="Semantic quality-constraint calibration (task #28): legacy=0.82/0.65 constants; attainability_v1=0.615/0.166; attainability_v2=quantile-anchored + cache-ceiling guardrail 0.633/0.297. Overrides multi_uav_env.epsilon_calibration.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")

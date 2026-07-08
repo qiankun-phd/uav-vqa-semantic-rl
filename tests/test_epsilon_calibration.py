@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from vqa_semcom.sim.multi_uav_env import (  # noqa: E402
     ATTAINABILITY_V1_EPSILON,
+    ATTAINABILITY_V2_EPSILON,
     MultiUAVVQAEnv,
 )
 from vqa_semcom.sim.resource_env import LUTEntry  # noqa: E402
@@ -94,6 +95,36 @@ class EpsilonCalibrationTest(unittest.TestCase):
         # Provenance guard: constants == documented ratio x oracle LCB ceiling.
         self.assertAlmostEqual(ATTAINABILITY_V1_EPSILON["critical"], round(0.90 * 0.6835, 3), places=9)
         self.assertAlmostEqual(ATTAINABILITY_V1_EPSILON["normal"], round(0.75 * 0.2209, 3), places=9)
+
+    def test_attainability_v2_values(self):
+        # v2 quantile-anchored + cache-guarded constants (docs/EPSILON_RECAL_V2.md).
+        self.assertAlmostEqual(self._eps("attainability_v2", "critical"), 0.633, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v2", "normal"), 0.297, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v2", "high"), 0.633, places=9)
+
+    def test_attainability_v2_critical_above_cache_p90(self):
+        # Guardrail invariant: eps_critical must clear the measured cache
+        # accuracy ceiling (P90 = 0.583) by at least the 0.05 margin, so cache
+        # can never be a critical-task compliance shortcut.
+        cache_p90 = 0.583
+        self.assertGreaterEqual(ATTAINABILITY_V2_EPSILON["critical"], cache_p90 + 0.05 - 1e-9)
+
+    def test_attainability_v2_ignores_row_and_scaling(self):
+        # v2, like v1, is a flat per-risk constant: row epsilon_k and scenario
+        # epsilon_scale / caps must not perturb it.
+        self.env.env_cfg = {"epsilon_calibration": "attainability_v2"}
+        self.env.scenario_cfg = {"task_layout": {"epsilon_scale": 0.5,
+                                                 "epsilon_cap_by_risk": {"critical": 0.4}}}
+        eps = self.env._epsilon_for_task({"epsilon_k": "0.99"}, "critical")
+        self.assertAlmostEqual(eps, 0.633, places=9)
+
+    def test_v1_and_legacy_unaffected_by_v2(self):
+        # Adding v2 must not perturb legacy or v1 selection.
+        self.assertAlmostEqual(self._eps("legacy", "critical"), 0.82, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v1", "critical"), 0.615, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v1", "normal"), 0.166, places=9)
+        self.assertEqual(ATTAINABILITY_V1_EPSILON, {"critical": 0.615, "normal": 0.166, "high": 0.615})
+
 
 
 if __name__ == "__main__":
