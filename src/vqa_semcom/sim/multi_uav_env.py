@@ -125,6 +125,19 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
+# Attainability-anchored semantic-quality thresholds (task #28). See
+# docs_spec/EPSILON_RECAL.md: epsilon_critical = 0.90 x peak-condition oracle
+# LCB ceiling (0.6835) => 0.615; epsilon_normal = 0.75 x nominal-condition
+# oracle LCB ceiling (0.2209) => 0.166. Selected via
+# env_cfg["epsilon_calibration"] == "attainability_v1"; default "legacy"
+# preserves the original 0.82/0.65 constants bit-for-bit.
+ATTAINABILITY_V1_EPSILON: dict[str, float] = {
+    "critical": 0.615,
+    "normal": 0.166,
+    "high": 0.615,
+}
+
+
 SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "nominal": {
         "description": "Default mixed task queue with calibrated physical constants.",
@@ -1164,9 +1177,13 @@ class MultiUAVVQAEnv:
         uav = self.uavs[int(parsed["uav_assignment"]) % len(self.uavs)]
         edge = self.edges[int(parsed["edge_id"]) % len(self.edges)]
 
-        task.last_sensed_snr_db = float(info["sensed_snr_db"])
-        task.last_sinr_db = float(info["sinr_db"])
-        task.last_snr_bin = str(info["snr_bin"])
+        # Cache-hit paths do not transmit, so the cache-eligible info builder
+        # omits sensed SNR/SINR (only reachable once epsilon recalibration makes
+        # the cache eligible; task #28). Fall back to the task's last-known link
+        # state; transmit paths always carry these keys -> behaviour unchanged.
+        task.last_sensed_snr_db = float(info.get("sensed_snr_db", task.last_sensed_snr_db))
+        task.last_sinr_db = float(info.get("sinr_db", task.last_sinr_db))
+        task.last_snr_bin = str(info.get("snr_bin", task.last_snr_bin))
         task.operational_intent_state = str(info.get("operational_intent_state", task.operational_intent_state))
         if success:
             task.completed = True
@@ -2202,6 +2219,10 @@ class MultiUAVVQAEnv:
         return tasks
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
+        mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()
+        if mode in ("attainability_v1", "attainability"):
+            table = ATTAINABILITY_V1_EPSILON
+            return float(table.get(risk, table["critical"]))
         default = 0.82 if risk == "critical" else 0.65
         base = float(row.get("epsilon_k", default))
         thresholds = self.env_cfg.get("semantic_threshold_by_risk", {})

@@ -117,6 +117,8 @@
   },
   "multi_uav_env": {
     "scenario": "nominal",
+    "epsilon_calibration": "legacy",
+    "epsilon_calibration_note": "task #28: legacy=0.82/0.65 quality constants (default, preserves published behaviour); attainability_v1=oracle-attainability-anchored 0.615(critical)/0.166(normal). Override at runtime via --epsilon-calibration.",
     "scenario_profile": "bubbles",
     "scenario_profile_note": "Set scenario_profile='bubbles' to enable the SESAR JU BUBBLES D2.1-conformant scenario (Table B-2 SAIL III-IV performance envelope, CPA two-condition tactical-conflict detection, Table G-13 'bubbles_daily' arrival curve). Default null leaves all env behaviour bit-identical to the legacy nominal scenario.",
     "bubbles_tc_threshold_s": 60.0,
