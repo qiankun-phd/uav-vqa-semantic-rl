@@ -10,7 +10,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from vqa_semcom.sim.multi_uav_env import (  # noqa: E402
     ATTAINABILITY_V1_EPSILON,
     ATTAINABILITY_V2_EPSILON,
+    ATTAINABILITY_V3_EPSILON,
     MultiUAVVQAEnv,
+    SemanticCacheEntry,
 )
 from vqa_semcom.sim.resource_env import LUTEntry  # noqa: E402
 
@@ -125,6 +127,95 @@ class EpsilonCalibrationTest(unittest.TestCase):
         self.assertAlmostEqual(self._eps("attainability_v1", "normal"), 0.166, places=9)
         self.assertEqual(ATTAINABILITY_V1_EPSILON, {"critical": 0.615, "normal": 0.166, "high": 0.615})
 
+    # --- v3 (structural cache-compliance ban) -------------------------------
+
+    def test_attainability_v3_values(self):
+        # v3 drops the v2 cache guardrail and returns to the pure P10
+        # attainability anchor 0.504; eps_normal restored to the v1 anchor
+        # 0.166 (docs/EPSILON_RECAL_V3.md).
+        self.assertAlmostEqual(self._eps("attainability_v3", "critical"), 0.504, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v3", "normal"), 0.166, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v3", "high"), 0.504, places=9)
+        self.assertEqual(ATTAINABILITY_V3_EPSILON, {"critical": 0.504, "normal": 0.166, "high": 0.504})
+
+    def test_attainability_v3_ignores_row_and_scaling(self):
+        # v3, like v1/v2, is a flat per-risk constant.
+        self.env.env_cfg = {"epsilon_calibration": "attainability_v3"}
+        self.env.scenario_cfg = {"task_layout": {"epsilon_scale": 0.5,
+                                                 "epsilon_cap_by_risk": {"critical": 0.4}}}
+        eps = self.env._epsilon_for_task({"epsilon_k": "0.99"}, "critical")
+        self.assertAlmostEqual(eps, 0.504, places=9)
+
+    def test_v1_v2_legacy_unaffected_by_v3(self):
+        # Adding v3 must not perturb legacy / v1 / v2 selection.
+        self.assertAlmostEqual(self._eps("legacy", "critical"), 0.82, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v1", "critical"), 0.615, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v2", "critical"), 0.633, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v2", "normal"), 0.297, places=9)
+        self.assertEqual(ATTAINABILITY_V2_EPSILON, {"critical": 0.633, "normal": 0.297, "high": 0.633})
+
+
+class CriticalCacheComplianceGateTest(unittest.TestCase):
+    """Task #28 v3: structural cache-compliance ban at the judgment layer."""
+
+    def _critical_cache_env(self, epsilon: float = 0.504, risk: str = "critical"):
+        env = _env()
+        env.reset(seed=5)
+        task = env._front_task()
+        assert task is not None
+        task.risk_level = risk
+        task.epsilon_k = epsilon
+        # Seed an eligible, fresh, high-quality cache entry that on its own
+        # clears the task's epsilon (exact match via area_id).
+        env.semantic_cache_entries = [
+            SemanticCacheEntry(
+                task_id="seed", task_type=task.task_type, risk_level=risk,
+                priority=1.0, x_m=0.0, y_m=0.0, cache_age=0, updated_step=0,
+                area_id=task.area_id, question_type=task.task_type,
+                quality_lcb=0.60, uncertainty=0.1,
+            )
+        ]
+        action = env._path_action("cache", task)
+        return env, task, action
+
+    def _eval(self, env, task, action):
+        return env.evaluate_action(action, task_id=task.task_id,
+                                   obs={"task_id": task.task_id}, mutate=False)
+
+    def test_allowed_critical_cache_only_is_compliant(self):
+        # Regression guard: under the default "allowed" gate an eligible cache
+        # whose LCB clears epsilon is quality-compliant (legacy/v1/v2 behaviour).
+        env, task, action = self._critical_cache_env()
+        env.env_cfg["critical_cache_compliance"] = "allowed"
+        info = self._eval(env, task, action)
+        self.assertFalse(bool(info["quality_violation"]))
+        self.assertTrue(bool(info["semantic_success"]))
+
+    def test_forbidden_critical_cache_only_is_violation(self):
+        # v3 core: the SAME eligible, epsilon-clearing cache is structurally
+        # non-compliant for a critical task under the "forbidden" gate.
+        env, task, action = self._critical_cache_env()
+        env.env_cfg["critical_cache_compliance"] = "forbidden"
+        info = self._eval(env, task, action)
+        self.assertTrue(bool(info["quality_violation"]))
+        self.assertFalse(bool(info["semantic_success"]))
+
+    def test_forbidden_leaves_normal_cache_untouched(self):
+        # The ban applies only to critical/high risk; a normal task's cache
+        # compliance is unchanged under "forbidden".
+        env, task, action = self._critical_cache_env(epsilon=0.166, risk="normal")
+        env.env_cfg["critical_cache_compliance"] = "forbidden"
+        info = self._eval(env, task, action)
+        self.assertFalse(bool(info["quality_violation"]))
+        self.assertTrue(bool(info["semantic_success"]))
+
+    def test_default_gate_absent_key_is_allowed(self):
+        # Absent config key must behave as "allowed" (bit-identical default).
+        env, task, action = self._critical_cache_env()
+        env.env_cfg.pop("critical_cache_compliance", None)
+        info = self._eval(env, task, action)
+        self.assertFalse(bool(info["quality_violation"]))
+        self.assertTrue(bool(info["semantic_success"]))
 
 
 if __name__ == "__main__":

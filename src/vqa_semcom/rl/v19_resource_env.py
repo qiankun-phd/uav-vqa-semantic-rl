@@ -368,6 +368,16 @@ class V19LUTResourceEnv:
         info = self._env.evaluate_action(parsed, task_id=task_id, obs=obs, mutate=False)
         return self._enrich_semantic_info(dict(info), obs)
 
+    def _critical_cache_compliance_forbidden(self) -> bool:
+        """True iff the underlying env forbids s0 cache-only compliance for
+        critical/high tasks (task #28 v3, method (c)).  Default "allowed" is a
+        no-op, keeping legacy/v1/v2 record-layer output bit-identical."""
+        try:
+            mode = str(self._env.env_cfg.get("critical_cache_compliance", "allowed") or "allowed").lower()
+        except Exception:
+            mode = "allowed"
+        return mode == "forbidden"
+
     def _record_from_info(self, info: dict[str, Any], reward: float) -> V19StepRecord:
         return V19StepRecord(
             episode=int(info.get("episode", self._env.episode)),
@@ -541,6 +551,23 @@ class V19LUTResourceEnv:
         info["q_deadline_increment"] = max(0.0, delay_s - deadline_s)
         info["q_energy_increment"] = max(0.0, energy_j - energy_budget_j)
         info["quality_violation"] = bool(float(info.get("answer_accuracy_est", 0.0)) < epsilon)
+        # Structural cache-compliance ban (task #28 v3, method (c)).  This is the
+        # authoritative RL record layer: it recomputes semantic_success /
+        # quality_violation from the calibrated LUT/persample estimate and
+        # therefore CLOBBERS the env-level compliance override.  Re-apply the ban
+        # here so a critical/high task served by the s0 cache-only path is never
+        # counted as quality-compliant -- this propagates uniformly to the CSV
+        # metrics, info["success"] below, the binary Lagrangian quality cost, and
+        # the oracle_best_feasible_evidence feasibility search (which calls this
+        # via evaluate_action).  The reward penalty and the env-side candidate
+        # metrics get the same override from the env.  Default "allowed" no-op.
+        if (
+            str(info.get("semantic_path", "")) == "cache"
+            and str(info.get("risk_level", "")) in ("critical", "high")
+            and self._critical_cache_compliance_forbidden()
+        ):
+            info["semantic_success"] = False
+            info["quality_violation"] = True
         info.setdefault("utm_constraint_violation", False)
         info.setdefault("utm_conflict_violation", bool(info.get("airspace_conflict", False) or info.get("utm_constraint_violation", False)))
         info.setdefault("dss_available", True)

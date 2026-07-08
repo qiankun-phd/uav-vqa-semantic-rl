@@ -156,6 +156,26 @@ ATTAINABILITY_V2_EPSILON: dict[str, float] = {
 }
 
 
+# Attainability recalibration iteration 3 (task #28, method (c): structural
+# cache-compliance ban).  See docs/EPSILON_RECAL_V3.md.  v2 proved rule (1)
+# quantile anchoring and rule (2) cache-ceiling guardrail mutually
+# contradictory for the counting-heavy peak mix: any eps_critical that defeats
+# the cache shortcut (>0.633) is unattainable, any attainable one (<=0.504) is
+# below the cache ceiling.  v3 DROPS the guardrail and instead forbids cache-
+# ONLY compliance for critical/high tasks *structurally* -- gated by
+# env_cfg["critical_cache_compliance"] == "forbidden" (default "allowed"
+# preserves legacy/v1/v2 bit-for-bit).  With the cache shortcut removed at the
+# compliance-judgment layer (not just the reward), eps_critical returns to the
+# pure attainability anchor P10=0.504, and eps_normal is restored to the v1
+# anchor 0.166 (v2's 0.297 caused a pure nominal regression 0.897 -> 0.846).
+# Selected via env_cfg["epsilon_calibration"] == "attainability_v3".
+ATTAINABILITY_V3_EPSILON: dict[str, float] = {
+    "critical": 0.504,
+    "normal": 0.166,
+    "high": 0.504,
+}
+
+
 SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "nominal": {
         "description": "Default mixed task queue with calibrated physical constants.",
@@ -1707,6 +1727,22 @@ class MultiUAVVQAEnv:
         if str(parsed["semantic_path"]) == "cache" and not bool(cache_status["cache_eligible"]):
             quality_violation = True
             semantic_success = False
+        # Structural cache-compliance ban (task #28 v3, method (c)).  When the
+        # env is configured with critical_cache_compliance == "forbidden", a
+        # critical/high-risk task served by the s0 cache-only path is NEVER
+        # counted as quality-compliant, even if the cached answer's LCB clears
+        # epsilon_k.  This closes the cache shortcut at the compliance-judgment
+        # layer, so it propagates uniformly to success, the reward violation
+        # term, the Lagrangian quality cost, and the oracle's per-task feasible-
+        # service search.  Default "allowed" keeps legacy/v1/v2 bit-identical.
+        if (
+            str(parsed["semantic_path"]) == "cache"
+            and task.risk_level in ("critical", "high")
+            and str(self.env_cfg.get("critical_cache_compliance", "allowed") or "allowed").lower()
+            == "forbidden"
+        ):
+            quality_violation = True
+            semantic_success = False
         deadline_violation = delay["total_delay_s"] > remaining_deadline_s
         battery_violation = energy["total_energy_j"] > uav.battery_j - float(self.env_cfg["return_energy_reserve_j"])
         gpu_memory_ok = self._gpu_memory_ok(edge, int(parsed["service_level"]))
@@ -2238,6 +2274,9 @@ class MultiUAVVQAEnv:
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
         mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()
+        if mode == "attainability_v3":
+            table = ATTAINABILITY_V3_EPSILON
+            return float(table.get(risk, table["critical"]))
         if mode == "attainability_v2":
             table = ATTAINABILITY_V2_EPSILON
             return float(table.get(risk, table["critical"]))

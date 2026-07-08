@@ -1519,6 +1519,25 @@ def _build_two_timescale_action(
     return env.parse_action(action)
 
 
+def _critical_cache_forbidden(env: V19LUTResourceEnv, obs: dict[str, Any]) -> bool:
+    """Structural cache-compliance ban gate (task #28 v3, method (c)).
+
+    True iff the underlying env runs with critical_cache_compliance=="forbidden"
+    AND the current task is critical/high risk.  When True the safety-projection
+    layer must never *downgrade onto* the s0 cache path (it is a guaranteed
+    quality violation for the task); it should fall through to the cheapest
+    feasible transmission service (token) instead, and otherwise leave the
+    Lagrangian dual to price any residual infeasibility.  Default "allowed"
+    leaves every projection path bit-identical to legacy/v1/v2.
+    """
+    base = getattr(env, "_env", env)
+    try:
+        mode = str(getattr(base, "env_cfg", {}).get("critical_cache_compliance", "allowed") or "allowed").lower()
+    except Exception:
+        mode = "allowed"
+    return mode == "forbidden" and str(obs.get("risk_level", "")) in ("critical", "high")
+
+
 def _project_path_mobility_action(
     env: V19LUTResourceEnv,
     obs: dict[str, Any],
@@ -1545,6 +1564,8 @@ def _project_path_mobility_action(
         if deadline_bad and (_is_edge_overload_obs(obs, cfg) or "utm_conflict" in scenario):
             for fallback in ("token", "cache", "reject", "defer"):
                 if fallback == path:
+                    continue
+                if fallback == "cache" and _critical_cache_forbidden(env, obs):
                     continue
                 if fallback == "cache" and (not _cache_eligible_for_obs(obs) or _path_quality_gap(obs, "cache") > float(cfg.expert_cache_gap_threshold)):
                     continue
@@ -2094,6 +2115,11 @@ def _deadline_token_cache_fallback_action(
 ) -> dict[str, Any] | None:
     if not bool(cfg.deadline_token_cache_fallback):
         return None
+    if _critical_cache_forbidden(env, obs):
+        # Critical/high task under the structural cache-compliance ban: a
+        # token->cache fallback would manufacture a guaranteed quality
+        # violation.  Refuse it and let the caller keep the (priced) token.
+        return None
     if int(action.get("service_level", info.get("service_level", 0))) != 1:
         return None
     deadline = max(1e-6, float(obs.get("deadline_s", obs.get("tau_k", info.get("deadline_s", 5.0)))))
@@ -2143,7 +2169,13 @@ def _projected_deadline_downgrade_action(
     }.get(current_path, ("token", "cache", "reject", "defer"))
     current_gap = _semantic_gap(info, obs)
     expert_path = expert_semantic_path(obs, cfg) if bool(cfg.semantic_path_actions) else ""
+    crit_cache_forbidden = _critical_cache_forbidden(env, obs)
     for path in downgrade_order:
+        if path == "cache" and crit_cache_forbidden:
+            # Structural ban: never downgrade a critical/high task onto the s0
+            # cache path.  The order tries the cheapest transmission (token)
+            # first, so skipping cache steers the projection to that instead.
+            continue
         if path == "defer" and expert_path != "defer":
             continue
         if path == "reject" and expert_path != "reject":
