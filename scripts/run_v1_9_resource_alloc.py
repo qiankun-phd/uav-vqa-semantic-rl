@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from vqa_semcom.config import load_config, resolve_path
 from vqa_semcom.rl.v19_ppo import (
+    FlatPPOPolicy,
     PPOServicePolicy,
     PPOTrainConfig,
     TwoTimescalePPOPolicy,
@@ -231,6 +232,7 @@ def make_env(
 ) -> V19LUTResourceEnv:
     snr_bins = parse_snr_bins(args.snr_bins) if args.snr_bins else None
     env_cfg = _cfg_with_scenario(cfg, args.scenario)
+    env_cfg = _cfg_with_a2g_overrides(env_cfg, args)
     return V19LUTResourceEnv(
         tasks=tasks,
         lut=lut,
@@ -581,6 +583,7 @@ def main() -> int:
     parser.add_argument("--lut-support-guard", default=None, choices=["off", "outage"], help="Task #35-(1): out-of-support SINR handling for the semantic LUT. 'off' (default) snaps a below-support SINR to the nearest (lowest) calibrated bin (silent extrapolation: a -30 dB link reads LUT quality ~0.85). 'outage' treats a service whose effective SINR is below the lowest bin by > lut_support_margin_db (2.5 dB) as a quality outage (LCB 0); above the top bin the SINR is still clamped (monotone saturation). Overrides multi_uav_env.lut_support_guard.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
+    parser.add_argument("--flat-ppo", action="store_true", help="Flat single-head PPO baseline (paper II P1): flatten the hybrid action space into ONE categorical head over service x discretized resource grid (3 levels per resource dim). Same reward shaping/duals/masks/safety layer as the hybrid path; no two-timescale split, no learned mobility head. Mutually exclusive with --two-timescale-ppo/--service-only-ppo/--semantic-path-ppo.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
     parser.add_argument("--semantic-path-ppo", action="store_true", help="Use semantic_path cache/token/image/defer/cache_update actor instead of service-level actor.")
     parser.add_argument("--mobility-update-interval", type=int, default=3, help="Slow mobility actor update interval K in slots.")
@@ -640,6 +643,8 @@ def main() -> int:
     parser.add_argument("--lambda-init-battery", type=float, default=0.0)
     parser.add_argument("--lambda-init-gpu", type=float, default=0.0)
     parser.add_argument("--num-uavs", type=int, default=None, help="Override the scenario UAV count (scalability/zero-shot sweeps). Injected through the canonical env's scalability layer so it wins over scenario presets.")
+    parser.add_argument("--interference-floor-dbm", type=float, default=None, help="M4 generalization axis: override multi_uav_env.a2g.interference_floor_dbm (base -120). Injected into the base env cfg; survives the scenario merge for presets that do not pin a2g (nominal/utm_conflict).")
+    parser.add_argument("--a2g-excess-loss-db", type=float, default=None, help="M4 generalization axis: override multi_uav_env.a2g.excess_loss_db (base 4.0) -- a scalar extra link attenuation, i.e. a dB-for-dB received-SNR degradation axis. Same injection path as --interference-floor-dbm.")
     parser.add_argument("--conflict-cost-limit", type=float, default=0.08, help="Conflict-rate budget for the conflict dual channel (TLS exposure anchor).")
     parser.add_argument("--quality-cost-limit", type=float, default=0.0)
     parser.add_argument("--deadline-cost-limit", type=float, default=0.0)
@@ -730,6 +735,10 @@ def run_experiment(
     ppo_policy: PPOServicePolicy | TwoTimescalePPOPolicy | None = None
     ppo_cfg: PPOTrainConfig | None = None
 
+    if bool(getattr(args, "flat_ppo", False)) and (
+        args.two_timescale_ppo or args.service_only_ppo or args.semantic_path_ppo
+    ):
+        raise ValueError("--flat-ppo is mutually exclusive with --two-timescale-ppo/--service-only-ppo/--semantic-path-ppo")
     if args.train_ppo or (args.policy == "ppo" and not args.load_ppo_model):
         train_env = make_env(args, cfg, tasks, lut, "ppo_train")
         hidden_layers = normalize_hidden_layers(args.hidden_layers, args.hidden_size)
@@ -798,6 +807,7 @@ def run_experiment(
             bc_epochs=args.bc_epochs,
             bc_aux_weight=args.bc_aux_weight,
             two_timescale=args.two_timescale_ppo,
+            flat_ppo=args.flat_ppo,
             mobility_update_interval=args.mobility_update_interval,
             no_mobility_actor=args.no_mobility_actor,
             deadline_aware_evidence_guard=args.deadline_aware_evidence_guard,
@@ -814,14 +824,17 @@ def run_experiment(
             model_name = "ppo_two_timescale_policy.pt"
         else:
             model, train_trace = train_ppo(train_env, ppo_cfg, seed=args.seed)
-            model_name = "ppo_service_policy.pt" if args.service_only_ppo else "ppo_hybrid_policy.pt"
+            if args.flat_ppo:
+                model_name = "ppo_flat_policy.pt"
+            else:
+                model_name = "ppo_service_policy.pt" if args.service_only_ppo else "ppo_hybrid_policy.pt"
         model_path = Path(args.output_dir) / model_name
         if args.two_timescale_ppo:
             save_two_timescale_model(model_path, model, train_env, ppo_cfg)
             ppo_policy = TwoTimescalePPOPolicy(train_env, model, ppo_cfg)
         else:
             save_ppo_model(model_path, model, train_env, ppo_cfg)
-            ppo_policy = PPOServicePolicy(train_env, model, ppo_cfg)
+            ppo_policy = FlatPPOPolicy(train_env, model, ppo_cfg) if args.flat_ppo else PPOServicePolicy(train_env, model, ppo_cfg)
         print(f"wrote {model_path}")
 
     for policy in selected:
@@ -836,6 +849,8 @@ def run_experiment(
             elif ppo_policy is not None:
                 if args.two_timescale_ppo:
                     eval_policy = TwoTimescalePPOPolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
+                elif args.flat_ppo:
+                    eval_policy = FlatPPOPolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
                 else:
                     eval_policy = PPOServicePolicy(eval_env, ppo_policy.model, ppo_policy.cfg)
                 action_fn = lambda obs, policy=eval_policy: policy.act(obs, deterministic=True)
@@ -1101,6 +1116,30 @@ def _print_summary_row(row: EvalSummary) -> None:
         f"{row.semantic_path_token_ratio:.2f}/{row.semantic_path_image_ratio:.2f}/{row.semantic_path_defer_ratio:.2f}/"
         f"{row.semantic_path_cache_update_ratio:.2f}/{row.semantic_path_reject_ratio:.2f}) expert_agree={row.expert_path_agreement_rate:.2f} defer_count={row.average_defer_count:.2f}"
     )
+
+
+def _cfg_with_a2g_overrides(cfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    """M4 generalization axes: interference floor / excess link loss.
+
+    Injected into the BASE multi_uav_env.a2g cfg, which the canonical env
+    deep-merges with the scenario preset at reset; the paper presets
+    (nominal/utm_conflict) pin no a2g block, so these overrides win there.
+    """
+    floor = getattr(args, "interference_floor_dbm", None)
+    excess = getattr(args, "a2g_excess_loss_db", None)
+    if floor is None and excess is None:
+        return cfg
+    out = dict(cfg)
+    env_cfg = dict(out.get("multi_uav_env", {}))
+    a2g = dict(env_cfg.get("a2g", {}))
+    if floor is not None:
+        a2g["interference_floor_dbm"] = float(floor)
+        a2g.setdefault("interference_enabled", True)
+    if excess is not None:
+        a2g["excess_loss_db"] = float(excess)
+    env_cfg["a2g"] = a2g
+    out["multi_uav_env"] = env_cfg
+    return out
 
 
 def _cfg_with_scenario(cfg: dict[str, Any], scenario: str | None) -> dict[str, Any]:

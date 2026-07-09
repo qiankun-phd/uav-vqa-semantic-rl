@@ -293,6 +293,18 @@ class PPOTrainConfig:
     two_timescale: bool = False
     mobility_update_interval: int = 3
     no_mobility_actor: bool = False
+    # Flat-PPO baseline (paper II, deep-review P1): the hybrid action space is
+    # flattened into ONE categorical head over service x discretized resource
+    # grid (Lya-HiPPO-style flat baseline).  Each continuous resource dim
+    # (bandwidth/power/cpu/gpu shares, sigmoid space) is discretized to
+    # flat_resource_levels; the joint head has
+    # num_services * len(levels)**len(RESOURCE_KEYS) logits.  No two-timescale
+    # split, no learned mobility head (deterministic mobility defaults, same as
+    # the monolithic path).  Reward shaping, Lagrangian duals, masks, and the
+    # safety projection layer are IDENTICAL to the hybrid path so the only
+    # delta is the action-space structure.  Default False = legacy untouched.
+    flat_ppo: bool = False
+    flat_resource_levels: tuple[float, ...] = (0.15, 0.5, 0.85)
     waypoint_delta_max_m: float = 80.0
     altitude_delta_max_m: float = 20.0
     flight_energy_cost_weight: float = 0.08
@@ -476,6 +488,80 @@ class HybridActorCritic(nn.Module if nn is not None else object):
 ServiceLevelActorCritic = HybridActorCritic
 
 
+class FlatActorCritic(nn.Module if nn is not None else object):
+    """Flat single-head PPO baseline over the flattened hybrid action space.
+
+    The discrete service choice and the four continuous resource dims are
+    flattened into ONE categorical head: each resource dim is discretized to
+    ``resource_levels`` (sigmoid-space grid points in (0,1)), giving
+    ``num_service_actions * len(levels)**len(RESOURCE_KEYS)`` joint actions.
+    Index layout: ``joint = service_idx * grid + sum_i level_i * L**i`` with
+    resource dim i ordered as RESOURCE_KEYS.  Everything downstream (safety
+    projection, duals, reward shaping) is shared with the hybrid path.
+    """
+
+    def __init__(
+        self,
+        obs_dim: int,
+        num_service_actions: int,
+        hidden_size: int = 128,
+        hidden_layers: tuple[int, ...] | list[int] | None = None,
+        resource_levels: tuple[float, ...] | list[float] | None = None,
+    ) -> None:
+        require_torch()
+        super().__init__()
+        self.hidden_layers = normalize_hidden_layers(hidden_layers, hidden_size)
+        self.num_service_actions = int(num_service_actions)
+        self.resource_levels = tuple(float(v) for v in (resource_levels or (0.15, 0.5, 0.85)))
+        if not self.resource_levels:
+            raise ValueError("flat PPO needs at least one resource level")
+        self.grid_size = len(self.resource_levels) ** len(RESOURCE_KEYS)
+        self.encoder, encoder_dim = _build_mlp(obs_dim, self.hidden_layers)
+        self.joint_actor = nn.Linear(encoder_dim, self.num_service_actions * self.grid_size)
+        self.critic = nn.Linear(encoder_dim, 1)
+
+    def forward(self, obs: Any) -> tuple[Any, Any]:
+        z = self.encoder(obs.float())
+        joint_logits = torch.nan_to_num(self.joint_actor(z), nan=0.0, posinf=20.0, neginf=-20.0)
+        value = torch.nan_to_num(self.critic(z).squeeze(-1), nan=0.0, posinf=1.0e4, neginf=-1.0e4)
+        return joint_logits, value
+
+
+def _flat_decode(index: int, num_levels: int) -> tuple[int, list[int]]:
+    """joint index -> (service_idx, per-resource level indices, RESOURCE_KEYS order)."""
+    grid = int(num_levels) ** len(RESOURCE_KEYS)
+    service_idx = int(index) // grid
+    rem = int(index) % grid
+    levels: list[int] = []
+    for _ in RESOURCE_KEYS:
+        levels.append(rem % int(num_levels))
+        rem //= int(num_levels)
+    return service_idx, levels
+
+
+def _flat_encode(service_idx: int, level_indices: list[int] | tuple[int, ...], num_levels: int) -> int:
+    """(service_idx, per-resource level indices) -> joint index (inverse of _flat_decode)."""
+    rem = 0
+    for i, level in enumerate(level_indices):
+        rem += int(level) * (int(num_levels) ** i)
+    grid = int(num_levels) ** len(RESOURCE_KEYS)
+    return int(service_idx) * grid + rem
+
+
+def _flat_resource_values(level_indices: list[int] | tuple[int, ...], levels: tuple[float, ...]) -> list[float]:
+    return [float(levels[int(idx)]) for idx in level_indices]
+
+
+def _flat_nearest_levels(values: list[float] | tuple[float, ...], levels: tuple[float, ...]) -> list[int]:
+    """Map sigmoid-space resource values in [0,1] to the nearest grid level index."""
+    return [min(range(len(levels)), key=lambda j, v=float(v): abs(levels[j] - v)) for v in values]
+
+
+def _flat_joint_mask(service_mask: Any, grid_size: int) -> Any:
+    """Expand a [.., num_services] boolean service mask to the joint space."""
+    return service_mask.repeat_interleave(int(grid_size), dim=-1)
+
+
 class TwoTimescaleMobilitySemanticActorCritic(nn.Module if nn is not None else object):
     """Two-timescale mobility-aware semantic resource PPO network.
 
@@ -622,6 +708,40 @@ class PPOServicePolicy:
         return _build_hybrid_action(self.env, obs, semantic_choice, resources, self.cfg)
 
 
+class FlatPPOPolicy:
+    """Deterministic evaluation wrapper for the flat single-head baseline."""
+
+    def __init__(
+        self,
+        env: V19LUTResourceEnv,
+        model: FlatActorCritic,
+        cfg: PPOTrainConfig | None = None,
+    ) -> None:
+        require_torch()
+        self.env = env
+        self.cfg = cfg or PPOTrainConfig(flat_ppo=True)
+        self.device = _model_device(model)
+        self.model = model.to(self.device)
+        self.model.eval()
+        self.obs_dim = _model_obs_dim(self.model)
+
+    def act(self, obs: dict[str, Any], deterministic: bool = True) -> dict[str, Any]:
+        obs_tensor = _obs_tensor(obs, self.device, self.obs_dim)
+        with torch.no_grad():
+            joint_logits, _value = self.model(obs_tensor)
+            action_labels = _semantic_action_labels(self.env, self.cfg)
+            mask = _service_mask_tensor(obs, action_labels, joint_logits.device, self.cfg)
+            joint_logits = _apply_service_mask(joint_logits, _flat_joint_mask(mask, self.model.grid_size))
+            if deterministic:
+                joint_index = int(torch.argmax(joint_logits, dim=-1).item())
+            else:
+                joint_index = int(Categorical(logits=joint_logits).sample().item())
+        service_idx, level_indices = _flat_decode(joint_index, len(self.model.resource_levels))
+        resources = _flat_resource_values(level_indices, self.model.resource_levels)
+        semantic_choice = action_labels[service_idx]
+        return _build_hybrid_action(self.env, obs, semantic_choice, resources, self.cfg)
+
+
 def train_ppo(
     env: V19LUTResourceEnv,
     cfg: PPOTrainConfig,
@@ -639,7 +759,16 @@ def train_ppo(
     obs_dim = int(len(obs["vector"]))
     hidden_layers = normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size)
     cfg = PPOTrainConfig(**{**asdict(cfg), "hidden_layers": hidden_layers})
-    model = HybridActorCritic(obs_dim, len(_semantic_action_labels(env, cfg)), cfg.hidden_size, cfg.hidden_layers).to(device)
+    if cfg.flat_ppo:
+        model = FlatActorCritic(
+            obs_dim,
+            len(_semantic_action_labels(env, cfg)),
+            cfg.hidden_size,
+            cfg.hidden_layers,
+            resource_levels=cfg.flat_resource_levels,
+        ).to(device)
+    else:
+        model = HybridActorCritic(obs_dim, len(_semantic_action_labels(env, cfg)), cfg.hidden_size, cfg.hidden_layers).to(device)
     try:
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     except ImportError:
@@ -777,13 +906,14 @@ def save_ppo_model(path: Path, model: HybridActorCritic, env: V19LUTResourceEnv,
     require_torch()
     cfg = cfg or PPOTrainConfig()
     path.parent.mkdir(parents=True, exist_ok=True)
+    is_flat = isinstance(model, FlatActorCritic)
     payload = {
         "state_dict": model.state_dict(),
         "obs_dim": model.encoder[0].in_features,
-        "num_actions": int(model.service_actor.out_features),
+        "num_actions": int(model.num_service_actions) if is_flat else int(model.service_actor.out_features),
         "service_levels": env.service_levels,
         "semantic_paths": list(_semantic_paths_from_env(env)),
-        "model_type": "semantic_hybrid_actor_critic",
+        "model_type": "flat_actor_critic" if is_flat else "semantic_hybrid_actor_critic",
         "resource_keys": RESOURCE_KEYS,
         "hidden_layers": list(getattr(model, "hidden_layers", normalize_hidden_layers(cfg.hidden_layers, cfg.hidden_size))),
         "config": asdict(cfg),
@@ -885,7 +1015,7 @@ def load_ppo_policy(
     env: V19LUTResourceEnv,
     hidden_size: int = 128,
     device: str | Any | None = None,
-) -> PPOServicePolicy:
+) -> "PPOServicePolicy | FlatPPOPolicy":
     require_torch()
     target_device = resolve_torch_device(device or "auto")
     payload = torch.load(path, map_location=target_device)
@@ -896,6 +1026,17 @@ def load_ppo_policy(
         int(cfg_payload.get("hidden_size", hidden_size)),
     )
     cfg = PPOTrainConfig(**{**asdict(cfg), "device": str(target_device), "hidden_layers": hidden_layers})
+    if bool(cfg.flat_ppo) or str(payload.get("model_type", "")) == "flat_actor_critic":
+        flat_model = FlatActorCritic(
+            int(payload["obs_dim"]),
+            int(payload["num_actions"]),
+            int(cfg_payload.get("hidden_size", hidden_size)),
+            hidden_layers,
+            resource_levels=tuple(float(v) for v in cfg.flat_resource_levels),
+        ).to(target_device)
+        flat_model.load_state_dict(payload["state_dict"])
+        flat_model.eval()
+        return FlatPPOPolicy(env, flat_model, cfg)
     model = HybridActorCritic(
         int(payload["obs_dim"]),
         int(payload["num_actions"]),
@@ -972,24 +1113,43 @@ def _collect_episode(
     while not done:
         with torch.no_grad():  # rollout collection needs no graph (P2 efficiency fix)
             obs_tensor = torch.as_tensor(obs["vector"], dtype=torch.float32, device=device).unsqueeze(0)
-            logits, resource_mean, resource_log_std, value = model(obs_tensor)
-            mask = _service_mask_tensor(obs, action_labels, logits.device, cfg)
-            masked_logits = _apply_service_mask(logits, mask)
-            masked_logits = _apply_semantic_path_bias(masked_logits, obs, action_labels, cfg)
-            service_dist = Categorical(logits=masked_logits)
-            action_idx = service_dist.sample()
-            resource_dist = Normal(resource_mean, resource_log_std.exp())
-            raw_resource = resource_dist.sample()
-            resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
-            service_log_prob = service_dist.log_prob(action_idx)
-            if cfg.hybrid_actions:
-                log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1)
+            if cfg.flat_ppo:
+                # Flat single-head baseline: sample ONE joint categorical over
+                # service x discretized-resource grid.  The service mask is
+                # expanded to the joint space (an infeasible service masks all
+                # of its grid cells); the semantic-path logit bias is a
+                # semantic_path_actions-only shaping aid and is skipped here.
+                joint_logits, value = model(obs_tensor)
+                mask = _service_mask_tensor(obs, action_labels, joint_logits.device, cfg)
+                joint_masked = _apply_service_mask(joint_logits, _flat_joint_mask(mask, model.grid_size))
+                joint_dist = Categorical(logits=joint_masked)
+                action_idx = joint_dist.sample()
+                log_prob = joint_dist.log_prob(action_idx)
+                service_idx, level_indices = _flat_decode(int(action_idx.item()), len(model.resource_levels))
+                resource_values = _flat_resource_values(level_indices, model.resource_levels)
+                # Stored for logging-shape compatibility only; the flat update
+                # recomputes log-probs from the joint index alone.
+                raw_resource = torch.as_tensor([resource_values], dtype=torch.float32, device=joint_logits.device)
             else:
-                resource_values = _default_resource_values()
-                raw_resource = torch.zeros_like(raw_resource)
-                log_prob = service_log_prob
+                logits, resource_mean, resource_log_std, value = model(obs_tensor)
+                mask = _service_mask_tensor(obs, action_labels, logits.device, cfg)
+                masked_logits = _apply_service_mask(logits, mask)
+                masked_logits = _apply_semantic_path_bias(masked_logits, obs, action_labels, cfg)
+                service_dist = Categorical(logits=masked_logits)
+                action_idx = service_dist.sample()
+                resource_dist = Normal(resource_mean, resource_log_std.exp())
+                raw_resource = resource_dist.sample()
+                resource_values = torch.sigmoid(raw_resource).squeeze(0).detach().cpu().tolist()
+                service_log_prob = service_dist.log_prob(action_idx)
+                if cfg.hybrid_actions:
+                    log_prob = service_log_prob + resource_dist.log_prob(raw_resource).sum(dim=-1)
+                else:
+                    resource_values = _default_resource_values()
+                    raw_resource = torch.zeros_like(raw_resource)
+                    log_prob = service_log_prob
+                service_idx = int(action_idx.item())
 
-        semantic_choice = action_labels[int(action_idx.item())]
+        semantic_choice = action_labels[service_idx]
         action = _build_hybrid_action(env, obs, semantic_choice, resource_values, cfg)
         next_obs, raw_reward, done, info = env.step(action)
         semantic_reward = _semantic_controller_reward(obs, info, raw_reward, cfg)
@@ -1434,15 +1594,25 @@ def _ppo_update(
     returns = torch.as_tensor(rollout["returns"], dtype=torch.float32, device=device)
     advantages = torch.as_tensor(rollout["advantages"], dtype=torch.float32, device=device)
     for _ in range(cfg.update_epochs):
-        logits, resource_mean, resource_log_std, values = model(obs)
-        logits = _apply_service_mask(logits, service_masks)
-        service_dist = Categorical(logits=logits)
-        log_probs = service_dist.log_prob(service_actions)
-        entropy = service_dist.entropy()
-        if cfg.hybrid_actions:
-            resource_dist = Normal(resource_mean, resource_log_std.exp())
-            log_probs = log_probs + resource_dist.log_prob(resource_raw_actions).sum(dim=-1)
-            entropy = entropy + resource_dist.entropy().sum(dim=-1)
+        if cfg.flat_ppo:
+            # Flat baseline: "service_actions" holds the JOINT index; the
+            # service mask is expanded to the joint grid exactly as in the
+            # collector, and there is no separate resource distribution.
+            joint_logits, values = model(obs)
+            joint_logits = _apply_service_mask(joint_logits, _flat_joint_mask(service_masks, model.grid_size))
+            joint_dist = Categorical(logits=joint_logits)
+            log_probs = joint_dist.log_prob(service_actions)
+            entropy = joint_dist.entropy()
+        else:
+            logits, resource_mean, resource_log_std, values = model(obs)
+            logits = _apply_service_mask(logits, service_masks)
+            service_dist = Categorical(logits=logits)
+            log_probs = service_dist.log_prob(service_actions)
+            entropy = service_dist.entropy()
+            if cfg.hybrid_actions:
+                resource_dist = Normal(resource_mean, resource_log_std.exp())
+                log_probs = log_probs + resource_dist.log_prob(resource_raw_actions).sum(dim=-1)
+                entropy = entropy + resource_dist.entropy().sum(dim=-1)
         ratio = torch.exp(log_probs - old_log_probs)
         clipped = torch.clamp(ratio, 1.0 - cfg.clip_ratio, 1.0 + cfg.clip_ratio) * advantages
         policy_loss = -torch.min(ratio * advantages, clipped).mean()
@@ -3257,6 +3427,25 @@ def _bc_loss(model: HybridActorCritic, demos: list[dict[str, Any]], cfg: PPOTrai
     service_actions = torch.as_tensor([item["service_action"] for item in batch], dtype=torch.int64, device=device)
     service_masks = torch.as_tensor([item["service_mask"] for item in batch], dtype=torch.bool, device=device)
     resource_targets = torch.as_tensor([item["resource_target"] for item in batch], dtype=torch.float32, device=device)
+    if cfg.flat_ppo:
+        # Flat baseline BC: the demo (service, sigmoid-space resources) pair is
+        # snapped to the nearest grid cell and cloned as ONE joint class.
+        num_levels = len(model.resource_levels)
+        joint_targets = torch.as_tensor(
+            [
+                _flat_encode(
+                    int(item["service_action"]),
+                    _flat_nearest_levels([float(v) for v in item["resource_target"]], model.resource_levels),
+                    num_levels,
+                )
+                for item in batch
+            ],
+            dtype=torch.int64,
+            device=device,
+        )
+        joint_logits, _value = model(obs)
+        joint_logits = _apply_service_mask(joint_logits, _flat_joint_mask(service_masks, model.grid_size))
+        return nn.functional.cross_entropy(joint_logits, joint_targets)
     logits, resource_mean, _log_std, _value = model(obs)
     logits = _apply_service_mask(logits, service_masks)
     loss = nn.functional.cross_entropy(logits, service_actions)
