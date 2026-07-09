@@ -1,0 +1,7 @@
+channel,method,snr_db,qtype,split,accuracy,n,lcb,ucb,mean_payload_bytes,mean_channel_uses,cbr
+rician,M6_djscc,-5.0,all,test,0.5641,936,0.5321,0.5955,92215.4,92215.4,
+rician,M6_djscc,0.0,all,test,0.578,936,0.5461,0.6092,92215.4,92215.4,
+rician,M6_djscc,5.0,all,test,0.5919,936,0.5601,0.6229,92215.4,92215.4,
+rician,M6_djscc,10.0,all,test,0.5994,936,0.5676,0.6303,92215.4,92215.4,
+rician,M6_djscc,15.0,all,test,0.6004,936,0.5687,0.6313,92215.4,92215.4,
+rician,M6_djscc,20.0,all,test,0.5962,936,0.5644,0.6271,92215.4,92215.4,
