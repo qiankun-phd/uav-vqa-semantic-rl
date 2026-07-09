@@ -154,7 +154,12 @@ def main():
     ax.set_yscale("log")
     ax.set_xticks(x + 0.4 - w / 2); ax.set_xticklabels([f"{s:g}" for s in snrs])
     ax.set_xlabel("SNR (dB)"); ax.set_ylabel("latency per query (s, log)")
-    ax.set_title(f"End-to-end latency breakdown ({ch}); solid=upload, //=tx-side detector, ..=inference")
+    ax.text(0.99, 0.97, {"awgn": "AWGN", "rayleigh": "Rayleigh",
+                         "rician": "Rician K=6 dB"}.get(ch, ch),
+            transform=ax.transAxes, va="top", ha="right", fontsize=9, fontweight="bold",
+            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
+    ax.text(0.01, 0.97, "solid=upload   //=tx-side detector   ..=inference",
+            transform=ax.transAxes, va="top", ha="left", fontsize=7.5, color="0.3")
     ax.grid(True, alpha=0.3, axis="y", which="both"); ax.legend(fontsize=8, ncol=3)
     fig.tight_layout()
     for ext in ("png", "pdf"):

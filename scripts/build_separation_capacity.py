@@ -412,7 +412,11 @@ def make_figure(rows, traffic_class, fig_base, channel="rician"):
                 label="BUBBLES default comm (1.8 s)")
     axL.set_xlabel("SNR (dB)")
     axL.set_ylabel(r"tactical-conflict separation $d_{TC}$ (m)")
-    axL.set_title("(a) separation minimum vs evidence")
+    axL.text(0.02, 0.97, "(a)", transform=axL.transAxes, va="top", ha="left",
+             fontsize=10, fontweight="bold")
+    axL.text(0.98, 0.03, "%s, class %s" % (
+        {"awgn": "AWGN", "rayleigh": "Rayleigh", "rician": "Rician K=6 dB"}.get(channel, channel),
+        traffic_class), transform=axL.transAxes, va="bottom", ha="right", fontsize=8, color="0.3")
     axL.grid(True, alpha=0.3)
     axL.legend(fontsize=8, loc="upper right")
 
@@ -424,14 +428,12 @@ def make_figure(rows, traffic_class, fig_base, channel="rician"):
     axR.axhline(1.0, ls="--", color="0.4", lw=1, label="BUBBLES default = 1.0")
     axR.set_xlabel("SNR (dB)")
     axR.set_ylabel(r"relative airspace capacity  $d_{TC}^{\rm def}/d_{TC}$")
-    axR.set_title("(b) capacity vs evidence")
+    axR.text(0.02, 0.97, "(b)", transform=axR.transAxes, va="top", ha="left",
+             fontsize=10, fontweight="bold")
     axR.grid(True, alpha=0.3)
     axR.legend(fontsize=8, loc="upper left")
 
-    fig.suptitle("Evidence selection enters the separation loop (BUBBLES Block 4)  "
-                 "-- %s channel, class %s, band = 0-2$\\sigma$" % (channel, traffic_class),
-                 fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.tight_layout()
     os.makedirs(os.path.dirname(fig_base), exist_ok=True)
     for ext in ("png", "pdf"):
         fig.savefig("%s.%s" % (fig_base, ext), dpi=150)

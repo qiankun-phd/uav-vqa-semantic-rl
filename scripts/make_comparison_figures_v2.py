@@ -21,7 +21,7 @@ STYLE = {
     "M0_naive":    ("#ff6b6b", "x", "M0 naive digital (fixed-rate LDPC)"),
     "M1_image":    ("#ffb454", "o", "M1 traditional (rate-adaptive image)"),
     "M2_analog":   ("#c678dd", "v", "M2 uncoded analog (JSCC-lite)"),
-    "M3_token":    ("#9aa7b4", "s", "M3 GO-SG token"),
+    "M3_token":    ("#9aa7b4", "s", "M3 fixed token"),
     "M4_adaptive": ("#5ad19a", "D", "M4 ours (adaptive)"),
     "M5_oracle":   ("#4ea1ff", "^", "M5 oracle (service upper bound)"),
 }
@@ -58,19 +58,28 @@ def main():
     fig, axes = plt.subplots(1, len(channels), figsize=(5.2 * len(channels), 4.3), sharey=True)
     if len(channels) == 1:
         axes = [axes]
+    # Wilson 95% band drawn for the adaptive policy and the two key baselines.
+    BAND_METHODS = {"M4_adaptive", "M1_image", "M3_token"}
     for ax, ch in zip(axes, channels):
         for m in ORDER:
-            pts = sorted([(r["snr_db"], r["accuracy"]) for r in rows
+            pts = sorted([(r["snr_db"], r["accuracy"], r["lcb"], r["ucb"]) for r in rows
                           if r["channel"] == ch and r["method"] == m and r["qtype"] == "all"])
             if not pts:
                 continue
             col, mk, lab = STYLE[m]
-            ax.plot([p[0] for p in pts], [p[1] for p in pts], DASHED.get(m, "-"), color=col, marker=mk,
+            xs = [p[0] for p in pts]
+            ax.plot(xs, [p[1] for p in pts], DASHED.get(m, "-"), color=col, marker=mk,
                     label=lab, linewidth=2, markersize=5)
-        ax.set_title(CH_TITLE.get(ch, ch)); ax.set_xlabel("SNR (dB)"); ax.grid(True, alpha=0.3)
+            if m in BAND_METHODS:
+                ax.fill_between(xs, [p[2] for p in pts], [p[3] for p in pts],
+                                color=col, alpha=0.15, linewidth=0)
+        # per-panel channel label (small annotation, IEEE: no big titles)
+        ax.text(0.03, 0.97, CH_TITLE.get(ch, ch), transform=ax.transAxes,
+                va="top", ha="left", fontsize=9, fontweight="bold",
+                bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
+        ax.set_xlabel("SNR (dB)"); ax.grid(True, alpha=0.3)
     axes[0].set_ylabel("VQA answer accuracy")
     axes[-1].legend(fontsize=7.5, loc="lower right")
-    fig.suptitle("Accuracy vs SNR across channels (held-out test set)", y=1.02)
     fig.tight_layout()
     for ext in ("png", "pdf"):
         fig.savefig(f"{args.out_dir}/F1_acc_snr_3panel_{args.tag}.{ext}", dpi=140, bbox_inches="tight")
@@ -92,7 +101,9 @@ def main():
         ax.text(0.99, 0.5, " chance≈0.5", transform=ax.get_yaxis_transform(),
                 va="bottom", ha="right", color="#888", fontsize=8)
         ax.set_xlabel("SNR (dB)"); ax.set_ylabel("VQA answer accuracy")
-        ax.set_title(f"Cliff effect: naive digital vs graceful adaptive ({CH_TITLE.get(cliff_ch, cliff_ch)})")
+        ax.text(0.03, 0.97, CH_TITLE.get(cliff_ch, cliff_ch), transform=ax.transAxes,
+                va="top", ha="left", fontsize=9, fontweight="bold",
+                bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
         ax.grid(True, alpha=0.3); ax.legend(fontsize=7.5, loc="lower right")
         fig.tight_layout()
         for ext in ("png", "pdf"):
@@ -107,15 +118,24 @@ def main():
     fig, ax = plt.subplots(figsize=(7, 4.3))
     x = np.arange(len(qtypes)); w = 0.8 / max(len(methods), 1)
     for i, m in enumerate(methods):
-        vals = []
+        vals, lo, hi = [], [], []
         for qt in qtypes:
-            v = [r["accuracy"] for r in rows if r["channel"] == ch and r["method"] == m
-                 and r["qtype"] == qt and abs(r["snr_db"] - args.bar_snr) < 1e-6]
-            vals.append(v[0] if v else 0)
+            rr = [r for r in rows if r["channel"] == ch and r["method"] == m
+                  and r["qtype"] == qt and abs(r["snr_db"] - args.bar_snr) < 1e-6]
+            if rr:
+                vals.append(rr[0]["accuracy"])
+                lo.append(rr[0]["accuracy"] - rr[0]["lcb"])
+                hi.append(rr[0]["ucb"] - rr[0]["accuracy"])
+            else:
+                vals.append(0); lo.append(0); hi.append(0)
         col, mk, lab = STYLE[m]
-        ax.bar(x + i * w, vals, w, color=col, label=lab)
+        ax.bar(x + i * w, vals, w, color=col, label=lab,
+               yerr=[lo, hi], error_kw=dict(ecolor="0.3", lw=0.8, capsize=2))
     ax.set_xticks(x + 0.4 - w / 2); ax.set_xticklabels(qtypes)
-    ax.set_ylabel("accuracy"); ax.set_title(f"Per-question-type accuracy ({CH_TITLE.get(ch, ch)}, SNR={args.bar_snr:g} dB)")
+    ax.set_ylabel("accuracy")
+    ax.text(0.99, 0.97, f"{CH_TITLE.get(ch, ch)}, SNR={args.bar_snr:g} dB",
+            transform=ax.transAxes, va="top", ha="right", fontsize=9, fontweight="bold",
+            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
     ax.legend(fontsize=7.5, ncol=2); ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
     for ext in ("png", "pdf"):
@@ -129,19 +149,28 @@ def main():
                       if use_uses else ["M1_image", "M3_token", "M4_adaptive"])
     xkey = "mean_channel_uses" if use_uses else "mean_payload_bytes"
     for m in pareto_methods:
-        pts = [(r[xkey], r["accuracy"]) for r in rows
+        pts = [(r[xkey], r["accuracy"], r["lcb"], r["ucb"]) for r in rows
                if r["channel"] == ch and r["method"] == m and r["qtype"] == "all" and r[xkey] > 0]
         if not pts:
             continue
         col, mk, lab = STYLE[m]
-        ax.scatter([p[0] for p in pts], [p[1] for p in pts], color=col, marker=mk, s=60, label=lab, zorder=3)
+        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+        yerr = [[p[1] - p[2] for p in pts], [p[3] - p[1] for p in pts]]
+        # Wilson 95% vertical bars (bandwidth-fair Pareto): show only for M4 to
+        # avoid clutter; other methods drawn as bare markers.
+        if m == "M4_adaptive":
+            ax.errorbar(xs, ys, yerr=yerr, fmt="none", ecolor=col, elinewidth=1,
+                        capsize=2, alpha=0.7, zorder=2)
+        ax.scatter(xs, ys, color=col, marker=mk, s=60, label=lab, zorder=3)
     ax.set_xscale("log")
     if use_uses:
         ax.set_xlabel("mean complex channel uses per query (CBR = uses / 2.88M source symbols)")
     else:
         ax.set_xlabel("mean payload (bytes / query)")
     ax.set_ylabel("accuracy")
-    ax.set_title(f"Goal-oriented efficiency ({CH_TITLE.get(ch, ch)})")
+    ax.text(0.99, 0.03, CH_TITLE.get(ch, ch), transform=ax.transAxes,
+            va="bottom", ha="right", fontsize=9, fontweight="bold",
+            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
     ax.grid(True, alpha=0.3, which="both"); ax.legend(fontsize=8, loc="lower right")
     fig.tight_layout()
     for ext in ("png", "pdf"):

@@ -128,7 +128,23 @@ def main():
     ap.add_argument("--out-dir", default="outputs/figures/comparison")
     ap.add_argument("--fig-channel", default="rician")
     ap.add_argument("--tag", default="v3")
+    ap.add_argument("--from-csv", default=None,
+                    help="skip the CPU-heavy sweep and (re)draw F8 from an existing "
+                         "sweep csv (e.g. outputs/reports/token_budget_full.csv).")
     args = ap.parse_args()
+
+    # ---- fast path: regenerate the F8 plot from an existing sweep csv ----
+    if args.from_csv:
+        rows = []
+        for r in csv.DictReader(open(args.from_csv)):
+            tb = r["t_budget"]
+            rows.append([r["channel"], tb, float(r["snr_db"]), r["qtype"],
+                         float(r["accuracy"]), int(r["n"]),
+                         float(r["mean_tokens_sent"]), float(r["mean_payload_bytes"]),
+                         float(r["mean_channel_uses"])])
+        print(f"loaded {len(rows)} rows from {args.from_csv} (plot-only, no recompute)")
+        draw_f8(rows, args.fig_channel, args.out_dir, args.tag)
+        return 0
 
     all_tasks = load_tasks()
     SNR_LABELS = derive_snr_labels("outputs/vlm/v3_0_rician_predictions.csv")
@@ -206,7 +222,17 @@ def main():
                     print(f"  {r[3]:12s} {r[2]:5.0f}dB  {r[4]:.3f}/{logged[key]:.3f}{flag}")
 
     # ---- F8: budget sweep figure (fig-channel) ----
-    ch = args.fig_channel
+    draw_f8(rows, args.fig_channel, args.out_dir, args.tag)
+
+
+def draw_f8(rows, ch, out_dir, tag):
+    """Draw the 3-panel F8 token-budget figure from sweep `rows`.
+
+    rows: list of [channel, t_budget, snr_db(float), qtype, accuracy(float), n,
+                   mean_tokens_sent(float), mean_payload_bytes(float),
+                   mean_channel_uses(float)].
+    IEEE styling: no in-figure titles; per-panel operating point as a small label.
+    """
     sub = [r for r in rows if r[0] == ch]
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.3))
     colors = {"counting": "#e06c75", "comparison": "#61afef", "co_presence": "#98c379",
@@ -219,7 +245,9 @@ def main():
                         color=colors[qt], label=qt, linewidth=2, markersize=4)
         ax.set_xscale("log"); ax.set_xlabel("mean tokens sent (top-t budget)")
         ax.set_ylabel("accuracy"); ax.grid(True, alpha=0.3)
-        ax.set_title(f"{ch}, SNR = {snr:g} dB")
+        ax.text(0.03, 0.03, f"{ch}, SNR = {snr:g} dB", transform=ax.transAxes,
+                va="bottom", ha="left", fontsize=9, fontweight="bold",
+                bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
     axes[0].legend(fontsize=8)
     ax = axes[2]
     for qt in list(QT_SYMBOLIC) + ["all"]:
@@ -229,15 +257,15 @@ def main():
                     color=colors[qt], label=qt, linewidth=2, markersize=4)
     ax.set_xscale("log"); ax.set_xlabel("mean complex channel uses / query")
     ax.set_ylabel("accuracy"); ax.grid(True, alpha=0.3)
-    ax.set_title(f"{ch}, SNR = 5 dB (bandwidth axis)")
-    fig.suptitle("Variable token budget: nested top-t truncation of s1 evidence "
-                 "(symbolic decoders, test set)", y=1.02)
+    ax.text(0.03, 0.03, f"{ch}, SNR = 5 dB (bandwidth axis)", transform=ax.transAxes,
+            va="bottom", ha="left", fontsize=9, fontweight="bold",
+            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(f"{args.out_dir}/F8_token_budget_{args.tag}.{ext}", dpi=140,
+        fig.savefig(f"{out_dir}/F8_token_budget_{tag}.{ext}", dpi=140,
                     bbox_inches="tight")
     plt.close(fig)
-    print(f"wrote F8_token_budget_{args.tag} -> {args.out_dir}")
+    print(f"wrote F8_token_budget_{tag} -> {out_dir}")
 
 
 if __name__ == "__main__":

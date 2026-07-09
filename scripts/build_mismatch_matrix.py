@@ -102,15 +102,15 @@ def main():
         ax.set_xticks(range(len(snrs))); ax.set_xticklabels([f"{bc.snr_val(s):g}" for s in snrs])
         ax.set_yticks(range(len(snrs))); ax.set_yticklabels([f"{bc.snr_val(s):g}" for s in snrs])
         ax.set_xlabel("true SNR (dB)"); ax.set_ylabel("assumed SNR at selection (dB)")
-        ax.set_title({"awgn": "AWGN", "rayleigh": "Rayleigh", "rician": "Rician K=6 dB"}.get(ch, ch))
+        ax.text(0.02, 1.02, {"awgn": "AWGN", "rayleigh": "Rayleigh",
+                             "rician": "Rician K=6 dB"}.get(ch, ch),
+                transform=ax.transAxes, va="bottom", ha="left", fontsize=9, fontweight="bold")
         for i in range(len(snrs)):
             for j in range(len(snrs)):
                 if vals[i][j] == vals[i][j]:
                     ax.text(j, i, f"{vals[i][j]:.2f}", ha="center", va="center",
                             fontsize=7, color="white" if vals[i][j] < 0.64 else "black")
         fig.colorbar(im, ax=ax, fraction=0.046)
-    fig.suptitle("Policy robustness to CSI error: accuracy under assumed-vs-true SNR "
-                 "(test set, link stays rate-adaptive at true SNR)", y=1.02)
     fig.tight_layout()
     for ext in ("png", "pdf"):
         fig.savefig(f"{args.out_dir}/F7_mismatch_{args.tag}.{ext}", dpi=140, bbox_inches="tight")
