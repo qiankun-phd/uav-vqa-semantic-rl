@@ -1,0 +1,24 @@
+{
+  "eps_critical_counting": 0.464,
+  "eps_critical_presence": 0.696,
+  "eps_normal": 0.529,
+  "delta_esc_peak": 0.99,
+  "delta_esc_nominal": 0.99,
+  "peak_decomposition": {
+    "n": 250,
+    "quality_unreachable": 0.04,
+    "deadline_blocked": 0.96,
+    "pipeline_blocked": 0.0,
+    "spec_unattainable": 1.0
+  },
+  "nominal_decomposition": {
+    "n": 517,
+    "quality_unreachable": 0.0,
+    "deadline_blocked": 0.9980657640232108,
+    "pipeline_blocked": 0.4874274661508704,
+    "spec_unattainable": 0.9980657640232108
+  },
+  "peak_counting_ge10_summary": "n=75 min=0.567 P10=0.567 P25=0.567 med=0.629 P90=0.629 max=0.629 mean=0.602",
+  "peak_presence_summary": "n=175 min=0.360 P10=0.746 P25=0.859 med=0.859 P90=0.859 max=0.859 mean=0.814",
+  "nominal_normal_summary": "n=466 min=0.205 P10=0.205 P25=0.634 med=0.748 P90=0.769 max=0.903 mean=0.674"
+}

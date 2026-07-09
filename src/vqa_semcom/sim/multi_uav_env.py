@@ -227,6 +227,52 @@ ATTAINABILITY_V4_EPSILON: dict[str, float] = {
 }
 
 
+# Attainability recalibration iteration 5 (task #28 v5): ATTAINABLE EPSILON on the
+# v5 UNIFIED LUT + escalation layer.  See docs/EPSILON_RECAL_V5.md and
+# scripts/calibrate_epsilon_v5.py.  v4's single pooled P10 (0.355) flattened the
+# two structurally different critical clusters (hard wide-tolerance counting vs
+# easy yes/no presence) into one bar, and could not separate the quality axis
+# from the deadline axis (v4 collapsed: 99.5% of peak critical charged as quality
+# violations that were actually physically-infeasible expired tasks).  v5:
+#   1. Splits the critical bar by qtype into a TWO-KEY (risk x qtype) table.
+#   2. Anchors each key on the v5 LUT (lut_v5 backend, GT>=10 counting re-judged
+#      +-20%) via eps = floor_3dp(P25(best_tx_lcb) - 0.05):
+#        (critical, counting GT>=10) -> P25 0.5144 -> 0.464   [quality-axis
+#          unreachable only 0.083 -> genuinely attainable]
+#        (critical, presence/other)  -> P25 0.7462 -> 0.696
+#        (normal, *)                 -> P25 0.5796 -> 0.529   (all-qtype pool)
+#   3. Pairs with the escalation layer (change 5): critical reject/expired tasks
+#      that are spec-UNattainable (no tx service both clears eps AND is deadline-
+#      feasible against full tau_k) are ESCALATED, not charged as quality
+#      violations -- this un-pins lambda_critical.
+# Keyed by (risk, qtype_class); qtype_class = "counting" iff counting with a
+# GT>=10 count bucket, else "presence".  normal uses one bar for all qtypes.
+# Selected via env_cfg["epsilon_calibration"] == "attainability_v5".  Pair with
+# --critical-cache-compliance forbidden and --quality-backend lut_v5.
+ATTAINABILITY_V5_GE10_BUCKETS = ("10-19", "20-49", "50+")
+ATTAINABILITY_V5_EPSILON: dict[tuple[str, str], float] = {
+    ("critical", "counting"): 0.464,
+    ("critical", "presence"): 0.696,
+    ("high", "counting"): 0.464,
+    ("high", "presence"): 0.696,
+    ("normal", "counting"): 0.529,
+    ("normal", "presence"): 0.529,
+}
+# Escalation dual-channel budgets delta_esc (change 5/escalation channel): the
+# measured spec-UNattainable fraction + 0.05, condition-adaptive.  Peak
+# (utm_conflict) is a UAV-flight-deadline cliff (measured spec-unattainable ~1.0;
+# the semantic pipeline itself never blocks -- pipeline_blocked 0.0 -- only the
+# flight geometry does); nominal is ~half-attainable by a well-positioned policy.
+ESCALATION_DELTA_V5: dict[str, float] = {"peak": 0.90, "nominal": 0.50}
+
+
+def epsilon_v5_class(qtype: str, count_bucket: str) -> str:
+    """(risk, qtype)-table column: counting-critical bucket vs presence-like."""
+    if str(qtype) == "counting" and str(count_bucket) in ATTAINABILITY_V5_GE10_BUCKETS:
+        return "counting"
+    return "presence"
+
+
 SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "nominal": {
         "description": "Default mixed task queue with calibrated physical constants.",
@@ -2335,6 +2381,14 @@ class MultiUAVVQAEnv:
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
         mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()
+        if mode == "attainability_v5":
+            qtype = str(row.get("question_type", "presence"))
+            bucket = count_bucket_v5(_safe_int(row.get("object_count", -1), -1)) if qtype == "counting" else "na"
+            klass = epsilon_v5_class(qtype, bucket)
+            key = (risk, klass)
+            if key not in ATTAINABILITY_V5_EPSILON:
+                key = ("normal", klass) if (risk, "presence") not in ATTAINABILITY_V5_EPSILON else (risk, "presence")
+            return float(ATTAINABILITY_V5_EPSILON.get(key, ATTAINABILITY_V5_EPSILON[("critical", "presence")]))
         if mode == "attainability_v4":
             table = ATTAINABILITY_V4_EPSILON
             return float(table.get(risk, table["critical"]))
