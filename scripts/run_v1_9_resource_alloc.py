@@ -1121,9 +1121,12 @@ def _print_summary_row(row: EvalSummary) -> None:
 def _cfg_with_a2g_overrides(cfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """M4 generalization axes: interference floor / excess link loss.
 
-    Injected into the BASE multi_uav_env.a2g cfg, which the canonical env
-    deep-merges with the scenario preset at reset; the paper presets
-    (nominal/utm_conflict) pin no a2g block, so these overrides win there.
+    Injected into multi_uav_env.calibration.a2g -- the LAST layer the canonical
+    env merges over the a2g defaults (see multi_uav_env._apply_calibration), so
+    the override wins over both the built-in defaults and the yaml calibration
+    block.  Scenario presets that pin their own env.a2g (e.g. low_snr_blockage)
+    still merge after calibration at reset, which is the desired behaviour for
+    the zero-shot profile points.
     """
     floor = getattr(args, "interference_floor_dbm", None)
     excess = getattr(args, "a2g_excess_loss_db", None)
@@ -1131,13 +1134,15 @@ def _cfg_with_a2g_overrides(cfg: dict[str, Any], args: argparse.Namespace) -> di
         return cfg
     out = dict(cfg)
     env_cfg = dict(out.get("multi_uav_env", {}))
-    a2g = dict(env_cfg.get("a2g", {}))
+    calibration = dict(env_cfg.get("calibration", {}))
+    a2g = dict(calibration.get("a2g", {}))
     if floor is not None:
         a2g["interference_floor_dbm"] = float(floor)
         a2g.setdefault("interference_enabled", True)
     if excess is not None:
         a2g["excess_loss_db"] = float(excess)
-    env_cfg["a2g"] = a2g
+    calibration["a2g"] = a2g
+    env_cfg["calibration"] = calibration
     out["multi_uav_env"] = env_cfg
     return out
 
