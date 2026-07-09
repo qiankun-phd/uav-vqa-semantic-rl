@@ -1735,6 +1735,43 @@ class MultiUAVVQAEnv:
             return "na"
         return count_bucket_v5(int(task.object_count))
 
+    def _escalation_enabled(self) -> bool:
+        """Change 5 (task #28 v5): the spec-attainability escalation layer.
+
+        Default "off" preserves legacy/v1-v4 reject/expired bookkeeping
+        bit-for-bit.  Under "spec_attainable" a critical/high reject-or-expired
+        task is charged as a quality violation ONLY if it was spec-attainable
+        (some tx service could clear eps AND fit the full tau_k); an
+        un-attainable one is ESCALATED (no quality cost, routed to the escalation
+        dual channel).
+        """
+        return str(self.env_cfg.get("escalation_mode", "off") or "off").lower() == "spec_attainable"
+
+    def _compute_spec_attainable(self, task: EnvTask, snr_bin: str) -> bool:
+        """Ground-truth feasibility certificate (change 5).
+
+        For the transmission services {1 token, 2 image} at the task's realised
+        SNR, is there one whose quality LCB clears the task's epsilon_k AND whose
+        total delay (incl. realised nearest-UAV flight) fits the FULL tau_k?  This
+        is an ENVIRONMENT property (env LUT quality + physics), exposed to the
+        policy as a state feature -- independent of the RL quality backend.
+        """
+        if bool(task.expired) or self._remaining_deadline_s(task) <= 0.0:
+            return False
+        tau = float(task.tau_k)
+        for level in (1, 2):
+            if level not in self.service_levels():
+                continue
+            action = self.candidate_action(level, {"task_id": task.task_id, "snr_bin": snr_bin,
+                                                    "risk_level": task.risk_level})
+            info = self.evaluate_action(action, task_id=task.task_id,
+                                        obs={"task_id": task.task_id, "snr_bin": snr_bin}, mutate=False)
+            quality_ok = not bool(info.get("quality_violation", False))
+            deadline_ok = float(info.get("delay_s", info.get("total_delay_s", 1e9))) <= tau
+            if quality_ok and deadline_ok:
+                return True
+        return False
+
     def _cache_freshness_from_age(self, cache_age: int) -> str:
         return self._freshness_from_age(int(cache_age))
 
@@ -1844,6 +1881,10 @@ class MultiUAVVQAEnv:
             and task.risk_level in ("critical", "high")
             and str(self.env_cfg.get("critical_cache_compliance", "allowed") or "allowed").lower()
             == "forbidden"
+            # Change 5: when the escalation layer is armed the cache ban only bites
+            # tasks that WERE spec-attainable (transmission was possible) -- a task
+            # with no feasible transmission is not "gaming" by falling back to cache.
+            and (not self._escalation_enabled() or bool(task.spec_attainable))
         ):
             quality_violation = True
             semantic_success = False
@@ -1974,6 +2015,19 @@ class MultiUAVVQAEnv:
             self.last_info = info
         return info
 
+    def _escalation_verdict(self, task: EnvTask, base_quality_violation: bool) -> tuple[bool, bool]:
+        """Change 5: resolve (quality_violation, escalated) for a reject/expired
+        critical/high task.  Legacy (escalation off) returns the base verdict with
+        escalated=False.  Under the escalation layer a spec-attainable task that is
+        rejected/expired is a genuine quality violation (the policy dropped a
+        serveable task -> full price); a spec-UNattainable one is escalated (no
+        quality cost, routed to the escalation channel)."""
+        if not self._escalation_enabled() or str(task.risk_level) not in ("critical", "high"):
+            return bool(base_quality_violation), False
+        if bool(task.spec_attainable):
+            return True, False
+        return False, True
+
     def _reject_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
         service_paths = ("cache", "token", "image", "cache_update")
         if task.expired or self._remaining_deadline_s(task) <= 0.0:
@@ -1999,6 +2053,11 @@ class MultiUAVVQAEnv:
         expected_saved_delay_s = min((float(info.get("delay_s", 0.0)) for info in service_infos), default=0.0)
         expected_saved_energy_j = min((float(info.get("energy_j", 0.0)) for info in service_infos), default=0.0)
         cache_status = self._cache_status(task)
+        # Change 5: legacy reject quality_violation base is False; escalation layer
+        # re-resolves it for critical/high tasks by spec-attainability.
+        _reject_quality_violation, _reject_escalated = self._escalation_verdict(task, base_quality_violation=False)
+        if _reject_escalated:
+            task.escalated = True
         info = self._empty_info()
         info.update(
             {
@@ -2029,7 +2088,10 @@ class MultiUAVVQAEnv:
                 "semantic_accuracy_lcb": 0.0,
                 "semantic_success": False,
                 "success": False,
-                "quality_violation": False,
+                "quality_violation": _reject_quality_violation,
+                "escalated": _reject_escalated,
+                "escalation": float(_reject_escalated),
+                "spec_attainable": bool(task.spec_attainable),
                 "deadline_violation": False,
                 "risk_violation": False,
                 "resource_violation": False,
@@ -2075,6 +2137,11 @@ class MultiUAVVQAEnv:
 
     def _expired_task_info(self, task: EnvTask, action: dict[str, Any]) -> dict[str, Any]:
         cache_status = self._cache_status(task)
+        # Change 5: legacy expired quality_violation base is True; escalation layer
+        # re-resolves it for critical/high tasks by spec-attainability.
+        _exp_quality_violation, _exp_escalated = self._escalation_verdict(task, base_quality_violation=True)
+        if _exp_escalated:
+            task.escalated = True
         info = self._empty_info()
         info.update(
             {
@@ -2098,9 +2165,12 @@ class MultiUAVVQAEnv:
                 "expired": True,
                 "semantic_path": str(action.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(int(action.get("service_level", 0)), "cache"))),
                 "service_level": int(action.get("service_level", 0)),
-                "quality_violation": True,
+                "quality_violation": _exp_quality_violation,
+                "escalated": _exp_escalated,
+                "escalation": float(_exp_escalated),
+                "spec_attainable": bool(task.spec_attainable),
                 "deadline_violation": True,
-                "risk_violation": bool(task.risk_level == "critical"),
+                "risk_violation": bool(task.risk_level == "critical" and _exp_quality_violation),
                 "success": False,
                 "cache_hit_probability": round(self._semantic_cache_hit_probability(task), 6),
                 **cache_status,
@@ -3282,6 +3352,10 @@ class MultiUAVVQAEnv:
             payloads[level] = candidate["payload_kb"]
             accuracies[level] = candidate["accuracy"]
             delays[level] = candidate["delay_s"]
+        # Change 5: ground-truth spec-attainability certificate, stored on the task
+        # and exposed as a state feature (only when the escalation layer is armed).
+        if self._escalation_enabled():
+            task.spec_attainable = self._compute_spec_attainable(task, snr_bin)
         obs = {
             "episode_step": self.step_count,
             "scenario": self.scenario_name,

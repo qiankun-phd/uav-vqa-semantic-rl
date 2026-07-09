@@ -496,6 +496,13 @@ class V19LUTResourceEnv:
             mode = "allowed"
         return mode == "forbidden"
 
+    def _escalation_enabled(self) -> bool:
+        """True iff the spec-attainability escalation layer is armed (change 5)."""
+        try:
+            return str(self._env.env_cfg.get("escalation_mode", "off") or "off").lower() == "spec_attainable"
+        except Exception:
+            return False
+
     def _record_from_info(self, info: dict[str, Any], reward: float) -> V19StepRecord:
         return V19StepRecord(
             episode=int(info.get("episode", self._env.episode)),
@@ -687,9 +694,24 @@ class V19LUTResourceEnv:
             str(info.get("semantic_path", "")) == "cache"
             and str(info.get("risk_level", "")) in ("critical", "high")
             and self._critical_cache_compliance_forbidden()
+            # Change 5: gate the ban to spec-attainable tasks when the escalation
+            # layer is armed (a task with no feasible transmission is not gaming by
+            # falling back to cache).
+            and (not self._escalation_enabled() or bool(info.get("spec_attainable", False)))
         ):
             info["semantic_success"] = False
             info["quality_violation"] = True
+        # Change 5: escalated reject/expired tasks (critical/high, spec-UNattainable)
+        # carry no quality cost -- the RL record layer must not re-charge them via
+        # the accuracy<epsilon recompute above.  Route them to the escalation channel.
+        if bool(info.get("escalated", False)):
+            info["quality_violation"] = False
+            info["semantic_success"] = False
+            info["escalation"] = 1.0
+        else:
+            info.setdefault("escalation", 0.0)
+            info.setdefault("escalated", False)
+        info.setdefault("spec_attainable", False)
         info.setdefault("utm_constraint_violation", False)
         info.setdefault("utm_conflict_violation", bool(info.get("airspace_conflict", False) or info.get("utm_constraint_violation", False)))
         info.setdefault("dss_available", True)
@@ -927,6 +949,10 @@ class V19LUTResourceEnv:
         vector = [float(value) for value in out.get("vector", [])] + self._queue_vector()
         if self.state_version == "v2":
             vector += self._state_v2_vector(out)
+        # Change 5: expose the spec-attainability certificate as one extra state
+        # dimension when the escalation layer is armed (consistent per run).
+        if self._escalation_enabled():
+            vector.append(float(bool(out.get("spec_attainable", False))))
         out["lyapunov_queues"] = dict(self._queue_state)
         out["state_version"] = self.state_version
         out["vector"] = vector
