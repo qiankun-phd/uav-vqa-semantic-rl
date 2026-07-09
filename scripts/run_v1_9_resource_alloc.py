@@ -575,6 +575,10 @@ def main() -> int:
     parser.add_argument("--escalation-cost-limit", type=float, default=None, help="Escalation dual-channel budget delta_esc (change 5). Defaults to the config value; the v5 matrix passes the calibrated peak/nominal budget.")
     parser.add_argument("--cache-quality", default=None, choices=["legacy", "entry_v2"], help="s0 cache quality source (task #28 v5 change 3): 'legacy' (default) keeps the U_sem(level=0) LUT override bit-for-bit; 'entry_v2' drives s0 runtime quality from the real cached-answer LCB x freshness decay (empty/non-matching cache -> s0 LCB 0). Overrides multi_uav_env.cache_quality.")
     parser.add_argument("--critical-cache-compliance", default=None, choices=["allowed", "forbidden"], help="Structural cache-compliance ban (task #28 v3, method (c)): 'forbidden' means a critical/high task served s0 cache-only is never quality-compliant (closes the cache shortcut at the compliance-judgment layer); 'allowed' (default) preserves legacy/v1/v2 behaviour bit-for-bit. Overrides multi_uav_env.critical_cache_compliance.")
+    parser.add_argument("--reward-success-semantics", default=None, choices=["legacy", "mission_aligned"], help="Task #36: reward attribution for a quality+deadline-COMPLIANT service that is UTM/airspace-BLOCKED. 'legacy' (default) charges the strict success AND + airspace penalty (a compliant-but-blocked token earns no bonus and is penalised, so it scores below the banned cache and floods it). 'mission_aligned' treats a UTM block as an airspace event, not a service failure: the token earns a discounted success bonus (reward_blocked_service_discount, default 0.8) and is not charged the airspace penalty. Non-compliant services and banned cache keep their negatives. Overrides multi_uav_env.reward_success_semantics.")
+    parser.add_argument("--reward-blocked-service-discount", type=float, default=None, help="Task #36: discount factor for the success bonus of a compliant-but-blocked service under --reward-success-semantics mission_aligned (default 0.8; must be <1 so a blocked delivery stays below an unblocked compliant one). Overrides multi_uav_env.reward_blocked_service_discount.")
+    parser.add_argument("--reference-bandwidth", default=None, choices=["legacy", "fair_share"], help="Task #35-(2): bandwidth anchoring the reference link budget for the obs SNR bin / spec-attainability certificate. 'legacy' (default) uses the 50 kHz s0 default (0.05 x pool), whose noise floor is ~13 dB too low so the quality axis is optimistic. 'fair_share' uses pool / N_uav (each UAV's fair spectrum share). Overrides multi_uav_env.reference_bandwidth.")
+    parser.add_argument("--lut-support-guard", default=None, choices=["off", "outage"], help="Task #35-(1): out-of-support SINR handling for the semantic LUT. 'off' (default) snaps a below-support SINR to the nearest (lowest) calibrated bin (silent extrapolation: a -30 dB link reads LUT quality ~0.85). 'outage' treats a service whose effective SINR is below the lowest bin by > lut_support_margin_db (2.5 dB) as a quality outage (LCB 0); above the top bin the SINR is still clamped (monotone saturation). Overrides multi_uav_env.lut_support_guard.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0"], help="Torch device for PPO training/evaluation.")
     parser.add_argument("--service-only-ppo", action="store_true", help="Disable continuous resource heads and train legacy service-level PPO.")
     parser.add_argument("--two-timescale-ppo", action="store_true", help="Train Two-timescale Mobility-aware Semantic Resource PPO.")
@@ -667,7 +671,11 @@ def main() -> int:
     cfg = load_config(args.config)
     if (getattr(args, "epsilon_calibration", None) or getattr(args, "critical_cache_compliance", None)
             or getattr(args, "cache_quality", None) or getattr(args, "escalation_mode", None)
-            or getattr(args, "deadline_semantics", None)):
+            or getattr(args, "deadline_semantics", None)
+            or getattr(args, "reward_success_semantics", None)
+            or getattr(args, "reward_blocked_service_discount", None) is not None
+            or getattr(args, "reference_bandwidth", None)
+            or getattr(args, "lut_support_guard", None)):
         _env = dict(cfg.get("multi_uav_env", {}))
         if getattr(args, "epsilon_calibration", None):
             _env["epsilon_calibration"] = args.epsilon_calibration
@@ -679,6 +687,14 @@ def main() -> int:
             _env["escalation_mode"] = args.escalation_mode
         if getattr(args, "deadline_semantics", None):
             _env["deadline_semantics"] = args.deadline_semantics
+        if getattr(args, "reward_success_semantics", None):
+            _env["reward_success_semantics"] = args.reward_success_semantics
+        if getattr(args, "reward_blocked_service_discount", None) is not None:
+            _env["reward_blocked_service_discount"] = float(args.reward_blocked_service_discount)
+        if getattr(args, "reference_bandwidth", None):
+            _env["reference_bandwidth"] = args.reference_bandwidth
+        if getattr(args, "lut_support_guard", None):
+            _env["lut_support_guard"] = args.lut_support_guard
         cfg["multi_uav_env"] = _env
     tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
     lut = load_lut(resolve_path(args.lut_csv))
