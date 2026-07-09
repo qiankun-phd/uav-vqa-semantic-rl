@@ -194,6 +194,13 @@ class PPOTrainConfig:
     conflict_cost_limit: float = 0.08
     battery_cost_limit: float = 0.0
     gpu_cost_limit: float = 0.0
+    # Escalation channel (task #28 v5 change 5): budget delta_esc = measured
+    # spec-unattainable fraction + 0.05 (peak ~0.90, nominal ~0.50).  lambda_lr /
+    # ceiling are shared with the base channels unless overridden.  With
+    # lambda_decay=0 on this channel it is a pure projected sub-gradient (change 6).
+    escalation_cost_limit: float = 0.90
+    lambda_max_escalation: float = 20.0
+    lambda_init_escalation: float = 0.0
     lambda_lr: float = 0.1
     # v3 calibration: dedicated dual step size for the conflict channel (it is
     # now the only conflict feedback path, so it gets a faster ascent rate).
@@ -336,6 +343,7 @@ class DualState:
     conflict: float = 0.0
     battery: float = 0.0
     gpu: float = 0.0
+    escalation: float = 0.0
 
     def penalty(self, info: dict[str, Any]) -> float:
         risk = str(info.get("risk_level", "normal"))
@@ -348,6 +356,10 @@ class DualState:
             * float(bool(info.get("airspace_conflict", False)) or bool(info.get("utm_constraint_violation", False)))
             + self.battery * float(bool(info.get("battery_violation", False)))
             + self.gpu * float(bool(info.get("resource_violation", False)))
+            # Escalation channel (task #28 v5 change 5): soft price on escalating a
+            # critical/high task.  escalated tasks carry NO quality cost above, so
+            # this is the only Lagrangian signal they contribute.
+            + self.escalation * float(bool(info.get("escalated", False)))
         )
 
     def to_trace(self) -> dict[str, float]:
@@ -359,6 +371,7 @@ class DualState:
             "lambda_conflict": float(self.conflict),
             "lambda_battery": float(self.battery),
             "lambda_gpu": float(self.gpu),
+            "lambda_escalation": float(self.escalation),
             "lambda_quality": float((self.quality_normal + self.quality_critical) / 2.0),
             "lambda_deadline": float((self.deadline_normal + self.deadline_critical) / 2.0),
         }
@@ -386,6 +399,7 @@ def _init_dual_state(cfg: PPOTrainConfig) -> DualState:
         conflict=conflict0,
         battery=_clamp(cfg.lambda_init_battery),
         gpu=_clamp(cfg.lambda_init_gpu),
+        escalation=max(0.0, min(float(cfg.lambda_init_escalation), float(cfg.lambda_max_escalation))),
     )
 
 
@@ -654,6 +668,7 @@ def train_ppo(
             "conflict_cost": float(_mean(rollout["conflict_costs"])),
             "battery_cost": float(_mean(rollout["battery_costs"])),
             "gpu_cost": float(_mean(rollout["gpu_costs"])),
+            "escalation_cost": float(_mean(rollout.get("escalation_costs", []))),
             "bc_loss": float(bc_loss),
             "demo_samples": float(len(demos)),
             "entropy_weight": float(_scheduled_entropy_weight(cfg, episode)),
@@ -884,6 +899,7 @@ def _collect_episode(
         "conflict_costs": [],
         "battery_costs": [],
         "gpu_costs": [],
+        "escalation_costs": [],
         "semantic_accuracy_lcbs": [],
         "semantic_uncertainties": [],
         "semantic_payload_kbs": [],
@@ -967,6 +983,7 @@ def _collect_episode(
         )
         rollout["battery_costs"].append(float(bool(info.get("battery_violation", False))))
         rollout["gpu_costs"].append(float(bool(info.get("resource_violation", False))))
+        rollout["escalation_costs"].append(float(bool(info.get("escalated", False))))
         rollout["semantic_accuracy_lcbs"].append(float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))))
         rollout["semantic_uncertainties"].append(float(info.get("semantic_uncertainty", 0.0)))
         rollout["semantic_payload_kbs"].append(float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))))
@@ -1189,6 +1206,7 @@ def _empty_rollout() -> dict[str, list[Any]]:
         "conflict_costs": [],
         "battery_costs": [],
         "gpu_costs": [],
+        "escalation_costs": [],
         "semantic_accuracy_lcbs": [],
         "semantic_uncertainties": [],
         "semantic_payload_kbs": [],
@@ -1259,6 +1277,7 @@ def _append_common_rollout(
     rollout["conflict_costs"].append(float(bool(info.get("airspace_conflict", False)) or bool(info.get("utm_constraint_violation", False))))
     rollout["battery_costs"].append(float(bool(info.get("battery_violation", False))))
     rollout["gpu_costs"].append(float(bool(info.get("resource_violation", False))))
+    rollout["escalation_costs"].append(float(bool(info.get("escalated", False))))
     rollout["semantic_accuracy_lcbs"].append(float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0))))
     rollout["semantic_uncertainties"].append(float(info.get("semantic_uncertainty", 0.0)))
     rollout["semantic_payload_kbs"].append(float(info.get("semantic_payload_kb", info.get("payload_kb", 0.0))))
@@ -1347,6 +1366,7 @@ def _trace_row_from_rollout(
         "conflict_cost": float(_mean(rollout["conflict_costs"])),
         "battery_cost": float(_mean(rollout["battery_costs"])),
         "gpu_cost": float(_mean(rollout["gpu_costs"])),
+        "escalation_cost": float(_mean(rollout.get("escalation_costs", []))),
         "bc_loss": float(bc_loss),
         "demo_samples": float(len(demos)),
         "entropy_weight": float(_scheduled_entropy_weight(cfg, episode)),
@@ -2932,12 +2952,13 @@ def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig)
         # Fixed-penalty baseline: dual variables stay at their init values.
         return
     if cfg.risk_aware_constraints:
-        dual.quality_normal = _dual_update(dual.quality_normal, _mean(rollout["quality_costs_normal"]), cfg.quality_cost_limit_normal, cfg)
-        dual.quality_critical = _dual_update(dual.quality_critical, _mean(rollout["quality_costs_critical"]), cfg.quality_cost_limit_critical, cfg)
+        # change 6: pure projected sub-gradient (lambda_decay=0) on the quality channels.
+        dual.quality_normal = _dual_update(dual.quality_normal, _mean(rollout["quality_costs_normal"]), cfg.quality_cost_limit_normal, cfg, lambda_decay=0.0)
+        dual.quality_critical = _dual_update(dual.quality_critical, _mean(rollout["quality_costs_critical"]), cfg.quality_cost_limit_critical, cfg, lambda_decay=0.0)
         dual.deadline_normal = _dual_update(dual.deadline_normal, _mean(rollout["deadline_costs_normal"]), cfg.deadline_cost_limit_normal, cfg)
         dual.deadline_critical = _dual_update(dual.deadline_critical, _mean(rollout["deadline_costs_critical"]), cfg.deadline_cost_limit_critical, cfg)
     else:
-        quality = _dual_update((dual.quality_normal + dual.quality_critical) / 2.0, _mean(rollout["quality_costs"]), cfg.quality_cost_limit, cfg)
+        quality = _dual_update((dual.quality_normal + dual.quality_critical) / 2.0, _mean(rollout["quality_costs"]), cfg.quality_cost_limit, cfg, lambda_decay=0.0)
         deadline = _dual_update((dual.deadline_normal + dual.deadline_critical) / 2.0, _mean(rollout["deadline_costs"]), cfg.deadline_cost_limit, cfg)
         dual.quality_normal = quality
         dual.quality_critical = quality
@@ -2953,6 +2974,16 @@ def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig)
     )
     dual.battery = _dual_update(dual.battery, _mean(rollout["battery_costs"]), cfg.battery_cost_limit, cfg)
     dual.gpu = _dual_update(dual.gpu, _mean(rollout["gpu_costs"]), cfg.gpu_cost_limit, cfg)
+    # Escalation channel (change 5): pure projected sub-gradient (change 6),
+    # budget delta_esc; escalated tasks are excluded from the quality costs above.
+    dual.escalation = _dual_update(
+        dual.escalation,
+        _mean(rollout.get("escalation_costs", [])),
+        cfg.escalation_cost_limit,
+        cfg,
+        lambda_max=cfg.lambda_max_escalation,
+        lambda_decay=0.0,
+    )
 
 
 def _collect_demonstrations(env: V19LUTResourceEnv, cfg: PPOTrainConfig, seed: int) -> list[dict[str, Any]]:
@@ -3262,15 +3293,21 @@ def _dual_update(
     cfg: PPOTrainConfig,
     lambda_max: float | None = None,
     lambda_lr: float | None = None,
+    lambda_decay: float | None = None,
 ) -> float:
     # Leaky projected sub-gradient ascent: lambda <- (1-decay)*lambda + lr*(cost-limit).
     # The decay term breaks the one-way ratchet observed in the 2026-07 review
     # (lambda monotone non-decreasing whenever limit=0), letting lambda relax
     # once the observed cost stays below the limit.  lambda_lr allows a
     # per-channel step size (v3: conflict channel uses cfg.lambda_lr_conflict).
+    # change 6 (task #28 v5): lambda_decay=0 for the quality_* and escalation
+    # channels -> PURE projected sub-gradient (their limits are now attainable
+    # under the v5 anchor + escalation reclassification, so the leak is unneeded
+    # and would bias lambda toward zero away from the true shadow price).
     ceiling = float(cfg.lambda_max if lambda_max is None else lambda_max)
     step = float(cfg.lambda_lr if lambda_lr is None else lambda_lr)
-    updated = (1.0 - float(cfg.lambda_decay)) * float(current) + step * (float(observed_cost) - float(limit))
+    decay = float(cfg.lambda_decay if lambda_decay is None else lambda_decay)
+    updated = (1.0 - decay) * float(current) + step * (float(observed_cost) - float(limit))
     return max(0.0, min(ceiling, updated))
 
 

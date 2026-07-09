@@ -702,6 +702,8 @@ def run_experiment(
             conflict_cost_limit=args.conflict_cost_limit,
             quality_cost_limit=args.quality_cost_limit,
             deadline_cost_limit=args.deadline_cost_limit,
+            **({"escalation_cost_limit": args.escalation_cost_limit}
+               if getattr(args, "escalation_cost_limit", None) is not None else {}),
             power_min_w=args.power_min_w,
             power_max_w=args.power_max_w,
             imitation_warm_start=args.imitation_warm_start,
