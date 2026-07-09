@@ -283,6 +283,16 @@ class V19LUTResourceEnv:
         self.quality_backend = str(quality_backend or rl_cfg.get("quality_backend", "lut")).lower()
         if self.quality_backend not in QUALITY_BACKENDS:
             raise ValueError(f"unknown quality_backend: {self.quality_backend} (expected {QUALITY_BACKENDS})")
+        # Change 3 (task #28 v5): s0 cache quality source.  "legacy" keeps the
+        # U_sem(level=0) LUT override (bit-identical default); "entry_v2" drives s0
+        # runtime quality from the real cached-answer LCB stored on the cache entry
+        # (multi_uav_env cache write) times a freshness decay, so an empty cache or
+        # a non-matching query yields s0 LCB = 0 instead of a synthetic LUT value.
+        self.cache_quality = str(
+            self._env.env_cfg.get("cache_quality", rl_cfg.get("cache_quality", "legacy")) or "legacy"
+        ).lower()
+        if self.cache_quality not in ("legacy", "entry_v2"):
+            raise ValueError(f"unknown cache_quality: {self.cache_quality} (expected legacy|entry_v2)")
         self._persample: PersamplePredictor | None = None
         self._persample_cache: dict[tuple[str, str, str, str, str], tuple[float, float]] = {}
         self._lut_v5: LutV5Table | None = None
@@ -638,6 +648,8 @@ class V19LUTResourceEnv:
             self._apply_persample_quality(info, obs, raw_accuracy)
         if self._lut_v5 is not None and semantic_path != "defer":
             self._apply_lut_v5_quality(info, obs, raw_accuracy)
+        if self.cache_quality == "entry_v2" and semantic_path == "cache":
+            self._apply_entry_v2_cache_quality(info)
 
         epsilon = self._epsilon_from_obs_or_info(info, obs)
         accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
@@ -836,6 +848,32 @@ class V19LUTResourceEnv:
         info["answer_accuracy_raw"] = raw_accuracy
         info["answer_accuracy_est"] = lcb
         info["quality_backend"] = self.quality_backend
+
+    # Freshness decay applied to the stored cache-answer LCB under entry_v2.
+    _CACHE_FRESHNESS_DECAY = {"fresh": 1.0, "stale": 0.6, "expired": 0.0}
+
+    def _apply_entry_v2_cache_quality(self, info: dict[str, Any]) -> None:
+        """Change 3: s0 cache quality driven by the real cached-answer LCB.
+
+        Replaces the U_sem(level=0) synthetic override with
+        cache_quality_lcb x freshness-decay.  An empty cache / non-matching query
+        has cache_quality_lcb = 0 (set by the env's _cache_status), so s0 LCB
+        collapses to 0 -- a critical task can no longer be silently "served" by a
+        non-existent cache hit.
+        """
+        lcb = float(info.get("cache_quality_lcb", 0.0))
+        fresh = str(info.get("cache_freshness_bin", info.get("freshness_bin", "fresh")))
+        decay = self._CACHE_FRESHNESS_DECAY.get(fresh, 0.0)
+        eligible = bool(info.get("cache_eligible", False))
+        # No matching entry at all -> LCB 0.  A matched-but-ineligible entry still
+        # exposes its decayed stored quality (the compliance gate handles eligibility
+        # separately); an empty match returns cache_quality_lcb 0 from the env.
+        value = max(0.0, min(1.0, lcb * decay)) if (lcb > 0.0 or eligible) else 0.0
+        info["semantic_accuracy_mean"] = value
+        info["semantic_accuracy_lcb"] = value
+        info["semantic_uncertainty"] = max(0.0, float(info.get("semantic_uncertainty", 0.0)))
+        info["answer_accuracy_est"] = value
+        info["cache_quality_mode"] = "entry_v2"
 
     @staticmethod
     def _epsilon_from_obs_or_info(info: dict[str, Any], obs: dict[str, Any] | None) -> float:
