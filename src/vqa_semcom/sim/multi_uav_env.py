@@ -1130,6 +1130,13 @@ def _env_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
         # compliant service that is only UTM-blocked.
         "reward_success_semantics": "legacy",
         "reward_blocked_service_discount": 0.8,
+        # Task #35-(2): reference bandwidth for the obs SNR bin / certificate.
+        # legacy = 0.05 x pool (50 kHz); fair_share = pool / N_uav.
+        "reference_bandwidth": "legacy",
+        # Task #35-(1): LUT support-set guard.  off = nearest-bin snap (legacy);
+        # outage = below-support SINR -> quality outage (LCB 0), top clamp above.
+        "lut_support_guard": "off",
+        "lut_support_margin_db": 2.5,
     }
     out = _deep_merge(defaults, cfg.get("multi_uav_env", {}))
     sim_cfg = cfg.get("simulation", {})
@@ -1798,6 +1805,63 @@ class MultiUAVVQAEnv:
         """
         return str(self.env_cfg.get("reward_success_semantics", "legacy") or "legacy").lower()
 
+    def _reference_bandwidth_semantics(self) -> str:
+        """Task #35-(2): which bandwidth anchors the REFERENCE link budget used to
+        derive the observation SNR bin and the spec-attainability certificate.
+
+        "legacy"     (default) -- the s0 default_action bandwidth, 0.05 x pool
+                     (== 50 kHz on the 1 MHz pool).  Preserves v1-v6 bit-for-bit.
+                     But 50 kHz sits ~13 dB below a realised transmission share
+                     (fair share or a critical full-pool grant), so the reference
+                     noise floor -174 + 10log10(B) + NF is ~13 dB too low and the
+                     quality axis (LUT lookup on the reference SNR bin) is
+                     systematically OPTIMISTIC -- an optimism that then feeds the
+                     epsilon/delta_esc accounting.
+        "fair_share" -- the reference bandwidth is the fair spectrum share
+                     pool / N_uav (each UAV's equal slice of the pool), the same
+                     fair-share notion the action_mask exposes as a resource
+                     hint.  This removes the reference optimism so the observation
+                     SNR bin and the certificate reflect a realistic per-UAV link.
+        """
+        return str(self.env_cfg.get("reference_bandwidth", "legacy") or "legacy").lower()
+
+    def _reference_bandwidth_hz(self) -> float:
+        """The bandwidth (Hz) used for the REFERENCE link budget (obs SNR bin /
+        certificate).  Under fair_share it is pool / N_uav; under legacy it is the
+        s0 default_action share (0.05 x pool)."""
+        pool = float(self.env_cfg["bandwidth_hz"])
+        if self._reference_bandwidth_semantics() == "fair_share":
+            return pool / max(1, len(self.uavs))
+        return 0.05 * pool
+
+    def _lut_support_guard(self) -> str:
+        """Task #35-(1): how a realised SINR OUTSIDE the LUT's calibrated support
+        set is treated for the semantic-quality lookup.
+
+        "off"    (default) -- the SINR is snapped to the NEAREST calibrated bin
+                 (v1-v6 behaviour, bit-for-bit).  Below-support SINRs therefore
+                 read the lowest bin's quality: a -32.5 dB link snaps to the
+                 -5 dB bin and reads its LUT accuracy (up to ~0.82) -- a silent
+                 out-of-support extrapolation the quality axis never earned.
+        "outage" -- a service whose effective SINR is below the lowest calibrated
+                 bin by more than lut_support_margin_db (default 2.5 dB) is
+                 treated as an OUTAGE: the semantic quality LCB is 0 (the service
+                 is quality-infeasible).  ABOVE the highest bin the SINR is still
+                 clamped to the top bin (monotone saturation -- more SINR cannot
+                 hurt quality; declared behaviour, no extrapolation upward).
+        """
+        return str(self.env_cfg.get("lut_support_guard", "off") or "off").lower()
+
+    def _sinr_below_lut_support(self, sinr_db: float) -> bool:
+        """True when the guard is armed AND the effective SINR is below the lowest
+        calibrated LUT bin by more than the support margin (out-of-support-low)."""
+        if self._lut_support_guard() != "outage":
+            return False
+        if not self.snr_bins_db:
+            return False
+        margin = float(self.env_cfg.get("lut_support_margin_db", 2.5))
+        return float(sinr_db) < (min(self.snr_bins_db) - margin)
+
     def _deadline_delay_s(self, delay: dict[str, float]) -> float:
         """Task #33-A: the delay charged against the deadline clock.
 
@@ -1944,6 +2008,15 @@ class MultiUAVVQAEnv:
         if int(parsed["service_level"]) == 0:
             accuracy *= 0.85 + 0.15 * cache_probability
         semantic_lcb = float(semantic_estimate.accuracy_lcb)
+        # Task #35-(1): LUT support-set outage guard.  When the guard is armed and
+        # this service's EFFECTIVE SINR is below the lowest calibrated bin (by more
+        # than the support margin), the semantic quality is an OUTAGE -- the LUT
+        # value at the nearest (lowest) bin is an unearned out-of-support
+        # extrapolation, so force accuracy/LCB to 0 (quality-infeasible).  Applies
+        # to the transmission services; the s0 cache path carries its own LCB.
+        if self._sinr_below_lut_support(float(link["sinr_db"])) and int(parsed["service_level"]) != 0:
+            accuracy = 0.0
+            semantic_lcb = 0.0
         cache_status = self._cache_status(task)
         if str(parsed["semantic_path"]) == "cache":
             semantic_lcb = float(cache_status["cache_quality_lcb"]) if bool(cache_status["cache_eligible"]) else 0.0
@@ -3548,7 +3621,13 @@ class MultiUAVVQAEnv:
         nearest = self._nearest_uav(task)
         action = self.default_action(0)
         action["uav_assignment"] = nearest.uav_id
-        link = self._link_budget(task, nearest, self.parse_action(action, task), interference_dbm=None)
+        # Task #35-(2): anchor the reference link budget on the fair spectrum
+        # share (pool / N_uav) instead of the 50 kHz s0 default, so the obs SNR
+        # bin and the spec-attainability certificate are not systematically
+        # optimistic.  Legacy keeps the 0.05 x pool reference bit-for-bit.
+        ref_parsed = self.parse_action(action, task)
+        ref_parsed["bandwidth"] = self._reference_bandwidth_hz()
+        link = self._link_budget(task, nearest, ref_parsed, interference_dbm=None)
         snr_bin = snr_db_to_bin_label(float(link["sinr_db"]), self.snr_bins_db)
         payloads = {}
         accuracies = {}

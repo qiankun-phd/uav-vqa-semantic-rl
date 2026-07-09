@@ -497,5 +497,165 @@ class MissionAlignedRewardGateTest(unittest.TestCase):
         self.assertAlmostEqual(r1 - r0, 2.0 * 1.0 * 0.86, places=6)
 
 
+# ---------------------------------------------------------------------------
+# Task #35-(2) (v7): reference-bandwidth for the observation SNR bin / spec-
+# attainability certificate.  legacy anchors on the 50 kHz s0 default (optimistic
+# noise floor); fair_share anchors on pool / N_uav.
+# ---------------------------------------------------------------------------
+class ReferenceBandwidthGateTest(unittest.TestCase):
+    def test_default_is_legacy(self):
+        env = _env("comm_window")
+        env.reset(seed=5)
+        env.env_cfg.pop("reference_bandwidth", None)
+        self.assertEqual(env._reference_bandwidth_semantics(), "legacy")
+
+    def test_legacy_reference_is_5pct_pool(self):
+        env = _env("comm_window")
+        env.reset(seed=5)
+        pool = float(env.env_cfg["bandwidth_hz"])
+        self.assertAlmostEqual(env._reference_bandwidth_hz(), 0.05 * pool, places=3)
+
+    def test_fair_share_reference_is_pool_over_nuav(self):
+        env = _env("comm_window", extra_env={"reference_bandwidth": "fair_share"})
+        env.reset(seed=5)
+        pool = float(env.env_cfg["bandwidth_hz"])
+        self.assertAlmostEqual(env._reference_bandwidth_hz(), pool / max(1, len(env.uavs)), places=3)
+        # fair share strictly exceeds the 50 kHz legacy reference for N_uav < 20,
+        # so the reference noise floor rises and the reference SINR falls.
+        self.assertGreater(env._reference_bandwidth_hz(), 0.05 * pool)
+
+
+# ---------------------------------------------------------------------------
+# Task #35-(1) (v7): LUT support-set outage guard.  off snaps a below-support
+# SINR to the nearest (lowest) bin (unearned extrapolation); outage forces the
+# semantic LCB to 0 for the transmission services, clamps above the top bin.
+# ---------------------------------------------------------------------------
+class _SupportGuardEnv:
+    """Build a full-LUT scenario env so the SINR->bin->quality chain is real."""
+
+    @staticmethod
+    def build(guard: str):
+        import sys as _sys
+        from pathlib import Path as _Path
+        _root = _Path(__file__).resolve().parents[1]
+        _sys.path.insert(0, str(_root / "src"))
+        from vqa_semcom.config import load_config, resolve_path
+        from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv as _Env
+        from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
+        cfg = load_config(str(_root / "configs/v1_9_bubbles.yaml"))
+        tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
+        lut = load_lut(resolve_path(str(_root / "outputs/lut/v1_9_snr_semantic_quality_lut.csv")))
+        tasks = filter_tasks_supported_by_lut(tasks, lut)
+        mu = cfg.setdefault("multi_uav_env", {})
+        mu.update({"scenario": "utm_conflict", "lut_support_guard": guard})
+        env = _Env(tasks, lut, cfg, seed=0)
+        env.reset(seed=0)
+        return env
+
+
+class LUTSupportGuardTest(unittest.TestCase):
+    def test_default_is_off(self):
+        env = _SupportGuardEnv.build("off")
+        env.env_cfg.pop("lut_support_guard", None)
+        self.assertEqual(env._lut_support_guard(), "off")
+
+    def test_below_support_threshold(self):
+        env = _SupportGuardEnv.build("outage")
+        lo = min(env.snr_bins_db)            # -5 dB
+        margin = float(env.env_cfg["lut_support_margin_db"])  # 2.5 dB
+        thresh = lo - margin                 # -7.5 dB
+        self.assertTrue(env._sinr_below_lut_support(thresh - 0.1))   # just below
+        self.assertFalse(env._sinr_below_lut_support(thresh))        # exactly at edge (in support)
+        self.assertFalse(env._sinr_below_lut_support(thresh + 0.1))  # above
+        self.assertTrue(env._sinr_below_lut_support(-30.0))          # deep outage
+        self.assertFalse(env._sinr_below_lut_support(25.0))          # above top bin (clamp, not outage)
+
+    def test_off_guard_never_flags_outage(self):
+        env = _SupportGuardEnv.build("off")
+        self.assertFalse(env._sinr_below_lut_support(-30.0))
+        self.assertFalse(env._sinr_below_lut_support(-100.0))
+
+    def test_minus30db_service_is_outage_lcb_zero(self):
+        """The Task #35-(1) single-test: at SINR -30 dB the s1/s2 services read
+        LCB=0 under the outage guard (vs a positive LUT extrapolation under off)."""
+        import types
+        from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv
+
+        def _force_sinr(sinr_db):
+            orig = MultiUAVVQAEnv._link_budget
+            def _lb(self, task, uav, action, interference_dbm=None):
+                d = dict(orig(self, task, uav, action, interference_dbm))
+                d["sinr_db"] = sinr_db
+                d["snr_db"] = sinr_db
+                return d
+            return _lb
+
+        # off: below-support SINR extrapolates to a POSITIVE LUT quality
+        env_off = _SupportGuardEnv.build("off")
+        env_off._link_budget = types.MethodType(_force_sinr(-30.0), env_off)
+        task = env_off._front_task()
+        for lvl in (1, 2):
+            act = env_off.candidate_action(lvl, {"task_id": task.task_id, "risk_level": task.risk_level})
+            info = env_off.evaluate_action(act, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+            self.assertGreater(float(info["semantic_accuracy_lcb"]), 0.0)  # unearned extrapolation
+
+        # outage: below-support SINR -> LCB 0, quality-infeasible
+        env_out = _SupportGuardEnv.build("outage")
+        env_out._link_budget = types.MethodType(_force_sinr(-30.0), env_out)
+        task = env_out._front_task()
+        for lvl in (1, 2):
+            act = env_out.candidate_action(lvl, {"task_id": task.task_id, "risk_level": task.risk_level})
+            info = env_out.evaluate_action(act, task_id=task.task_id, obs={"task_id": task.task_id}, mutate=False)
+            self.assertAlmostEqual(float(info["semantic_accuracy_lcb"]), 0.0, places=9)
+            self.assertAlmostEqual(float(info["answer_accuracy_est"]), 0.0, places=9)
+            self.assertTrue(bool(info["quality_violation"]))
+
+
+# ---------------------------------------------------------------------------
+# Task v7: gate-combination regression -- with all three v7 flags at their legacy
+# defaults the reward / bin / quality chain is bit-for-bit the v6 behaviour.
+# ---------------------------------------------------------------------------
+class V7AllLegacyIsV6Test(unittest.TestCase):
+    def test_all_v7_flags_default_legacy(self):
+        env = _env("comm_window")
+        for key in ("reward_success_semantics", "reference_bandwidth", "lut_support_guard"):
+            env.env_cfg.pop(key, None)
+        self.assertEqual(env._reward_success_semantics(), "legacy")
+        self.assertEqual(env._reference_bandwidth_semantics(), "legacy")
+        self.assertEqual(env._lut_support_guard(), "off")
+
+    def test_reward_all_legacy_matches_explicit_formula(self):
+        """With legacy reward semantics the served-token reward equals the exact
+        v6 formula (success AND, airspace penalty charged)."""
+        env = _env("comm_window")  # all v7 flags legacy
+        info = {
+            "success": False, "answer_accuracy_est": 0.86,
+            "delay_s": 11.27, "deadline_charged_delay_s": 2.16,
+            "energy_j": 15.0, "payload_kb": 80.0,
+            "quality_violation": False, "deadline_violation": False,
+            "service_compliant": True, "airspace_conflict": True,
+            "utm_constraint_violation": True,
+        }
+
+        class _T:
+            priority = 1.0
+
+        expected = (
+            2.0 * 1.0 * 0.86 * 0.0            # success bonus zeroed (success False)
+            - 0.20 * 2.16                     # comm-window delay
+            - 0.0004 * 15.0                   # energy
+            - 0.002 * 80.0                    # payload
+            - 1.0 * (0.0 + 0.0)               # no quality/deadline violation
+            - 1.0 * 1.0                       # airspace conflict charged
+        )
+        self.assertAlmostEqual(env._reward(_T(), info), expected, places=9)
+
+    def test_outage_guard_off_leaves_service_quality_untouched(self):
+        """off guard: a normal in-support service keeps its LUT quality (no zeroing)."""
+        env = _env("comm_window")  # lut_support_guard off
+        # in-support SINR (default geometry) -> positive quality, guard inert
+        self.assertFalse(env._sinr_below_lut_support(-30.0))  # off => never flags
+
+
 if __name__ == "__main__":
     unittest.main()
