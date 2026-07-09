@@ -146,6 +146,73 @@ def t4_value(params: SeparationParams | None = None, confidence_sigma: float | N
     return mean + k * std
 
 
+# --------------------------------------------------------------------------- #
+# E7v2 (task #23): shared-link non-preemptive priority M/G/1 waiting time.     #
+# --------------------------------------------------------------------------- #
+# The tactical loop delivers evidence over a SHARED radio link; before v6 the
+# three E7 call sites (separation-capacity script, spec-attainability certificate
+# queue term, env queue_delay) each modelled queueing differently.  This is the
+# ONE shared estimator: the Pollaczek-Khinchine mean wait for a service-time
+# distribution S with utilisation rho, W = rho * E[S^2] / (2 * E[S]), extended to
+# non-preemptive priority classes (C2 / critical evidence is high-priority).
+#
+# For a single aggregate class this is exactly the prompt's
+#     W = rho * E[S^2] / (2 * E[S]).
+# For K non-preemptive priority classes (index 0 = highest priority), the mean
+# wait of class k is the standard Cobham (1954) result
+#     W_k = R / ((1 - sigma_{k-1}) * (1 - sigma_k)),
+#     R = sum_i lambda_i * E[S_i^2] / 2   (aggregate mean residual service),
+#     sigma_k = sum_{i<=k} rho_i,  rho_i = lambda_i * E[S_i].
+
+
+def mg1_pk_wait(rho: float, mean_service_s: float, second_moment_s2: float) -> float:
+    """Pollaczek-Khinchine mean waiting time W = rho*E[S^2]/(2*E[S]).
+
+    rho              : link utilisation of this traffic (lambda * E[S]), in [0,1).
+    mean_service_s   : E[S], mean airtime per evidence delivery (s).
+    second_moment_s2 : E[S^2] (s^2); for a deterministic S it equals E[S]^2, for
+                       exponential 2*E[S]^2, generally = E[S]^2 + Var[S].
+    Returns 0 for a saturated/degenerate queue guard (rho>=1 or E[S]<=0).
+    """
+    rho = float(rho)
+    mean_service_s = float(mean_service_s)
+    if mean_service_s <= 0.0 or rho <= 0.0:
+        return 0.0
+    if rho >= 1.0:
+        return float("inf")
+    return rho * float(second_moment_s2) / (2.0 * mean_service_s)
+
+
+def mg1_priority_wait(classes: list[dict], target_index: int) -> float:
+    """Non-preemptive priority M/G/1 mean wait for class `target_index`.
+
+    classes: ordered HIGH->LOW priority; each a dict with keys
+        lam   -- arrival rate lambda_i (1/s),
+        es    -- mean service E[S_i] (s),
+        es2   -- second moment E[S_i^2] (s^2)  [defaults to es^2 = deterministic].
+    C2 / critical evidence is placed at index 0 (highest priority) by the caller.
+    Returns the Cobham waiting time; inf if the cumulative load through the class
+    saturates the link.
+    """
+    if not classes or not (0 <= target_index < len(classes)):
+        return 0.0
+    # aggregate mean residual R = sum_i lambda_i E[S_i^2] / 2
+    residual = 0.0
+    rhos: list[float] = []
+    for c in classes:
+        lam = float(c.get("lam", 0.0))
+        es = float(c.get("es", 0.0))
+        es2 = float(c.get("es2", es * es))
+        residual += lam * es2 / 2.0
+        rhos.append(lam * es)
+    sigma_prev = sum(rhos[:target_index])            # sigma_{k-1}
+    sigma_k = sigma_prev + rhos[target_index]         # sigma_k
+    denom = (1.0 - sigma_prev) * (1.0 - sigma_k)
+    if denom <= 0.0:
+        return float("inf")
+    return residual / denom
+
+
 @dataclass(frozen=True)
 class SeparationMinima:
     """Result of the D2.1 Block-4 separation-minima chain (metres)."""

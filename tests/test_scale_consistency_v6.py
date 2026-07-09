@@ -266,6 +266,67 @@ class CacheBanEngagementTest(unittest.TestCase):
         self.assertFalse(bool(info.get("quality_violation")))
 
 
+class MG1QueueingTest(unittest.TestCase):
+    """Task #23 E7v2: shared-link M/G/1 non-preemptive priority wait (hand-checked)."""
+
+    def test_pk_formula(self):
+        from vqa_semcom.sim.bubbles_separation import mg1_pk_wait
+        # M/M/1: rho=0.5, E[S]=1, E[S^2]=2 -> W = 0.5*2/(2*1) = 0.5
+        self.assertAlmostEqual(mg1_pk_wait(0.5, 1.0, 2.0), 0.5, places=9)
+        # M/D/1: rho=0.5, E[S]=1, E[S^2]=1 -> W = 0.25
+        self.assertAlmostEqual(mg1_pk_wait(0.5, 1.0, 1.0), 0.25, places=9)
+        self.assertEqual(mg1_pk_wait(0.0, 1.0, 1.0), 0.0)     # idle
+        self.assertEqual(mg1_pk_wait(0.5, 0.0, 1.0), 0.0)     # degenerate service
+        self.assertEqual(mg1_pk_wait(1.2, 1.0, 1.0), float("inf"))  # saturated
+
+    def test_priority_two_class_hand(self):
+        from vqa_semcom.sim.bubbles_separation import mg1_priority_wait
+        cls = [{"lam": 0.3, "es": 1.0, "es2": 1.0}, {"lam": 0.4, "es": 1.0, "es2": 1.0}]
+        # R = (0.3+0.4)/2 = 0.35; hi: 0.35/((1)(0.7)) = 0.5; lo: 0.35/((0.7)(0.3)) = 1.6667
+        self.assertAlmostEqual(mg1_priority_wait(cls, 0), 0.5, places=9)
+        self.assertAlmostEqual(mg1_priority_wait(cls, 1), 5.0 / 3.0, places=9)
+
+    def test_priority_saturation(self):
+        from vqa_semcom.sim.bubbles_separation import mg1_priority_wait
+        cls = [{"lam": 0.7, "es": 1.0, "es2": 1.0}, {"lam": 0.5, "es": 1.0, "es2": 1.0}]
+        # sigma through lo class = 1.2 > 1 -> lo wait saturates
+        self.assertEqual(mg1_priority_wait(cls, 1), float("inf"))
+
+    def test_t4_comm_is_baseline_plus_W(self):
+        import importlib
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        B = importlib.import_module("build_separation_capacity")
+        w = B.evidence_queue_wait(0.5, B.LOAD_PRESETS["peak"], c2_dedicated=False)
+        self.assertGreater(w, 0.0)
+        # heavier airtime -> larger W (monotone)
+        w_big = B.evidence_queue_wait(2.0, B.LOAD_PRESETS["peak"], c2_dedicated=False)
+        self.assertGreater(w_big, w)
+        # dedicated C2 removes the C2 top-class load -> strictly smaller evidence wait
+        w_ded = B.evidence_queue_wait(0.5, B.LOAD_PRESETS["peak"], c2_dedicated=True)
+        self.assertLess(w_ded, w)
+
+    def test_env_queue_model_legacy_default(self):
+        # legacy queue model reproduces the affine formula exactly.
+        env = _env("legacy")
+        env.env_cfg["queue_delay_scale_s"] = 0.5
+        env.env_cfg["gpu_queue_delay_scale_s"] = 0.2
+        from types import SimpleNamespace
+        edge = SimpleNamespace(load=0.4, gpu_load=0.3)
+        # legacy: 0.4*0.5 + 0.3*0.2 = 0.26
+        self.assertAlmostEqual(env._queue_delay_s(edge, 0.1), 0.26, places=9)
+
+    def test_env_queue_model_mg1_optin(self):
+        env = _env("legacy", extra_env={"queue_model": "mg1", "queue_delay_scale_s": 0.5,
+                                        "gpu_queue_delay_scale_s": 0.0})
+        from types import SimpleNamespace
+        edge = SimpleNamespace(load=0.4, gpu_load=0.0)
+        # mg1 wait is finite and positive for rho 0.4, service 0.1
+        w = env._queue_delay_s(edge, 0.1)
+        self.assertGreater(w, 0.0)
+        self.assertTrue(w == w and w != float("inf"))  # finite
+
+
 class EscalationBudgetDeterminismTest(unittest.TestCase):
     """Task #34-(i): the delta_esc estimator is deterministic (same seed/config
     -> same decomposition), so the single calibration JSON is reproducible."""

@@ -2957,6 +2957,41 @@ class MultiUAVVQAEnv:
             sample_count=1 if entry.accuracy > 0.0 or entry.payload_bytes > 0.0 else 0,
         )
 
+    def _queue_delay_s(self, edge: "EdgeNode", tx_delay_s: float) -> float:
+        """Shared-link + compute queue wait (task #23 E7v2 site iii).
+
+        queue_model == "legacy" (default): the affine load model
+            edge.load * queue_delay_scale_s + edge.gpu_load * gpu_queue_delay_scale_s
+        -- bit-for-bit v1-v5.  This is the first-order (small-rho) approximation of
+        the M/G/1 wait: W = rho*E[S^2]/(2E[S]) ~= (E[S^2]/(2E[S])) * rho, i.e.
+        linear in the link utilisation rho == edge.load, with queue_delay_scale_s
+        playing the role of the per-unit-load residual E[S^2]/(2E[S]).
+
+        queue_model == "mg1": the SAME shared M/G/1 non-preemptive priority
+        estimator used by the separation-capacity chain (bubbles_separation.
+        mg1_priority_wait), with the link service time S = this delivery's tx
+        airtime and rho = edge.load (C2/critical high-priority).  The GPU/compute
+        queue keeps the affine gpu term (a distinct resource).  Opt-in so legacy
+        runs stay identical.
+        """
+        gpu_q = float(edge.gpu_load) * float(self.env_cfg["gpu_queue_delay_scale_s"])
+        model = str(self.env_cfg.get("queue_model", "legacy") or "legacy").lower()
+        if model != "mg1":
+            return float(edge.load) * float(self.env_cfg["queue_delay_scale_s"]) + gpu_q
+        rho = max(0.0, min(0.999, float(edge.load)))
+        es = max(1e-6, float(tx_delay_s))
+        payload_rho = max(0.0, min(0.999, rho * float(self.env_cfg.get("queue_payload_load_ratio", 1.0))))
+        classes = [
+            {"lam": rho / es, "es": es, "es2": es * es},               # C2/critical hi-pri
+            {"lam": payload_rho / es, "es": es, "es2": es * es},        # payload lo-pri
+        ]
+        w = bubbles_separation.mg1_priority_wait(classes, target_index=0)
+        if not math.isfinite(w):
+            # saturation guard: fall back to the affine model so the sim never
+            # returns an infinite delay.
+            return float(edge.load) * float(self.env_cfg["queue_delay_scale_s"]) + gpu_q
+        return w + gpu_q
+
     def _delay_parts(
         self,
         task: EnvTask,
@@ -2978,7 +3013,7 @@ class MultiUAVVQAEnv:
         cpu_delay = processing_base * cpu_work / max(1e-6, float(action["cpu_share"]))
         gpu_delay = processing_base * gpu_work / max(1e-6, float(action["gpu_share"]))
         infer_delay = max(cpu_delay, gpu_delay, 0.02 if level == 0 else 0.0)
-        queue_delay = edge.load * float(self.env_cfg["queue_delay_scale_s"]) + edge.gpu_load * float(self.env_cfg["gpu_queue_delay_scale_s"])
+        queue_delay = self._queue_delay_s(edge, tx_delay)
         model_cached = level == 0 or level in edge.cached_service_levels
         load_delay = float(self.env_cfg["model_cache_hit_delay_s"] if model_cached else self.env_cfg["model_load_delay_s"])
         total = fly_delay + sense_delay + tx_delay + queue_delay + infer_delay + load_delay

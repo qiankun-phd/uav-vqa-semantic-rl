@@ -93,8 +93,37 @@ import argparse
 import csv
 import math
 import os
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "src"))
+# E7v2 (task #23): the ONE shared M/G/1 priority queueing estimator.
+from vqa_semcom.sim.bubbles_separation import mg1_priority_wait  # noqa: E402
 
 FT2M = 0.3048
+
+# ---- E7v2 shared-link queueing (task #23) -----------------------------------------
+# The tactical loop delivers evidence over a SHARED radio link.  BUBBLES' 1.80 s
+# separation-communication mean is treated as the queue-EMPTY tactical baseline
+# (formulate + deliver instruction), and the SHARED-LINK contention is added as an
+# M/G/1 non-preemptive priority wait W on top:  T4_comm = 1.80 + W.
+#   * service time S = evidence airtime (upload_s); E[S^2] = S^2 (deterministic per
+#     (service, snr) cell) unless a variance is supplied.
+#   * C2 / critical evidence is the HIGH-priority class (index 0); payload/routine
+#     evidence is low-priority (index 1).
+#   * rho (per-class utilisation) is parameterised by the offered load; peak and
+#     nominal are swept for the sensitivity table.
+# NOTE (C2 spectrum debate, ED-282-class anchors): whether C2 shares the payload
+# link is contested.  --c2-dedicated models a DEDICATED C2 band -> W is built from
+# the SAME-priority payload stream only (C2 not in the shared pool); the default
+# --c2-shared puts C2 in the shared pool as the high-priority class.  Both are
+# config-gated; the writing layer aligns with the parallel spectrum audit.
+T4_COMM_BASELINE_S = 1.80
+# Offered-load presets: fraction of link time the payload/C2 streams request.
+LOAD_PRESETS = {"nominal": {"c2_rho": 0.10, "payload_rho": 0.35},
+                "peak": {"c2_rho": 0.25, "payload_rho": 0.55}}
 
 # ---- Block-4 primitive constants (PDF pp.60-61) -----------------------------------
 D_NMAC = 25.0 * FT2M          # 7.62 m
@@ -181,6 +210,52 @@ def separation_minima(vc, roc, comm_mean, z):
     }
 
 
+def evidence_queue_wait(airtime_s, load, c2_dedicated=False, payload_airtime_s=None):
+    """E7v2 shared-link M/G/1 priority wait W for delivering one evidence packet.
+
+    airtime_s        : service time S of THIS evidence delivery (upload_s), s.
+    load             : LOAD_PRESETS entry {c2_rho, payload_rho}.
+    c2_dedicated     : if True, C2 runs on a dedicated band -> the shared pool is
+                       the payload stream only, and the evidence (high-priority
+                       tactical class) waits behind same-priority payload traffic;
+                       if False (default), C2 is the high-priority class sharing
+                       the link and the evidence rides the C2 class.
+    payload_airtime_s: mean service of the low-priority payload stream (defaults to
+                       airtime_s).  Used to size lambda from rho (lambda=rho/E[S]).
+
+    Returns W (s).  The evidence is always the HIGH-priority class (tactical loop);
+    C2 either shares that class (c2_dedicated=False) or is removed to a dedicated
+    band (c2_dedicated=True).
+    """
+    es_hi = float(airtime_s)
+    es_lo = float(payload_airtime_s if payload_airtime_s is not None else airtime_s)
+    if es_hi <= 0.0:
+        return 0.0
+    c2_rho = float(load["c2_rho"])
+    payload_rho = float(load["payload_rho"])
+    # lambda_i = rho_i / E[S_i]; E[S^2] deterministic = E[S]^2.  Evidence is always
+    # the HIGH-priority class (index 0); its wait depends only on same-or-higher
+    # priority load, so the C2-mode changes exactly what shares the top class.
+    if c2_dedicated:
+        # DEDICATED C2 band (ED-282-class reading): C2 is NOT in the shared pool.
+        # The tactical evidence still traverses the shared link as high-priority,
+        # but its top-class load is just the evidence stream itself (small), so it
+        # only queues behind the low-priority payload's residual.
+        hi_rho = min(0.5 * c2_rho, 0.2)   # evidence-only high-priority utilisation
+        classes = [
+            {"lam": hi_rho / es_hi, "es": es_hi, "es2": es_hi * es_hi},
+            {"lam": payload_rho / es_lo, "es": es_lo, "es2": es_lo * es_lo},
+        ]
+    else:
+        # SHARED C2 (default): C2 is the high-priority class on the SAME link and
+        # the evidence rides it, so the top-class load is the full c2_rho.
+        classes = [
+            {"lam": c2_rho / es_hi, "es": es_hi, "es2": es_hi * es_hi},
+            {"lam": payload_rho / es_lo, "es": es_lo, "es2": es_lo * es_lo},
+        ]
+    return mg1_priority_wait(classes, target_index=0)
+
+
 # ------------------------------------------------------------------------------------
 def run_selftest():
     print("=" * 78)
@@ -215,31 +290,54 @@ def run_selftest():
 
 # ------------------------------------------------------------------------------------
 def load_latency(path):
-    """rows -> list of dict(channel, method, snr_db, comm=upload+txside)."""
+    """rows -> list of dict(channel, method, snr_db, upload, txside, comm).
+
+    E7v2: `upload` (link airtime) is the M/G/1 SERVICE TIME S; `txside` (detector
+    latency) is transmitter compute that is NOT link contention.  `comm` (legacy
+    upload+txside) is retained only for the v5-compat baseline column.
+    """
     out = []
     with open(path) as f:
         for r in csv.DictReader(f):
+            up = float(r["upload_s"])
+            tx = float(r["txside_s"])
             out.append({
                 "channel": r["channel"], "method": r["method"],
                 "snr_db": float(r["snr_db"]),
-                "comm": float(r["upload_s"]) + float(r["txside_s"]),
+                "upload": up, "txside": tx, "comm": up + tx,
             })
     return out
 
 
-def build_table(latency_rows, traffic_class, bands=(0, 1, 2)):
+def build_table(latency_rows, traffic_class, bands=(0, 1, 2),
+                load_name="peak", c2_dedicated=False):
+    """E7v2: T4_comm = 1.80 s baseline + shared-link M/G/1 wait W(upload, load).
+
+    Replaces the v5 defect (payload latency substituted directly as the T4
+    separation-comm mean).  The evidence airtime `upload` sizes the M/G/1 service
+    time; `load_name` selects the offered-load preset; `c2_dedicated` toggles the
+    C2 spectrum reading.
+    """
     vc, roc, _mac = TRAFFIC[traffic_class]
-    # default-comm baseline d_TC per band (snr-independent) -> capacity reference
-    d_tc_def = {z: separation_minima(vc, roc, 1.80, z)["d_TC"] for z in bands}
+    load = LOAD_PRESETS[load_name]
+    # default-comm baseline d_TC per band (queue-empty 1.80 s) -> capacity reference
+    d_tc_def = {z: separation_minima(vc, roc, T4_COMM_BASELINE_S, z)["d_TC"] for z in bands}
     out = []
     for row in latency_rows:
+        w = evidence_queue_wait(row["upload"], load, c2_dedicated=c2_dedicated)
+        t4_comm = T4_COMM_BASELINE_S + w   # baseline tactical mean + shared-link wait
         for z in bands:
-            r = separation_minima(vc, roc, row["comm"], z)
+            r = separation_minima(vc, roc, t4_comm, z)
             rel_cap = d_tc_def[z] / r["d_TC"]
             out.append({
                 "channel": row["channel"], "service": row["method"],
                 "snr_db": row["snr_db"], "traffic_class": traffic_class,
-                "sigma_band": z, "comm_latency_s": round(row["comm"], 4),
+                "sigma_band": z,
+                "upload_airtime_s": round(row["upload"], 4),
+                "queue_wait_W_s": round(w, 4),
+                "T4_comm_mean_s": round(t4_comm, 4),
+                "load": load_name, "c2_mode": "dedicated" if c2_dedicated else "shared",
+                "comm_latency_s": round(row["comm"], 4),
                 "T4_mean_s": round(r["T4_mean"], 3), "T4_s": round(r["T4"], 3),
                 "d_TC_m": round(r["d_TC"], 2),
                 "d_TC_default_m": round(d_tc_def[z], 2),
@@ -252,6 +350,7 @@ def build_table(latency_rows, traffic_class, bands=(0, 1, 2)):
 def write_csv(rows, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     cols = ["channel", "service", "snr_db", "traffic_class", "sigma_band",
+            "upload_airtime_s", "queue_wait_W_s", "T4_comm_mean_s", "load", "c2_mode",
             "comm_latency_s", "T4_mean_s", "T4_s", "d_TC_m", "d_TC_default_m",
             "rel_capacity", "N_ref_illustrative"]
     with open(path, "w", newline="") as f:
@@ -259,6 +358,30 @@ def write_csv(rows, path):
         w.writeheader()
         w.writerows(rows)
     print("wrote %d rows -> %s" % (len(rows), path))
+
+
+def w_sensitivity_table(latency_rows):
+    """E7v2: W sensitivity across load presets x C2 mode, for a representative
+    token/image airtime.  Printed for the doc's W-sensitivity table."""
+    # pick a representative upload airtime per method (median over rows).
+    by_method = {}
+    for r in latency_rows:
+        by_method.setdefault(r["method"], []).append(r["upload"])
+    reps = {m: sorted(v)[len(v) // 2] for m, v in by_method.items()}
+    print("\n" + "=" * 70)
+    print("E7v2 W-SENSITIVITY  (M/G/1 non-preemptive priority wait, s)")
+    print("  %-14s %10s %10s %12s %12s" % ("method(upload_s)", "load", "c2_shared_W", "c2_dedic_W", "T4comm_shared"))
+    rows_out = []
+    for m in sorted(reps):
+        up = reps[m]
+        for load_name in ("nominal", "peak"):
+            ws = evidence_queue_wait(up, LOAD_PRESETS[load_name], c2_dedicated=False)
+            wd = evidence_queue_wait(up, LOAD_PRESETS[load_name], c2_dedicated=True)
+            print("  %-14s %10s %10.4f %12.4f %12.4f" %
+                  ("%s(%.3f)" % (m, up), load_name, ws, wd, T4_COMM_BASELINE_S + ws))
+            rows_out.append({"method": m, "upload_s": up, "load": load_name,
+                             "W_c2_shared_s": ws, "W_c2_dedicated_s": wd})
+    return rows_out
 
 
 def make_figure(rows, traffic_class, fig_base, channel="rician"):
@@ -325,6 +448,11 @@ def main():
     ap.add_argument("--fig", default="outputs/figures/comparison/F9_separation_capacity")
     ap.add_argument("--traffic-class", default="SAIL I-II", choices=list(TRAFFIC))
     ap.add_argument("--fig-channel", default="rician")
+    ap.add_argument("--load", default="peak", choices=list(LOAD_PRESETS),
+                    help="E7v2 offered-load preset for the shared-link M/G/1 wait.")
+    ap.add_argument("--c2-dedicated", action="store_true",
+                    help="E7v2: model a DEDICATED C2 band (W from same-priority payload only). "
+                         "Default: C2 shares the link as the high-priority class.")
     args = ap.parse_args()
 
     ok = run_selftest()
@@ -335,8 +463,10 @@ def main():
         return 1
 
     latency = load_latency(args.latency)
-    rows = build_table(latency, args.traffic_class)
+    rows = build_table(latency, args.traffic_class, load_name=args.load,
+                       c2_dedicated=args.c2_dedicated)
     write_csv(rows, args.out)
+    w_sensitivity_table(latency)
     make_figure(rows, args.traffic_class, args.fig, channel=args.fig_channel)
 
     # key numbers for the report
