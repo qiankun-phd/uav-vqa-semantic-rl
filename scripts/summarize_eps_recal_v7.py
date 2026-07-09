@@ -230,7 +230,10 @@ o_ddl = m(ORACLE_CEIL, "peak", "admitted_deadline_violation_rate")
 o_acc = m(ORACLE_CEIL, "peak", "admitted_average_accuracy")
 print(f"(criterion-1 oracle ceiling = {ORACLE_CEIL})")
 checks.append(("1a. PEAK oracle mission(admitted) >= 0.85", o_m, o_m >= 0.85))
-checks.append(("1b. PEAK oracle admitted deadline-violation ~ 0 (<0.05)", o_ddl, o_ddl < 0.05))
+# v7 task criterion 1b: admitted deadline-violation must NOT worsen from the
+# v6 escalation-aware oracle edge (0.084); persisting at ~0.084 is allowed
+# per the v7 brief ("v6 0.084 marginal, hold-even OK, do not worsen").
+checks.append(("1b. PEAK oracle admitted deadline-violation <= 0.085 (v6 0.084 hold-even)", o_ddl, o_ddl <= 0.085))
 
 # 2. escalation budget + nominal escalation
 pesc = m("proposed", "peak", "critical_escalation_rate")

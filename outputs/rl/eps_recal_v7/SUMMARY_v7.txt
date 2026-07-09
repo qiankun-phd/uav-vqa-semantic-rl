@@ -1,0 +1,68 @@
+============================================================================================================================================
+V6 MATRIX -- peak condition  (mission = quality AND deadline, on admitted)
+============================================================================================================================================
+arm                                 mission  admMiss  admDdlV  semSucc  admSucc   task    acc  admAcc  cacheR  neRejR   escR  critEsc  specAtt
+----------------------------------------------------------------------------------------------------------------------------------------------
+bl_oracle_best_feasible_evidence      0.528    0.528    0.412    0.916    0.916  0.260  0.757   0.757   0.008   0.000  0.000    0.000    0.472
+bl_oracle_escalation_aware            0.970    0.916    0.084    0.354    1.000  0.789  0.286   0.808   0.000   0.000  0.646    0.666    0.324
+bl_always_cache                       0.000    0.000    0.000    0.000    0.000  0.000  0.000   0.000   1.000   0.000  0.000    0.000    0.504
+bl_random                             0.292    0.292    0.333    0.552    0.552  0.120  0.454   0.454   0.339   0.000  0.000    0.000    0.463
+proposed                              0.230    0.179    0.024    0.186    0.202  0.228  0.166   0.167   0.441   0.325  0.079    0.124    0.323
+no_lagrangian                         0.244    0.176    0.021    0.178    0.198  0.242  0.161   0.164   0.436   0.321  0.102    0.162    0.322
+fixed_penalty                         0.215    0.176    0.023    0.187    0.199  0.214  0.163   0.164   0.441   0.338  0.061    0.100    0.326
+e4lut                                 0.189    0.137    0.089    0.139    0.152  0.189  0.140   0.143   0.653   0.108  0.085    0.110    0.407
+
+============================================================================================================================================
+V6 MATRIX -- nominal condition  (mission = quality AND deadline, on admitted)
+============================================================================================================================================
+arm                                 mission  admMiss  admDdlV  semSucc  admSucc   task    acc  admAcc  cacheR  neRejR   escR  critEsc  specAtt
+----------------------------------------------------------------------------------------------------------------------------------------------
+bl_oracle_best_feasible_evidence      0.691    0.691    0.281    0.952    0.952  0.691  0.485   0.485   0.037   0.000  0.000    0.000    0.488
+bl_oracle_escalation_aware            0.703    0.703    0.234    0.912    0.912  0.703  0.454   0.454   0.000   0.033  0.000    0.000    0.507
+bl_always_cache                       0.250    0.250    0.000    0.250    0.250  0.250  0.000   0.000   0.750   0.000  0.000    0.000    0.636
+proposed                              0.635    0.635    0.186    0.815    0.815  0.628  0.430   0.430   0.167   0.000  0.000    0.000    0.501
+no_lagrangian                         0.693    0.693    0.087    0.780    0.780  0.689  0.401   0.401   0.232   0.000  0.000    0.000    0.510
+fixed_penalty                         0.642    0.642    0.146    0.784    0.784  0.641  0.404   0.404   0.209   0.000  0.000    0.000    0.501
+e4lut                                 0.434    0.434    0.140    0.560    0.560  0.434  0.285   0.285   0.385   0.000  0.000    0.000    0.568
+
+============================================================================================================================================
+V6 MATRIX -- nomtrain condition  (mission = quality AND deadline, on admitted)
+============================================================================================================================================
+arm                                 mission  admMiss  admDdlV  semSucc  admSucc   task    acc  admAcc  cacheR  neRejR   escR  critEsc  specAtt
+----------------------------------------------------------------------------------------------------------------------------------------------
+proposed                              0.709    0.709    0.069    0.778    0.778  0.709  0.414   0.414   0.208   0.000  0.000    0.000    0.513
+
+============================================================================================================================================
+LAMBDA / ESCALATION TRAJECTORY (v7 peak training, terminal-window means)
+arm/seed         lamQC_first lamQC_last  lamQC_max  pinned? qCostCrit lamDdlC_last  escCost  lamEsc
+proposed_0             0.038     18.540     18.540     True     0.425        0.000    0.008   0.000
+proposed_1             0.028     18.052     18.052     True     0.368        0.000    0.058   0.000
+proposed_2             0.028     18.335     18.335     True     0.378        0.072    0.107   0.031
+no_lagrangian_0        0.000      0.000      0.000     True     0.407        0.000    0.074   0.000
+no_lagrangian_1        0.000      0.000      0.000     True     0.334        0.000    0.112   0.000
+no_lagrangian_2        0.000      0.000      0.000     True     0.376        0.000    0.115   0.000
+fixed_penalty_0        9.740      9.740      9.740     True     0.416        6.840    0.008   0.000
+fixed_penalty_1        9.740      9.740      9.740     True     0.373        6.840    0.073   0.000
+fixed_penalty_2        9.740      9.740      9.740     True     0.374        6.840    0.066   0.000
+e4lut_0                0.038     20.000     20.000     True     0.574        0.000    0.060   0.000
+e4lut_1                0.048     20.000     20.000     True     0.528        0.013    0.051   0.000
+
+============================================================================================================================================
+V6 SUCCESS CRITERIA
+============================================================================================================================================
+(criterion-1 oracle ceiling = bl_oracle_escalation_aware)
+[PASS] 1a. PEAK oracle mission(admitted) >= 0.85  (obs 0.9156)
+[PASS] 1b. PEAK oracle admitted deadline-violation <= 0.085 (v6 0.084 hold-even)  (obs 0.0844)
+[PASS] 2a. PEAK proposed crit-escalation in [0.10,0.21] (delta_esc 0.15)  (obs 0.1243)
+[PASS] 2b. NOMINAL proposed escalation < 0.15  (obs 0.0000)
+[FAIL] 3a. PEAK proposed cacheR < 0.40  (obs 0.4409)
+[FAIL] 3b. PEAK proposed non-escalated-rejectR < 0.20  (obs 0.3254)
+[FAIL] 3c. PEAK proposed mission(admitted) >= 0.6*oracle (0.549)  (obs 0.1786)
+[FAIL] 3d. PEAK proposed acc(admitted) >= 0.7*oracle_acc (0.566)  (obs 0.1670)
+[FAIL] 4. lambda quality/deadline-critical NON-pinned, active (>=2/3 seeds)  (obs 0)
+[PASS] 5a. NOMINAL proposed mission(admitted) >= 0.85*nominal-oracle (0.597)  (obs 0.6348)
+[FAIL] 5b. NOMINAL proposed task success >= 0.75  (obs 0.6280)
+[PASS] 6a. spec_attainable non-constant under nominal  (obs 1)
+[PASS] 6b. cache-ban engages (>=1 cache-only critical non-compliant event, peak)  (obs 122)
+
+7/13 criteria PASS  ->  FAIL
