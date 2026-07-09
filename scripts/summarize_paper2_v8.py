@@ -91,16 +91,26 @@ def read_results_row(d: Path, policy: str) -> dict[str, float] | None:
 
 
 def rollout_derived(d: Path, policy: str, delta_esc: float | None = None) -> dict[str, float]:
-    """Non-escalated reject rate, conflict OR-rate, per-channel eval costs."""
+    """Non-escalated reject rate, conflict OR-rate, per-channel eval costs.
+
+    Channel costs use the IMPLEMENTED constraint semantics (the quantity the
+    dual compares against d_i): numerator = joint event
+    1{violation AND risk-class}, denominator = ADMITTED (non-escalated) steps.
+    Escalated steps carry no violation by construction and are excluded from
+    the admitted set of Eq. (cmdp); under zero escalation this equals the
+    training-time all-steps mean exactly.
+    """
     f = d / "v1_9_resource_alloc_rollout.csv"
     out: dict[str, float] = {}
     if not f.exists():
         return out
     n = 0
+    n_adm = 0
     ne_rej = 0
     conflict = 0
     esc = 0
-    ch = {k: [0, 0] for k in CHANNELS}  # [count, denom]
+    crit_n = 0
+    ch = {k: 0 for k in CHANNELS}  # joint-event counts on the admitted set
     for r in csv.DictReader(f.open()):
         if str(r.get("policy", "")) != policy:
             continue
@@ -113,24 +123,24 @@ def rollout_derived(d: Path, policy: str, delta_esc: float | None = None) -> dic
         conflict += int(conf)
         risk = str(r.get("risk_level", "normal"))
         crit = risk in ("critical", "high")
+        crit_n += int(crit)
+        if escd:
+            continue
+        n_adm += 1
         q = _truthy(r.get("quality_violation", ""))
         dl = _truthy(r.get("deadline_violation", ""))
-        ch["quality_critical" if crit else "quality_normal"][0] += int(q)
-        ch["quality_critical" if crit else "quality_normal"][1] += 1
-        ch["deadline_critical" if crit else "deadline_normal"][0] += int(dl)
-        ch["deadline_critical" if crit else "deadline_normal"][1] += 1
-        ch["conflict"][0] += int(conf)
-        ch["conflict"][1] += 1
-        ch["battery"][0] += int(_truthy(r.get("battery_violation", "")))
-        ch["battery"][1] += 1
-        ch["gpu"][0] += int(_truthy(r.get("resource_violation", "")))
-        ch["gpu"][1] += 1
+        ch["quality_critical" if crit else "quality_normal"] += int(q)
+        ch["deadline_critical" if crit else "deadline_normal"] += int(dl)
+        ch["conflict"] += int(conf)
+        ch["battery"] += int(_truthy(r.get("battery_violation", "")))
+        ch["gpu"] += int(_truthy(r.get("resource_violation", "")))
     if n:
         out["non_escalated_reject_ratio"] = ne_rej / n
         out["conflict_rate"] = conflict / n
         out["escalation_rate_check"] = esc / n
-        for k, (c, dnm) in ch.items():
-            out[f"cost_{k}"] = (c / dnm) if dnm else float("nan")
+        out["critical_share"] = crit_n / n
+        for k, c in ch.items():
+            out[f"cost_{k}"] = (c / n_adm) if n_adm else float("nan")
         if delta_esc is not None:
             out["escalation_budget"] = float(delta_esc)
     return out
