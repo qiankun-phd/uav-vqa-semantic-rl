@@ -211,6 +211,14 @@ class EvalSummary:
     admitted_semantic_success_rate: float = 0.0
     admitted_average_accuracy: float = 0.0
     admitted_quality_violation_rate: float = 0.0
+    # Task #34-(iv): headline mission_success = quality-compliant AND deadline-
+    # compliant, on the ADMITTED (non-escalated) set.  The quality-only
+    # admitted_semantic_success_rate above is kept as the cross-generation
+    # comparison column; mission_success is the v6 headline that couples the two
+    # axes the scale fix reconciled.
+    mission_success_rate: float = 0.0
+    admitted_mission_success_rate: float = 0.0
+    admitted_deadline_violation_rate: float = 0.0
 
 
 def make_env(
@@ -455,6 +463,9 @@ def summarize(
                 admitted_semantic_success_rate=round(_admitted_rate(records, "semantic_success"), 6),
                 admitted_average_accuracy=round(_admitted_mean(records, "answer_accuracy_est"), 6),
                 admitted_quality_violation_rate=round(_admitted_rate(records, "quality_violation"), 6),
+                mission_success_rate=round(_mission_success_rate(records), 6),
+                admitted_mission_success_rate=round(_admitted_mission_success_rate(records), 6),
+                admitted_deadline_violation_rate=round(_admitted_rate(records, "deadline_violation"), 6),
             )
         )
     return out
@@ -1202,6 +1213,29 @@ def _admitted_rate(records: list[V19StepRecord], field: str) -> float:
 
 def _admitted_mean(records: list[V19StepRecord], field: str) -> float:
     return _mean(_admitted_records(records), field)
+
+
+def _is_mission_success(record: V19StepRecord) -> bool:
+    """Task #34-(iv): a task counts as a mission success iff it is BOTH quality-
+    compliant and deadline-compliant.  Works uniformly across served / reject /
+    expired records: a served task fails on either violation; an escalation-
+    resolved reject carries quality_violation from the certificate verdict; an
+    expired record carries deadline_violation=True."""
+    return not bool(getattr(record, "quality_violation", False)) and \
+        not bool(getattr(record, "deadline_violation", False))
+
+
+def _mission_success_rate(records: list[V19StepRecord]) -> float:
+    if not records:
+        return 0.0
+    return sum(float(_is_mission_success(r)) for r in records) / len(records)
+
+
+def _admitted_mission_success_rate(records: list[V19StepRecord]) -> float:
+    admitted = _admitted_records(records)
+    if not admitted:
+        return 0.0
+    return sum(float(_is_mission_success(r)) for r in admitted) / len(admitted)
 
 
 def _critical_escalation_rate(records: list[V19StepRecord]) -> float:

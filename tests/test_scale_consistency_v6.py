@@ -183,5 +183,115 @@ class CertificateDistributionTest(unittest.TestCase):
         self.assertFalse(legacy._compute_spec_attainable(tl, "20dB"))
 
 
+class MissionSuccessMetricTest(unittest.TestCase):
+    """Task #34-(iv): mission_success = quality AND deadline compliant."""
+
+    def _rec(self, **kw):
+        from types import SimpleNamespace
+        base = {"quality_violation": False, "deadline_violation": False,
+                "escalated": False, "risk_level": "critical"}
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    def test_mission_needs_both_axes(self):
+        import importlib
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        R = importlib.import_module("run_v1_9_resource_alloc")
+        self.assertTrue(R._is_mission_success(self._rec()))
+        self.assertFalse(R._is_mission_success(self._rec(quality_violation=True)))
+        self.assertFalse(R._is_mission_success(self._rec(deadline_violation=True)))
+        self.assertFalse(R._is_mission_success(self._rec(quality_violation=True, deadline_violation=True)))
+
+    def test_admitted_excludes_escalated(self):
+        import importlib
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        R = importlib.import_module("run_v1_9_resource_alloc")
+        recs = [
+            self._rec(),                                   # admitted mission ok
+            self._rec(deadline_violation=True),            # admitted mission fail
+            self._rec(escalated=True, quality_violation=True),  # escalated -> excluded
+        ]
+        # admitted set = 2 records, 1 mission-ok -> 0.5
+        self.assertAlmostEqual(R._admitted_mission_success_rate(recs), 0.5, places=9)
+        # overall mission rate over all 3 = 1/3
+        self.assertAlmostEqual(R._mission_success_rate(recs), 1.0 / 3.0, places=9)
+
+
+class CacheBanEngagementTest(unittest.TestCase):
+    """Task #34-(iii): the critical cache-compliance ban must actually bite a
+    spec-attainable critical task served cache-only under the escalation layer."""
+
+    def _cache_env(self):
+        env = _env("comm_window", tau_k="30.0", extra_env={
+            "escalation_mode": "spec_attainable",
+            "critical_cache_compliance": "forbidden",
+            "cache_quality": "legacy",
+        })
+        env.reset(seed=3)
+        # Seed an ELIGIBLE, high-quality cache entry co-located with the front
+        # task so cache_eligible=True and the cache LCB clears epsilon -- then the
+        # ONLY thing that can make the cache-only path non-compliant is the ban.
+        from vqa_semcom.sim.multi_uav_env import SemanticCacheEntry
+        task = env._front_task()
+        task.epsilon_k = 0.5
+        env.semantic_cache_entries = [SemanticCacheEntry(
+            task_id=task.task_id, task_type=task.task_type, risk_level=task.risk_level,
+            priority=1.0, x_m=task.x_m, y_m=task.y_m, cache_age=0, updated_step=0,
+            area_id=task.area_id, question_type=task.task_type, quality_lcb=0.99, uncertainty=0.01,
+        )]
+        return env, task
+
+    def test_cache_only_critical_spec_attainable_is_noncompliant(self):
+        env, task = self._cache_env()
+        task.risk_level = "critical"
+        # sanity: with the ban OFF the eligible cache WOULD be compliant
+        cs = env._cache_status(task)
+        self.assertTrue(cs["cache_eligible"])
+        self.assertGreaterEqual(cs["cache_quality_lcb"], task.epsilon_k)
+        task.spec_attainable = True  # transmission WAS possible -> ban bites
+        info = env.evaluate_action(env.candidate_action(0, {"task_id": task.task_id}), task_id=task.task_id, mutate=False)
+        self.assertEqual(str(info.get("semantic_path")), "cache")
+        # eligible cache clears eps, yet the ban forces non-compliance:
+        self.assertTrue(bool(info.get("quality_violation")))
+
+    def test_cache_ban_relaxed_when_not_spec_attainable(self):
+        env, task = self._cache_env()
+        task.risk_level = "critical"
+        task.spec_attainable = False  # no feasible tx -> not gaming -> ban relaxed
+        info = env.evaluate_action(env.candidate_action(0, {"task_id": task.task_id}), task_id=task.task_id, mutate=False)
+        self.assertEqual(str(info.get("semantic_path")), "cache")
+        # eligible cache clears eps AND the ban is relaxed -> compliant.
+        self.assertFalse(bool(info.get("quality_violation")))
+
+
+class EscalationBudgetDeterminismTest(unittest.TestCase):
+    """Task #34-(i): the delta_esc estimator is deterministic (same seed/config
+    -> same decomposition), so the single calibration JSON is reproducible."""
+
+    def test_spec_decompose_deterministic(self):
+        import importlib
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        V5 = importlib.import_module("calibrate_epsilon_v5")
+        per_task = [
+            {"qtype": "presence", "counting_ge10": False,
+             "svc": {1: (0.60, True, True), 2: (0.80, False, False)}},
+            {"qtype": "counting", "counting_ge10": True,
+             "svc": {1: (0.30, True, True), 2: (0.40, True, True)}},
+        ]
+        d1 = V5.spec_decompose(per_task, 0.464, 0.696)
+        d2 = V5.spec_decompose(per_task, 0.464, 0.696)
+        self.assertEqual(d1, d2)
+        # task 1: presence eps 0.696; lvl2 lcb 0.80>=eps but deadline False,
+        #   lvl1 lcb 0.60<eps -> quality-attainable via lvl2 but NOT deadline ->
+        #   deadline_blocked.  task 2: counting eps 0.464; both lcb<eps ->
+        #   quality_unreachable.
+        self.assertAlmostEqual(d1["spec_unattainable"], 1.0, places=9)
+        self.assertAlmostEqual(d1["quality_unreachable"], 0.5, places=9)
+        self.assertAlmostEqual(d1["deadline_blocked"], 0.5, places=9)
+
+
 if __name__ == "__main__":
     unittest.main()
