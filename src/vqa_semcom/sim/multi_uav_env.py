@@ -1123,6 +1123,13 @@ def _env_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
         "reward_payload": 0.002,
         "reward_violation": 1.0,
         "reward_conflict": 1.0,
+        # Task #36: reward success-attribution semantics (see
+        # MultiUAVVQAEnv._reward_success_semantics).  legacy keeps the
+        # strict success AND; mission_aligned pays a discounted success
+        # bonus (and drops the airspace penalty) for a quality+deadline-
+        # compliant service that is only UTM-blocked.
+        "reward_success_semantics": "legacy",
+        "reward_blocked_service_discount": 0.8,
     }
     out = _deep_merge(defaults, cfg.get("multi_uav_env", {}))
     sim_cfg = cfg.get("simulation", {})
@@ -1768,6 +1775,29 @@ class MultiUAVVQAEnv:
         """
         return str(self.env_cfg.get("deadline_semantics", "legacy") or "legacy").lower()
 
+    def _reward_success_semantics(self) -> str:
+        """Task #36: how the reward attributes a quality+deadline-COMPLIANT
+        service that is UTM/airspace-BLOCKED.
+
+        "legacy"          (default) -- success is the strict AND (incl. the
+                          airspace axis), so a compliant-but-blocked token earns
+                          NO success bonus AND is charged the airspace conflict
+                          penalty.  Preserves v1-v6 behaviour bit-for-bit.  Under
+                          the peak all-critical UTM mix this made a compliant
+                          delivery score below the (banned) cache shortcut,
+                          flooding cache and pinning lambda_quality_critical.
+        "mission_aligned" -- a UTM block is an AIRSPACE event, not a service
+                          failure.  A service that cleared the quality LCB, the
+                          deadline, the battery reserve and the GPU budget earns
+                          the success bonus even when blocked (scaled by
+                          reward_blocked_service_discount, default 0.8, to stay
+                          strictly below a compliant-AND-cleared delivery), and
+                          the airspace-conflict penalty is NOT charged as a
+                          service failure.  Non-compliant services and banned
+                          cache keep their negative rewards unchanged.
+        """
+        return str(self.env_cfg.get("reward_success_semantics", "legacy") or "legacy").lower()
+
     def _deadline_delay_s(self, delay: dict[str, float]) -> float:
         """Task #33-A: the delay charged against the deadline clock.
 
@@ -1972,6 +2002,18 @@ class MultiUAVVQAEnv:
             or utm_constraint_violation
             or not gpu_memory_ok
         )
+        # Task #36: SERVICE compliance -- the served token met the quality LCB,
+        # the deadline, the battery reserve, and the GPU-memory budget.  This is
+        # "did the SERVICE succeed" and deliberately EXCLUDES the airspace/UTM
+        # blocking axis: a compliant delivery that is UTM-blocked is an AIRSPACE
+        # event (a tasking-layer disposition), not a service failure.  Used only
+        # by the mission_aligned reward semantics; success stays the strict AND.
+        service_compliant = not (
+            quality_violation
+            or deadline_violation
+            or battery_violation
+            or not gpu_memory_ok
+        )
         payload_kb = semantic_payload_kb
         route = self.semantic_service_route(task, parsed, entry, cache_probability)
         utility = self.semantic_utility(
@@ -2069,6 +2111,7 @@ class MultiUAVVQAEnv:
             "semantic_utility": round(float(utility["semantic_utility"]), 6),
             "semantic_efficiency": round(float(utility["semantic_efficiency"]), 6),
             "success": bool(success),
+            "service_compliant": bool(service_compliant),
             "distance_3d_m": round(float(link["distance_3d_m"]), 6),
             "elevation_deg": round(float(link["elevation_deg"]), 6),
             "los_probability": round(float(link["los_probability"]), 6),
@@ -3424,13 +3467,28 @@ class MultiUAVVQAEnv:
         # delay, bit-for-bit.
         reward_delay_s = float(info.get("deadline_charged_delay_s", info["delay_s"])) \
             if self._deadline_semantics() == "comm_window" else float(info["delay_s"])
+        # Task #36: mission-aligned success attribution.  Under mission_aligned a
+        # quality+deadline-COMPLIANT service that is only UTM/airspace-BLOCKED
+        # earns the success bonus (discounted) and is NOT charged the airspace
+        # conflict penalty -- a UTM block is a spatial event, not a service
+        # failure.  Legacy keeps the strict success AND and the conflict penalty.
+        success_bonus_scale = float(bool(info["success"]))
+        conflict_charged = float(bool(info["airspace_conflict"]))
+        if self._reward_success_semantics() == "mission_aligned":
+            compliant = bool(info.get("service_compliant", info["success"]))
+            blocked = bool(info["airspace_conflict"]) or bool(info.get("utm_constraint_violation", False))
+            if compliant and blocked and not bool(info["success"]):
+                # compliant-but-blocked: pay the success bonus at the blocked-
+                # service discount, and drop the airspace penalty (spatial event).
+                success_bonus_scale = float(self.env_cfg.get("reward_blocked_service_discount", 0.8))
+                conflict_charged = 0.0
         return (
-            float(self.env_cfg["reward_success"]) * task.priority * float(info["answer_accuracy_est"]) * float(bool(info["success"]))
+            float(self.env_cfg["reward_success"]) * task.priority * float(info["answer_accuracy_est"]) * success_bonus_scale
             - float(self.env_cfg["reward_delay"]) * reward_delay_s
             - float(self.env_cfg["reward_energy"]) * float(info["energy_j"])
             - float(self.env_cfg["reward_payload"]) * float(info["payload_kb"])
             - float(self.env_cfg["reward_violation"]) * (float(bool(info["quality_violation"])) + float(bool(info["deadline_violation"])))
-            - float(self.env_cfg["reward_conflict"]) * float(bool(info["airspace_conflict"]))
+            - float(self.env_cfg["reward_conflict"]) * conflict_charged
         )
 
     def _reject_reward(self, task: EnvTask, info: dict[str, Any]) -> float:

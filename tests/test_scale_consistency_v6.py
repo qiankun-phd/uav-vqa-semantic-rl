@@ -399,5 +399,103 @@ class EscalationBudgetDeterminismTest(unittest.TestCase):
         self.assertAlmostEqual(d1["deadline_blocked"], 0.5, places=9)
 
 
+# ---------------------------------------------------------------------------
+# Task #36 (v7): mission-aligned reward success attribution.  A quality+deadline
+# COMPLIANT service that is only UTM/airspace-BLOCKED is an airspace event, not a
+# service failure -- under mission_aligned it earns a discounted success bonus and
+# is NOT charged the airspace-conflict penalty, so a compliant-but-blocked token
+# out-scores the (banned) cache shortcut.  Legacy keeps the strict success AND.
+# ---------------------------------------------------------------------------
+class _Task:
+    def __init__(self, priority: float):
+        self.priority = float(priority)
+
+
+def _blocked_info(**overrides):
+    """A quality+deadline-COMPLIANT service that is UTM/airspace-BLOCKED
+    (success=False only because of the airspace axis).  Mirrors the v6 peak
+    diagnostic (acc 0.86, comm-window ddl-delay 2.16 s)."""
+    info = {
+        "success": False,
+        "answer_accuracy_est": 0.86,
+        "delay_s": 11.27,
+        "deadline_charged_delay_s": 2.16,
+        "energy_j": 15.0,
+        "payload_kb": 80.0,
+        "quality_violation": False,
+        "deadline_violation": False,
+        "service_compliant": True,
+        "airspace_conflict": True,
+        "utm_constraint_violation": True,
+    }
+    info.update(overrides)
+    return info
+
+
+class MissionAlignedRewardGateTest(unittest.TestCase):
+    def test_default_is_legacy(self):
+        env = _env("comm_window")
+        env.env_cfg.pop("reward_success_semantics", None)
+        self.assertEqual(env._reward_success_semantics(), "legacy")
+
+    def test_legacy_blocked_token_loses_to_banned_cache(self):
+        """Regression: the v6 defect.  Under legacy the compliant-but-blocked
+        token scores BELOW the banned cache (cache floods, pins lambda_QC)."""
+        env = _env("comm_window")  # legacy reward semantics by default
+        r_blocked = env._reward(_Task(1.0), _blocked_info())
+        r_banned = env._reject_reward(_Task(0.54), {"reject_feasible": False})
+        self.assertLess(r_blocked, r_banned)  # the inversion we are fixing
+
+    def test_mission_aligned_blocked_token_beats_banned_cache(self):
+        """The Task #36 single-test: under mission_aligned the compliant-but-
+        blocked token STRICTLY out-scores the banned cache (ordering flipped)."""
+        env = _env("comm_window", extra_env={"reward_success_semantics": "mission_aligned"})
+        r_blocked = env._reward(_Task(1.0), _blocked_info())
+        r_banned = env._reject_reward(_Task(0.54), {"reject_feasible": False})
+        self.assertGreater(r_blocked, r_banned)
+        # and the banned cache reward is unchanged from legacy (no free pass there)
+        self.assertAlmostEqual(r_banned, -2.0 * 0.54, places=9)
+
+    def test_mission_aligned_noncompliant_blocked_stays_penalised(self):
+        """A quality-VIOLATING service that is also blocked gets NO success bonus
+        and stays negative -- mission_aligned only rescues COMPLIANT deliveries."""
+        env = _env("comm_window", extra_env={"reward_success_semantics": "mission_aligned"})
+        r = env._reward(_Task(1.0), _blocked_info(quality_violation=True, service_compliant=False))
+        self.assertLess(r, 0.0)
+
+    def test_mission_aligned_full_success_outscores_blocked(self):
+        """The blocked-service discount (0.8) must keep a compliant-but-blocked
+        token STRICTLY below an unblocked compliant-AND-successful delivery."""
+        env = _env("comm_window", extra_env={"reward_success_semantics": "mission_aligned"})
+        r_blocked = env._reward(_Task(1.0), _blocked_info())
+        r_success = env._reward(
+            _Task(1.0),
+            _blocked_info(success=True, airspace_conflict=False, utm_constraint_violation=False),
+        )
+        self.assertGreater(r_success, r_blocked)
+
+    def test_mission_aligned_leaves_clean_service_reward_identical(self):
+        """A service with NO airspace block gets the SAME reward under both
+        semantics (mission_aligned only changes the blocked-compliant branch)."""
+        clean = _blocked_info(success=True, airspace_conflict=False, utm_constraint_violation=False)
+        r_legacy = _env("comm_window")._reward(_Task(1.0), clean)
+        r_mission = _env(
+            "comm_window", extra_env={"reward_success_semantics": "mission_aligned"}
+        )._reward(_Task(1.0), clean)
+        self.assertAlmostEqual(r_legacy, r_mission, places=9)
+
+    def test_discount_knob_is_configurable(self):
+        """reward_blocked_service_discount scales the blocked-service bonus."""
+        env0 = _env("comm_window", extra_env={
+            "reward_success_semantics": "mission_aligned", "reward_blocked_service_discount": 0.0})
+        env1 = _env("comm_window", extra_env={
+            "reward_success_semantics": "mission_aligned", "reward_blocked_service_discount": 1.0})
+        # discount 0.0 => no bonus; discount 1.0 => full bonus.  The full-bonus
+        # reward exceeds the zero-bonus one by exactly reward_success*prio*acc.
+        r0 = env0._reward(_Task(1.0), _blocked_info())
+        r1 = env1._reward(_Task(1.0), _blocked_info())
+        self.assertAlmostEqual(r1 - r0, 2.0 * 1.0 * 0.86, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()
