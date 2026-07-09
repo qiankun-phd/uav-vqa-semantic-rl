@@ -163,11 +163,35 @@ semSucc, task, acc, cacheR, rejectR, escR -- is produced by
 `scripts/summarize_eps_recal_v6.py` from `outputs/rl/eps_recal_v6`.)
 
 --------------------------------------------------------------------------------
-## 4. Criteria judgment
+## 4. Criteria judgment (mission on admitted set)
 
-Evaluated by `scripts/summarize_eps_recal_v6.py` on `outputs/rl/eps_recal_v6`
-(mission on the admitted set; all six PASS => PASS).  See the summarizer output;
-this section is updated with the verdict once the matrix completes.
+The scale fix itself is verified by the **escalation-aware oracle ceiling** (peak):
+admitted mission **0.916**, admitted deadline-violation **0.084**, admitted
+semSucc **1.0** -- i.e. once flight is off the deadline clock and tau is
+re-anchored, an escalation-aware policy achieves a clean, high-mission admitted
+set.  Criterion 1 PASSES.  The escalation channel works: the certificate is
+non-constant, the cache-ban re-engages, and delta_esc is a physics quantity
+(0.155) not a scale artefact (0.90).
+
+**The trained proposed policy does NOT reach the ceiling.**  It over-uses the
+(banned) cache path on critical tasks (cacheR ~0.44, tokenR ~0.18 across seeds),
+which pins `lambda_quality_critical` at ~18 and yields admitted mission ~0.19 and
+critical-escalation ~0.08 (below the 0.155 budget).  Root cause (diagnosed, NOT a
+scale-fix bug): under the utm_conflict density, a quality-and-deadline-compliant
+token on a UTM-blocked task still scores `success=False`, so it earns NO positive
+quality reward and nets more negative than cache; the policy learns cache is the
+least-negative action and accepts the quality-ban penalty rather than
+reject-to-escalate.  cache (-1.08) and reject (-1.08) are reward-indistinguishable
+but cache pins lambda while reject escalates -- the escalation dual does not
+break that tie under the current reward.  This is a reward-shaping / scenario-UTM
+matter that pre-exists v5 (v5 also pinned lambda_quality_critical 18.4/11.1/19.5),
+orthogonal to the scale-consistency mandate.
+
+Verdict: **scale-consistency (A-F) DONE and correct**; the proposed-policy
+criteria (2a escalation-in-band, 3, 4 non-pinned lambda, 5) FAIL because of the
+UTM-driven cache preference, with the ceiling proving the fix is sound.  Per the
+brief this is reported as a diagnosed FAIL, not escalated to a v7.  The final
+per-criterion table is produced by `scripts/summarize_eps_recal_v6.py`.
 
 --------------------------------------------------------------------------------
 ## 5. Reproduce
