@@ -249,16 +249,20 @@ checks.append(("3b. PEAK proposed non-escalated-rejectR < 0.20", pr, pr < 0.20))
 checks.append((f"3c. PEAK proposed mission(admitted) >= 0.6*oracle ({0.6*o_m:.3f})", pm, pm >= 0.6 * o_m))
 checks.append((f"3d. PEAK proposed acc(admitted) >= 0.7*oracle_acc ({0.7*o_acc:.3f})", pa, pa >= 0.7 * o_acc))
 
-# 4. lambda channel active (quality_critical OR deadline_critical) >= 2/3 seeds
+# 4. lambda channel NON-PINNED, NON-ZERO (quality_critical OR deadline_critical)
+# on >= 2/3 seeds.  "non-pinned" = terminal in (0.1, 0.9*lambda_max) AND not
+# stuck at the max; OR the quality-critical cost sits in the target band.  A
+# lambda that saturates at ~lambda_max is a FAIL (the v5/v6 pin), so ldmax alone
+# does not rescue it.
 active = []
 for seed in (0, 1, 2):
     sh = lam(ROOT / f"proposed_{seed}")
     if sh:
-        band_q = (0.1 < sh["last"] < 0.9 * LAMBDA_MAX)
+        band_q = (0.1 < sh["last"] < 0.9 * LAMBDA_MAX) and not sh["pinned"]
         cost_q = (QUALITY_LIMIT_CRIT - 0.02) <= sh["costmean"] <= (QUALITY_LIMIT_CRIT + 0.05)
-        band_d = (0.1 < sh["ld_last"] < 0.9 * LAMBDA_MAX) or (sh["ldmax"] > 0.1)
+        band_d = (0.1 < sh["ld_last"] < 0.9 * LAMBDA_MAX)
         active.append(band_q or cost_q or band_d)
-checks.append(("4. lambda quality/deadline-critical active (>=2/3 seeds)", sum(active), sum(active) >= 2))
+checks.append(("4. lambda quality/deadline-critical NON-pinned, active (>=2/3 seeds)", sum(active), sum(active) >= 2))
 
 # 5. nominal proposed
 nm = m("proposed", "nominal", "admitted_mission_success_rate")
