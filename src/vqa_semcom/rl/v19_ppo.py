@@ -130,6 +130,19 @@ class PPOTrainConfig:
     risk_aware_constraints: bool = False
     safety_layer: bool = True
     semantic_reward_mode: str = "env"
+    # Task #36 (v7b wiring): mission-aligned reward-success attribution for
+    # the CONTROLLER reward.  "legacy" (default) keeps the strict success AND
+    # incl. the airspace/UTM axis, so a quality+deadline-COMPLIANT but
+    # UTM-BLOCKED service earns no success bonus AND is charged the conflict
+    # penalty (env + dual) -- it scores below the banned cache, floods it, and
+    # pins lambda_quality_critical.  "mission_aligned" treats a UTM block as an
+    # airspace event: the compliant-blocked service earns the success bonus at
+    # reward_blocked_service_discount and is NOT charged the airspace/UTM
+    # conflict penalty (neither the shaped safety term nor the dual lambda).
+    # Mirrors multi_uav_env._reward()/_reward_success_semantics bit-for-bit so
+    # the env-layer log (raw_reward) and the learner (shaped_reward) agree.
+    reward_success_semantics: str = "legacy"
+    reward_blocked_service_discount: float = 0.8
     semantic_success_weight: float = 12.0
     semantic_accuracy_weight: float = 3.5
     semantic_margin_weight: float = 6.0
@@ -956,7 +969,7 @@ def _collect_episode(
         action = _build_hybrid_action(env, obs, semantic_choice, resource_values, cfg)
         next_obs, raw_reward, done, info = env.step(action)
         semantic_reward = _semantic_controller_reward(obs, info, raw_reward, cfg)
-        shaped_reward = semantic_reward - dual.penalty(info) if cfg.constrained else semantic_reward
+        shaped_reward = semantic_reward - dual.penalty(_mission_aligned_reward_info(info, cfg)[0]) if cfg.constrained else semantic_reward
 
         risk = str(info.get("risk_level", obs.get("risk_level", "normal")))
         quality_cost = float(bool(info.get("quality_violation", False)))
@@ -1125,7 +1138,7 @@ def _collect_two_timescale_episode(
         action = _build_two_timescale_action(env, obs, semantic_choice, resource_values, mobility_action, cfg)
         next_obs, raw_reward, done, info = env.step(action)
         semantic_reward = _two_timescale_step_semantic_reward(obs, info, raw_reward, cfg)
-        shaped_reward = semantic_reward - dual.penalty(info) if cfg.constrained else semantic_reward
+        shaped_reward = semantic_reward - dual.penalty(_mission_aligned_reward_info(info, cfg)[0]) if cfg.constrained else semantic_reward
 
         _append_common_rollout(rollout, obs, action_idx, mask, raw_resource, log_prob, value, shaped_reward, semantic_reward, raw_reward, done, info, action, cfg)
         rollout["uav_actions"].append(int(uav_idx))
@@ -2774,16 +2787,103 @@ def _apply_service_mask(logits: Any, mask: Any) -> Any:
     return logits.masked_fill(~mask, -1.0e9)
 
 
+def _mission_aligned_success_credit(info: dict[str, Any], cfg: PPOTrainConfig) -> float:
+    """Task #36 (v7b) single truth source for the CONTROLLER reward.
+
+    Returns the *success credit* (in [0,1]) that the reward should attribute to a
+    service that is quality+deadline+battery+resource COMPLIANT but only
+    UTM/airspace BLOCKED, under the mission_aligned semantics.  Mirrors
+    multi_uav_env._reward()'s success_bonus_scale branch:
+
+      * legacy               -> credit == float(info["success"])  (strict AND;
+                                a compliant-but-blocked service gets 0).
+      * mission_aligned, and the service is COMPLIANT (cleared quality, deadline,
+        battery, resource -- the same axes multi_uav_env uses for service_compliant,
+        computed here from the RL-authoritative wrapper fields so it stays
+        consistent with info["success"]) AND BLOCKED (airspace_conflict or a UTM
+        constraint/conflict violation) AND not already a strict success
+                             -> credit == reward_blocked_service_discount (0.8).
+
+    A blocked-but-NON-compliant service, or an unblocked service, returns the
+    strict float(info["success"]) so only compliant-blocked deliveries are
+    rescued.  The banned cache / reject paths are unaffected (they are not
+    "compliant service" tokens and hit their own branches below).
+    """
+    success = float(bool(info.get("success", False)))
+    mode = str(getattr(cfg, "reward_success_semantics", "legacy") or "legacy").lower()
+    if mode != "mission_aligned":
+        return success
+    if bool(info.get("success", False)):
+        return success
+    # RL-authoritative compliance: cleared every service axis EXCEPT airspace/UTM.
+    # Uses the same field set the wrapper folds into info["success"] (quality,
+    # deadline, battery, resource) so a compliant-blocked token is exactly one
+    # whose only failing axis is the block.  Prefer an explicit env-provided
+    # service_compliant flag when present (multi_uav_env sets it), else derive it.
+    if "service_compliant" in info:
+        compliant = bool(info.get("service_compliant", False))
+    else:
+        compliant = not (
+            bool(info.get("quality_violation", False))
+            or bool(info.get("deadline_violation", False))
+            or bool(info.get("battery_violation", False))
+            or bool(info.get("resource_violation", False))
+        )
+    blocked = (
+        bool(info.get("airspace_conflict", False))
+        or bool(info.get("utm_constraint_violation", False))
+        or bool(info.get("utm_conflict_violation", False))
+    )
+    if compliant and blocked:
+        return float(getattr(cfg, "reward_blocked_service_discount", 0.8))
+    return success
+
+
+def _mission_aligned_reward_info(info: dict[str, Any], cfg: PPOTrainConfig) -> tuple[dict[str, Any], float]:
+    """Return an (info_view, success_credit) pair for the CONTROLLER reward.
+
+    When the mission_aligned credit fires for a compliant-but-blocked service,
+    the returned info_view has the airspace/UTM BLOCK flags cleared so that BOTH
+    the shaped safety_cost terms (in _semantic_controller_reward) AND the dual
+    conflict penalty (shaped_reward = semantic_reward - dual.penalty(info)) drop
+    the block charge -- a UTM block is an airspace event, not a service failure.
+    All other fields (incl. every genuine violation) are untouched, and legacy
+    returns the info unchanged with the strict success credit, so legacy runs are
+    bit-for-bit identical.
+    """
+    credit = _mission_aligned_success_credit(info, cfg)
+    if credit <= float(bool(info.get("success", False))):
+        # no rescue happened (legacy, or non-compliant/unblocked) -> passthrough.
+        return info, credit
+    view = dict(info)
+    view["airspace_conflict"] = False
+    view["utm_constraint_violation"] = False
+    view["utm_conflict_violation"] = False
+    return view, credit
+
+
 def _semantic_controller_reward(obs: dict[str, Any], info: dict[str, Any], raw_reward: float, cfg: PPOTrainConfig) -> float:
     if cfg.semantic_reward_mode == "env":
         return float(raw_reward)
+    # Task #36 (v7b): rebind to the mission_aligned info view + success credit
+    # so a compliant-but-blocked service (a) earns the success bonus at the
+    # blocked-service discount and (b) is not charged the airspace/UTM penalty
+    # in safety_cost.  Legacy returns info unchanged and credit==success.
+    info, _ma_success_credit = _mission_aligned_reward_info(info, cfg)
     risk_weight = 1.6 if str(info.get("risk_level", obs.get("risk_level", "normal"))) == "critical" else 1.0
     accuracy = _control_accuracy(info, cfg)
     accuracy_mean = float(info.get("semantic_accuracy_mean", accuracy))
     uncertainty = float(info.get("semantic_uncertainty", 0.0))
     epsilon = float(obs.get("epsilon_k", 0.0))
     semantic_success = float(bool(info.get("semantic_success", info.get("success", False))))
-    task_success = float(bool(info.get("success", False)))
+    # Task #36 (v7b): only the TASK/MISSION success axis carries the
+    # mission_aligned credit.  A compliant-but-blocked service accomplished the
+    # mission (blocked delivery is an airspace disposition) so it earns the
+    # task-success bonus at reward_blocked_service_discount; its SEMANTIC
+    # (quality) success was never in doubt and stays at its true value above.
+    # Legacy: _ma_success_credit == float(info["success"]) so this is the old
+    # line bit-for-bit.
+    task_success = float(_ma_success_credit)
     service_level = int(info.get("service_level", 0))
     semantic_path = str(info.get("semantic_path", SERVICE_LEVEL_TO_SEMANTIC_PATH.get(service_level, "image")))
     delay_norm = float(info.get("delay_s", 0.0)) / max(0.5, float(obs.get("deadline_s", obs.get("tau_k", 5.0))))

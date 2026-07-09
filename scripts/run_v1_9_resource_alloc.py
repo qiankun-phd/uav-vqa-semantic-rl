@@ -741,6 +741,13 @@ def run_experiment(
             risk_aware_constraints=args.risk_aware_constraints,
             safety_layer=not args.no_safety_layer,
             semantic_reward_mode=args.semantic_reward_mode,
+            # Task #36 (v7b): thread the mission-aligned reward-success knobs
+            # into the CONTROLLER reward (the learner path).  None -> legacy so
+            # unset runs are bit-for-bit unchanged; mission_aligned mirrors the
+            # env-layer multi_uav_env._reward semantics.
+            reward_success_semantics=(getattr(args, "reward_success_semantics", None) or "legacy"),
+            reward_blocked_service_discount=(float(args.reward_blocked_service_discount)
+                if getattr(args, "reward_blocked_service_discount", None) is not None else 0.8),
             entropy_weight_start=args.entropy_start,
             entropy_weight_end=args.entropy_end,
             entropy_decay_episodes=args.entropy_decay_episodes,
