@@ -259,11 +259,31 @@ ATTAINABILITY_V5_EPSILON: dict[tuple[str, str], float] = {
     ("normal", "presence"): 0.529,
 }
 # Escalation dual-channel budgets delta_esc (change 5/escalation channel): the
-# measured spec-UNattainable fraction + 0.05, condition-adaptive.  Peak
-# (utm_conflict) is a UAV-flight-deadline cliff (measured spec-unattainable ~1.0;
-# the semantic pipeline itself never blocks -- pipeline_blocked 0.0 -- only the
-# flight geometry does); nominal is ~half-attainable by a well-positioned policy.
+# measured spec-UNattainable fraction + 0.05, condition-adaptive.
+#
+# v6 UPDATE (task #33/#34): under the LEGACY full-flight deadline these values
+# reflected a UAV-flight-deadline CLIFF -- peak spec-unattainable ~1.0 because a
+# critical tau_k of 2.55 s (3.0 x tau_scale 0.85) can never fit the ~13 s flight
+# to the task area.  That cliff is a scale ARTEFACT, not physics: BUBBLES puts
+# flight/positioning in the tasking layer and reserves the T4 tactical-comm
+# window (separation-communication N(1.8, sigma 1.0), Table G-2) for the
+# decision loop.  Under deadline_semantics="comm_window" the flight term is
+# removed from the deadline clock, so the escalation budget is re-derived by
+# scripts/calibrate_epsilon_v6.py and SHIPPED IN THE CALIBRATION JSON (single
+# estimator, task #34-(i)).  The dict below is only the legacy fallback used
+# when no calibration JSON is supplied; do NOT hand-tune it.
 ESCALATION_DELTA_V5: dict[str, float] = {"peak": 0.90, "nominal": 0.50}
+
+# v6 comm-window deadline anchors (task #33-B).  tau_k under
+# deadline_semantics="comm_window" is the tactical COMMUNICATION-DECISION window
+# only (sense + tx + queue + infer + load); flight/positioning is charged to the
+# tasking layer, not the deadline clock.  Anchored on BUBBLES D2.1 Table G-2
+# separation-communication delay N(mean 1.8 s, sigma 1.0 s):
+#   * tau_critical = 1.8 + 1*sigma = 2.8 s  (1-sigma / 0.841 confidence)
+#   * tau_normal   = 1.8 + 2*sigma = 3.8 s  (2-sigma / 0.977 confidence)
+# Overridable from configs/*.yaml thresholds {tau_critical_comm, tau_normal_comm}.
+# tau_scale is NOT applied under comm_window (the anchor already IS the window).
+COMM_WINDOW_TAU: dict[str, float] = {"critical": 2.8, "normal": 3.8, "high": 2.8}
 
 
 def epsilon_v5_class(qtype: str, count_bucket: str) -> str:
@@ -1714,10 +1734,15 @@ class MultiUAVVQAEnv:
             delay_s = float(info.get("delay_s", 0.0))
             fly_delay_s = float(info.get("fly_delay_s", 0.0))
             queue_delay_s = float(info.get("queue_delay_s", 0.0))
+            # Task #33-A: under comm_window the deadline clock ignores flight, so
+            # the whole fly term is off the deadline-charged delay; under legacy
+            # keep the historical one-slot flight-progress credit.
+            fly_credit = fly_delay_s if self._deadline_semantics() == "comm_window" \
+                else min(fly_delay_s, float(self.env_cfg["slot_s"]))
             expected_delay_after_defer = max(
                 0.0,
                 delay_s
-                - min(fly_delay_s, float(self.env_cfg["slot_s"]))
+                - fly_credit
                 - edge_improvement * queue_delay_s,
             )
             if expected_delay_after_defer <= remaining_after_defer:
@@ -1727,6 +1752,37 @@ class MultiUAVVQAEnv:
     def _remaining_deadline_s(self, task: EnvTask) -> float:
         elapsed = max(0, self.step_count - int(task.generation_time)) * float(self.env_cfg["slot_s"])
         return max(0.0, float(task.tau_k) - elapsed)
+
+    def _deadline_semantics(self) -> str:
+        """Task #33-A: which delay components count against the deadline clock.
+
+        "legacy"      (default) -- the FULL end-to-end delay, including the UAV
+                      flight/positioning time (fly_delay), is charged against
+                      tau_k.  Preserves v1-v5 behaviour bit-for-bit.
+        "comm_window" -- tau_k is the tactical COMMUNICATION-DECISION window
+                      only; the deadline clock counts sense + tx + queue + infer +
+                      load and EXCLUDES fly_delay (flight/positioning is a tasking-
+                      layer concern, per BUBBLES D2.1's separation-communication
+                      T4 window).  Closes the scale contradiction where a critical
+                      tau_k of 2.55 s can never fit a ~13 s flight to the task.
+        """
+        return str(self.env_cfg.get("deadline_semantics", "legacy") or "legacy").lower()
+
+    def _deadline_delay_s(self, delay: dict[str, float]) -> float:
+        """Task #33-A: the delay charged against the deadline clock.
+
+        Under "comm_window" the flight/positioning term (fly_delay_s /
+        arrival_delay_s) is removed; every other latency component (sense, tx,
+        queue, infer, load, and the UTM DSS/notification delays already folded
+        into total_delay_s) still counts.  Under "legacy" the full total is used.
+        This is the SINGLE chokepoint every deadline comparison routes through, so
+        the two semantics stay consistent across step/certificate/reject/defer.
+        """
+        total = float(delay.get("total_delay_s", 0.0))
+        if self._deadline_semantics() != "comm_window":
+            return total
+        fly = float(delay.get("fly_delay_s", delay.get("arrival_delay_s", 0.0)))
+        return max(0.0, total - fly)
 
     @staticmethod
     def _count_bucket_for_task(task: EnvTask) -> str:
@@ -1752,13 +1808,20 @@ class MultiUAVVQAEnv:
 
         For the transmission services {1 token, 2 image} at the task's realised
         SNR, is there one whose quality LCB clears the task's epsilon_k AND whose
-        total delay (incl. realised nearest-UAV flight) fits the FULL tau_k?  This
-        is an ENVIRONMENT property (env LUT quality + physics), exposed to the
-        policy as a state feature -- independent of the RL quality backend.
+        deadline-charged delay fits the FULL tau_k?  This is an ENVIRONMENT
+        property (env LUT quality + physics), exposed to the policy as a state
+        feature -- independent of the RL quality backend.
+
+        Task #34-(ii): the certificate is re-computed EVERY slot from the
+        remaining tau (remaining-tau reslot), so a task whose window has been
+        eaten by defers/aging turns un-attainable, and the certificate is a
+        non-constant distribution under nominal (verified by test).  The deadline
+        comparison routes through the SAME _deadline_delay_s chokepoint as the
+        step judgment, so under comm_window flight is excluded here too.
         """
-        if bool(task.expired) or self._remaining_deadline_s(task) <= 0.0:
+        remaining = self._remaining_deadline_s(task)
+        if bool(task.expired) or remaining <= 0.0:
             return False
-        tau = float(task.tau_k)
         for level in (1, 2):
             if level not in self.service_levels():
                 continue
@@ -1767,7 +1830,11 @@ class MultiUAVVQAEnv:
             info = self.evaluate_action(action, task_id=task.task_id,
                                         obs={"task_id": task.task_id, "snr_bin": snr_bin}, mutate=False)
             quality_ok = not bool(info.get("quality_violation", False))
-            deadline_ok = float(info.get("delay_s", info.get("total_delay_s", 1e9))) <= tau
+            ddl_delay = self._deadline_delay_s({
+                "total_delay_s": float(info.get("delay_s", info.get("total_delay_s", 1e9))),
+                "fly_delay_s": float(info.get("fly_delay_s", info.get("arrival_delay_s", 0.0))),
+            })
+            deadline_ok = ddl_delay <= remaining
             if quality_ok and deadline_ok:
                 return True
         return False
@@ -1888,7 +1955,11 @@ class MultiUAVVQAEnv:
         ):
             quality_violation = True
             semantic_success = False
-        deadline_violation = delay["total_delay_s"] > remaining_deadline_s
+        # Task #33-A: charge only the comm-decision window against the deadline
+        # under deadline_semantics="comm_window" (fly/positioning -> tasking layer);
+        # legacy charges the full end-to-end delay.  Single chokepoint.
+        deadline_charged_delay_s = self._deadline_delay_s(delay)
+        deadline_violation = deadline_charged_delay_s > remaining_deadline_s
         battery_violation = energy["total_energy_j"] > uav.battery_j - float(self.env_cfg["return_energy_reserve_j"])
         gpu_memory_ok = self._gpu_memory_ok(edge, int(parsed["service_level"]))
         utm_constraint_violation = bool(utm["utm_constraint_violation"])
@@ -1944,10 +2015,15 @@ class MultiUAVVQAEnv:
             "semantic_success": bool(semantic_success),
             "semantic_path": str(parsed["semantic_path"]),
             "delay_s": round(delay["total_delay_s"], 6),
+            "deadline_charged_delay_s": round(float(deadline_charged_delay_s), 6),
             "energy_j": round(energy["total_energy_j"], 6),
             "payload_kb": round(payload_kb, 6),
             "quality_violation": bool(quality_violation),
             "deadline_violation": bool(deadline_violation),
+            # Task #34-(ii): surface the stored spec-attainability certificate on
+            # the SERVED-task record too (previously only reject/expired/obs paths
+            # carried it, so spec_attainable_rate read ~0 for serving policies).
+            "spec_attainable": bool(task.spec_attainable),
             "battery_violation": bool(battery_violation),
             "resource_violation": bool(not gpu_memory_ok),
             "risk_violation": bool(risk_violation),
@@ -2407,7 +2483,7 @@ class MultiUAVVQAEnv:
             jitter_y = self.rng.uniform(-jitter_ratio, jitter_ratio) * spacing
             risk = self._cycled_value(layout.get("risk_cycle"), idx, row.get("risk_level", "normal"))
             generation = self._generation_step(idx, area_id, layout)
-            tau = float(row.get("tau_k", 3.0 if risk == "critical" else 5.0)) * float(layout.get("tau_scale", 1.0))
+            tau = self._tau_for_task(row, risk, layout)
             if "tau_floor_s" in layout:
                 tau = max(tau, float(layout["tau_floor_s"]))
             freshness = self._cycled_value(layout.get("freshness_cycle"), idx, row.get("freshness_bin") or "")
@@ -2448,6 +2524,34 @@ class MultiUAVVQAEnv:
                 )
             )
         return tasks
+
+    def _tau_for_task(self, row: dict[str, str], risk: str, layout: dict[str, Any]) -> float:
+        """Task #33-B: per-task deadline tau_k.
+
+        LEGACY: tau_k = CSV tau_k (fallback 3.0 critical / 5.0 normal) x tau_scale
+        -- unchanged, so v1-v5 stay bit-for-bit.
+
+        COMM_WINDOW: tau_k is the tactical communication-decision window anchored
+        on BUBBLES D2.1 Table G-2 separation-communication N(1.8, sigma 1.0):
+        critical=2.8 s (1-sigma), normal=3.8 s (2-sigma), overridable from
+        config thresholds {tau_critical_comm, tau_normal_comm} or from the layout
+        {tau_comm_by_risk}.  tau_scale is deliberately NOT applied -- the anchor
+        already IS the window (its role under comm_window is documented as待校验
+        in docs/SCALE_CONSISTENCY_V6.md; layout may still override via
+        tau_comm_scale if a study needs it).
+        """
+        if self._deadline_semantics() == "comm_window":
+            # thresholds live at the TOP level of the config (self.cfg), not in
+            # the multi_uav_env sub-block (self.env_cfg); read both so either
+            # placement works.
+            thresholds = dict(self.cfg.get("thresholds", {}) or {})
+            thresholds.update(self.env_cfg.get("thresholds", {}) or {})
+            by_risk = dict(layout.get("tau_comm_by_risk", {}) or {})
+            default = COMM_WINDOW_TAU.get(risk, COMM_WINDOW_TAU["normal"])
+            cfg_key = "tau_critical_comm" if risk in ("critical", "high") else "tau_normal_comm"
+            tau = float(by_risk.get(risk, thresholds.get(cfg_key, default)))
+            return tau * float(layout.get("tau_comm_scale", 1.0))
+        return float(row.get("tau_k", 3.0 if risk == "critical" else 5.0)) * float(layout.get("tau_scale", 1.0))
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
         mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()

@@ -26,7 +26,10 @@
     "epsilon_normal": 0.65,
     "epsilon_critical": 0.82,
     "tau_normal": 5.0,
-    "tau_critical": 3.0
+    "tau_critical": 3.0,
+    "tau_normal_comm": 3.8,
+    "tau_critical_comm": 2.8,
+    "tau_comm_note": "task #33-B: comm-window deadline anchors (used only when multi_uav_env.deadline_semantics=='comm_window'). tau_k is the tactical communication-decision window; flight/positioning is charged to the tasking layer, not the deadline clock. Anchored on BUBBLES D2.1 Table G-2 separation-communication delay N(mean 1.8s, sigma 1.0s): critical=1.8+1sigma=2.8s (0.841 conf), normal=1.8+2sigma=3.8s (0.977 conf). tau_scale is NOT applied under comm_window."
   },
   "evaluator": {
     "seed": 7,

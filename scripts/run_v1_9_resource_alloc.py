@@ -530,6 +530,7 @@ def main() -> int:
     parser.add_argument("--quality-backend", default=None, choices=["lut", "persample", "lut_v5"], help="Semantic quality source for services 1/2: calibrated LUT cells (default), the per-sample calibrated predictor (E4), or the v5 unified count-bucket LUT (lut_v5, task #28 v5).")
     parser.add_argument("--epsilon-calibration", default=None, choices=["legacy", "attainability_v1", "attainability_v2", "attainability_v3", "attainability_v4", "attainability_v5"], help="Semantic quality-constraint calibration (task #28). attainability_v5=attainable two-key (risk x qtype) LUT anchor {(critical,counting):0.464, (critical,presence):0.696, normal:0.529} on the lut_v5 backend, paired with the escalation layer + --critical-cache-compliance forbidden --quality-backend lut_v5.  Earlier modes: legacy=0.82/0.65 constants; attainability_v1=0.615/0.166; attainability_v2=quantile-anchored + cache-ceiling guardrail 0.633/0.297; attainability_v3=pure attainability anchor 0.504/0.166 (guardrail dropped, cache shortcut closed structurally -- pair with --critical-cache-compliance forbidden). attainability_v4=transmission-only anchor 0.355/0.166 (P10 of per-task best-tx LCB max(token,image) over the peak all-critical mix, s0 cache excluded; 0.355<=0.504 invariant; pair with --critical-cache-compliance forbidden). Overrides multi_uav_env.epsilon_calibration.")
     parser.add_argument("--escalation-mode", default=None, choices=["off", "spec_attainable"], help="Escalation layer (task #28 v5 change 5): 'off' (default) preserves legacy reject/expired bookkeeping bit-for-bit; 'spec_attainable' re-routes critical/high reject-or-expired tasks that are physically un-attainable (no tx service clears eps AND fits full tau_k) to the escalation dual channel instead of charging them as quality violations, and exposes a spec_attainable state feature. Overrides multi_uav_env.escalation_mode.")
+    parser.add_argument("--deadline-semantics", default=None, choices=["legacy", "comm_window"], help="Task #33: which delay counts against tau_k. 'legacy' (default) charges the FULL end-to-end delay incl. UAV flight/positioning -- preserves v1-v5 bit-for-bit. 'comm_window' charges only the tactical comm-decision window (sense+tx+queue+infer+load) and excludes flight (a tasking-layer concern), and re-anchors tau_critical=2.8s/tau_normal=3.8s on BUBBLES D2.1 Table G-2 separation-comm N(1.8,1.0). Overrides multi_uav_env.deadline_semantics.")
     parser.add_argument("--escalation-cost-limit", type=float, default=None, help="Escalation dual-channel budget delta_esc (change 5). Defaults to the config value; the v5 matrix passes the calibrated peak/nominal budget.")
     parser.add_argument("--cache-quality", default=None, choices=["legacy", "entry_v2"], help="s0 cache quality source (task #28 v5 change 3): 'legacy' (default) keeps the U_sem(level=0) LUT override bit-for-bit; 'entry_v2' drives s0 runtime quality from the real cached-answer LCB x freshness decay (empty/non-matching cache -> s0 LCB 0). Overrides multi_uav_env.cache_quality.")
     parser.add_argument("--critical-cache-compliance", default=None, choices=["allowed", "forbidden"], help="Structural cache-compliance ban (task #28 v3, method (c)): 'forbidden' means a critical/high task served s0 cache-only is never quality-compliant (closes the cache shortcut at the compliance-judgment layer); 'allowed' (default) preserves legacy/v1/v2 behaviour bit-for-bit. Overrides multi_uav_env.critical_cache_compliance.")
@@ -624,7 +625,8 @@ def main() -> int:
 
     cfg = load_config(args.config)
     if (getattr(args, "epsilon_calibration", None) or getattr(args, "critical_cache_compliance", None)
-            or getattr(args, "cache_quality", None) or getattr(args, "escalation_mode", None)):
+            or getattr(args, "cache_quality", None) or getattr(args, "escalation_mode", None)
+            or getattr(args, "deadline_semantics", None)):
         _env = dict(cfg.get("multi_uav_env", {}))
         if getattr(args, "epsilon_calibration", None):
             _env["epsilon_calibration"] = args.epsilon_calibration
@@ -634,6 +636,8 @@ def main() -> int:
             _env["cache_quality"] = args.cache_quality
         if getattr(args, "escalation_mode", None):
             _env["escalation_mode"] = args.escalation_mode
+        if getattr(args, "deadline_semantics", None):
+            _env["deadline_semantics"] = args.deadline_semantics
         cfg["multi_uav_env"] = _env
     tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
     lut = load_lut(resolve_path(args.lut_csv))
