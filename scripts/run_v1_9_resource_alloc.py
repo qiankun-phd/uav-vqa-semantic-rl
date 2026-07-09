@@ -629,6 +629,8 @@ def main() -> int:
     parser.add_argument("--lambda-lr-conflict", type=float, default=0.2, help="v3 calibration: dedicated dual ascent rate for the conflict channel (it is the only conflict feedback path).")
     parser.add_argument("--lambda-max", type=float, default=20.0)
     parser.add_argument("--lambda-max-conflict", type=float, default=8.0, help="Per-channel dual ceiling for the conflict constraint (0 disables the channel).")
+    parser.add_argument("--lambda-max-quality", type=float, default=20.0, help="v8 lever 1: per-channel dual ceiling for the quality_normal/quality_critical channels (mirrors --lambda-max-conflict). Default 20 = legacy shared global cap; v8 uses 8 so the quality-critical dual penalty cannot dwarf the positive semantic-utility terms under the peak all-critical overload.")
+    parser.add_argument("--dual-warmup-episodes", type=int, default=0, help="v8 lever 2: freeze all dual variables for the first N training episodes (costs still logged), then resume normal dual ascent. Lets the policy form under the fixed-init reward during the BC/service-prior shaping window. Default 0 = legacy (ascent from episode 0).")
     parser.add_argument("--lambda-init-conflict", type=float, default=0.0, help="Warm-start value for lambda_conflict at episode 0 (clamped to --lambda-max-conflict). Puts the Lagrangian conflict price in the reward during the policy-formation phase instead of waiting for dual ascent.")
     parser.add_argument("--freeze-lambda", action="store_true", help="Fixed-penalty baseline (Khairy-style comparison triple): skip dual ascent so every lambda channel stays at its --lambda-init-* value for the whole run.")
     parser.add_argument("--lambda-init-quality-normal", type=float, default=0.0)
@@ -773,6 +775,8 @@ def run_experiment(
             lambda_lr_conflict=args.lambda_lr_conflict,
             lambda_max=args.lambda_max,
             lambda_max_conflict=args.lambda_max_conflict,
+            lambda_max_quality=args.lambda_max_quality,
+            dual_warmup_episodes=args.dual_warmup_episodes,
             lambda_init_conflict=args.lambda_init_conflict,
             lambda_freeze=args.freeze_lambda,
             lambda_init_quality_normal=args.lambda_init_quality_normal,

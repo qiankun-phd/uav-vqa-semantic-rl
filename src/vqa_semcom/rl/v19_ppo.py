@@ -220,6 +220,24 @@ class PPOTrainConfig:
     lambda_lr_conflict: float = 0.2
     lambda_max: float = 20.0
     lambda_max_conflict: float = 8.0
+    # v8 (task #37) lever 1: per-channel dual ceiling for the QUALITY channels
+    # (quality_normal / quality_critical), mirroring the conflict-channel
+    # precedent (lambda_max_conflict=8 vs global 20).  Under the peak all-critical
+    # overload the quality_critical cost (~0.40) sits an order of magnitude above
+    # its 0.02 limit at every step, so the shared global ceiling lets lambda_QC
+    # ratchet to ~18.4 and its dual penalty (lambda*cost ~7.4/step) dwarfs the
+    # positive semantic-utility terms (~+23), drowning the learning signal.
+    # Capping at 8 bounds the penalty at "a conflict step is net-negative"
+    # instead of "the whole return is swamped".  Default 20 preserves legacy.
+    lambda_max_quality: float = 20.0
+    # v8 (task #37) lever 2: freeze ALL dual variables for the first
+    # dual_warmup_episodes episodes (updates paused, costs still logged), then
+    # resume normal projected sub-gradient ascent.  This lets the policy form
+    # under the (fixed-init) reward during the BC/service-prior shaping window
+    # before the constraint price starts moving; without it lambda_QC is already
+    # ~5.5 by the time the BC aux weight has decayed.  Default 0 preserves legacy
+    # (dual ascent from episode 0).
+    dual_warmup_episodes: int = 0
     lambda_decay: float = 0.01
     # Lambda warm-start (2026-07 dual-latency probe): with lambda_init_conflict=0
     # the conflict dual needs hundreds of episodes to climb to its equilibrium
@@ -404,9 +422,15 @@ def _init_dual_state(cfg: PPOTrainConfig) -> DualState:
     def _clamp(value: float) -> float:
         return max(0.0, min(float(value), float(cfg.lambda_max)))
 
+    def _clamp_quality(value: float) -> float:
+        # v8 lever 1: quality channels honour the per-channel ceiling so a
+        # warm-started init (e.g. fixed-penalty quality_critical=9.74) cannot
+        # start above lambda_max_quality.
+        return max(0.0, min(float(value), float(cfg.lambda_max_quality)))
+
     return DualState(
-        quality_normal=_clamp(cfg.lambda_init_quality_normal),
-        quality_critical=_clamp(cfg.lambda_init_quality_critical),
+        quality_normal=_clamp_quality(cfg.lambda_init_quality_normal),
+        quality_critical=_clamp_quality(cfg.lambda_init_quality_critical),
         deadline_normal=_clamp(cfg.lambda_init_deadline_normal),
         deadline_critical=_clamp(cfg.lambda_init_deadline_critical),
         conflict=conflict0,
@@ -632,7 +656,7 @@ def train_ppo(
         rollout = _collect_episode(env, model, seed + episode, cfg, dual)
         if optimizer is not None:
             _ppo_update(model, optimizer, rollout, cfg, demos, episode)
-        _update_duals(dual, rollout, cfg)
+        _update_duals(dual, rollout, cfg, episode=episode)
         row = {
             "episode": float(episode),
             "raw_return": float(sum(rollout["raw_rewards"])),
@@ -731,7 +755,7 @@ def train_two_timescale_ppo(
         rollout = _collect_two_timescale_episode(env, model, seed + episode, cfg, dual)
         if optimizer is not None:
             _two_timescale_ppo_update(model, optimizer, rollout, cfg, demos, episode)
-        _update_duals(dual, rollout, cfg)
+        _update_duals(dual, rollout, cfg, episode=episode)
         row = _trace_row_from_rollout(episode, rollout, cfg, dual, demos, bc_loss)
         row.update(
             {
@@ -3045,20 +3069,34 @@ def _snr_scaled(obs: dict[str, Any]) -> float:
     return float(vector[11]) if len(vector) > 11 else 0.0
 
 
-def _update_duals(dual: DualState, rollout: dict[str, Any], cfg: PPOTrainConfig) -> None:
+def _update_duals(
+    dual: DualState,
+    rollout: dict[str, Any],
+    cfg: PPOTrainConfig,
+    *,
+    episode: int | None = None,
+) -> None:
     if not cfg.constrained:
         return
     if cfg.lambda_freeze:
         # Fixed-penalty baseline: dual variables stay at their init values.
         return
+    # v8 lever 2: dual warm-up.  For the first dual_warmup_episodes episodes the
+    # dual variables are frozen at their init values (the policy forms under the
+    # fixed-init reward through the BC/service-prior window); the rollout costs
+    # are still logged by the caller.  episode=None (any non-training caller)
+    # bypasses the gate, preserving legacy behaviour.
+    if episode is not None and int(cfg.dual_warmup_episodes) > 0 and int(episode) < int(cfg.dual_warmup_episodes):
+        return
     if cfg.risk_aware_constraints:
         # change 6: pure projected sub-gradient (lambda_decay=0) on the quality channels.
-        dual.quality_normal = _dual_update(dual.quality_normal, _mean(rollout["quality_costs_normal"]), cfg.quality_cost_limit_normal, cfg, lambda_decay=0.0)
-        dual.quality_critical = _dual_update(dual.quality_critical, _mean(rollout["quality_costs_critical"]), cfg.quality_cost_limit_critical, cfg, lambda_decay=0.0)
+        # v8 lever 1: quality channels capped at lambda_max_quality (per-channel).
+        dual.quality_normal = _dual_update(dual.quality_normal, _mean(rollout["quality_costs_normal"]), cfg.quality_cost_limit_normal, cfg, lambda_max=cfg.lambda_max_quality, lambda_decay=0.0)
+        dual.quality_critical = _dual_update(dual.quality_critical, _mean(rollout["quality_costs_critical"]), cfg.quality_cost_limit_critical, cfg, lambda_max=cfg.lambda_max_quality, lambda_decay=0.0)
         dual.deadline_normal = _dual_update(dual.deadline_normal, _mean(rollout["deadline_costs_normal"]), cfg.deadline_cost_limit_normal, cfg)
         dual.deadline_critical = _dual_update(dual.deadline_critical, _mean(rollout["deadline_costs_critical"]), cfg.deadline_cost_limit_critical, cfg)
     else:
-        quality = _dual_update((dual.quality_normal + dual.quality_critical) / 2.0, _mean(rollout["quality_costs"]), cfg.quality_cost_limit, cfg, lambda_decay=0.0)
+        quality = _dual_update((dual.quality_normal + dual.quality_critical) / 2.0, _mean(rollout["quality_costs"]), cfg.quality_cost_limit, cfg, lambda_max=cfg.lambda_max_quality, lambda_decay=0.0)
         deadline = _dual_update((dual.deadline_normal + dual.deadline_critical) / 2.0, _mean(rollout["deadline_costs"]), cfg.deadline_cost_limit, cfg)
         dual.quality_normal = quality
         dual.quality_critical = quality
