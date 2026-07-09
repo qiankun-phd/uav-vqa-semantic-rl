@@ -684,7 +684,14 @@ class V19LUTResourceEnv:
         info["deadline_s"] = float(deadline_s)
         info["energy_budget_j"] = float(energy_budget_j)
         info["q_quality_increment"] = max(0.0, epsilon - accuracy_lcb)
-        info["q_deadline_increment"] = max(0.0, delay_s - deadline_s)
+        # Task #33-A consistency: the deadline virtual-queue overshoot charges the
+        # comm-decision window (flight excluded) under comm_window, matching the
+        # deadline flag and the env delay-reward; legacy uses the full delay.
+        _ddl_delay_s = delay_s
+        if str(self._env.env_cfg.get("deadline_semantics", "legacy") or "legacy").lower() == "comm_window":
+            _fly_s = float(info.get("fly_delay_s", info.get("arrival_delay_s", 0.0)))
+            _ddl_delay_s = float(info.get("deadline_charged_delay_s", max(0.0, delay_s - _fly_s)))
+        info["q_deadline_increment"] = max(0.0, _ddl_delay_s - deadline_s)
         info["q_energy_increment"] = max(0.0, energy_j - energy_budget_j)
         info["quality_violation"] = bool(float(info.get("answer_accuracy_est", 0.0)) < epsilon)
         # Structural cache-compliance ban (task #28 v3, method (c)).  This is the

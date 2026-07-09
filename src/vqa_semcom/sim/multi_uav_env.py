@@ -3415,9 +3415,18 @@ class MultiUAVVQAEnv:
         return "expired"
 
     def _reward(self, task: EnvTask, info: dict[str, Any]) -> float:
+        # Task #33-A consistency: under comm_window the DELAY PENALTY charges the
+        # same comm-decision window as the deadline (flight is a tasking-layer
+        # cost, not a semantic-service cost).  Charging the full ~13s flight here
+        # made cache (delay ~0.24s) look ~2.5 reward-units cheaper than a
+        # deadline-feasible token, biasing the policy into the (banned) cache
+        # shortcut and pinning lambda_quality_critical.  Legacy uses the full
+        # delay, bit-for-bit.
+        reward_delay_s = float(info.get("deadline_charged_delay_s", info["delay_s"])) \
+            if self._deadline_semantics() == "comm_window" else float(info["delay_s"])
         return (
             float(self.env_cfg["reward_success"]) * task.priority * float(info["answer_accuracy_est"]) * float(bool(info["success"]))
-            - float(self.env_cfg["reward_delay"]) * float(info["delay_s"])
+            - float(self.env_cfg["reward_delay"]) * reward_delay_s
             - float(self.env_cfg["reward_energy"]) * float(info["energy_j"])
             - float(self.env_cfg["reward_payload"]) * float(info["payload_kb"])
             - float(self.env_cfg["reward_violation"]) * (float(bool(info["quality_violation"])) + float(bool(info["deadline_violation"])))
