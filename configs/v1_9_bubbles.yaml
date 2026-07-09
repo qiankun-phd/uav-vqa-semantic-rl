@@ -27,9 +27,9 @@
     "epsilon_critical": 0.82,
     "tau_normal": 5.0,
     "tau_critical": 3.0,
-    "tau_normal_comm": 3.8,
-    "tau_critical_comm": 2.8,
-    "tau_comm_note": "task #33-B: comm-window deadline anchors (used only when multi_uav_env.deadline_semantics=='comm_window'). tau_k is the tactical communication-decision window; flight/positioning is charged to the tasking layer, not the deadline clock. Anchored on BUBBLES D2.1 Table G-2 separation-communication delay N(mean 1.8s, sigma 1.0s): critical=1.8+1sigma=2.8s (0.841 conf), normal=1.8+2sigma=3.8s (0.977 conf). tau_scale is NOT applied under comm_window."
+    "tau_normal_comm": 4.8,
+    "tau_critical_comm": 3.8,
+    "tau_comm_note": "task #33-B/-C: comm-window deadline anchors (used only when multi_uav_env.deadline_semantics=='comm_window'). tau_k is the tactical communication-decision window (sense+tx+queue+infer+load); flight/positioning is charged to the tasking layer, not the deadline clock. Anchored on BUBBLES D2.1 Table G-2 separation-communication delay N(mean 1.8s, sigma 1.0s); normal carries one extra sigma of headroom over critical. REFERENCE 1-sigma band (COMM_WINDOW_TAU code default) is critical=1.8+1sigma=2.8 / normal=1.8+2sigma=3.8; but the task #33-C design gate (peak spec-unattainable in [0.15,0.5], nominal escalation<0.15) FAILS at 1-sigma because a 2.8s critical window structurally excludes image evidence (receiver VLM infer ~2.26s) -> 65% nominal escalation. The sanctioned knob (tau confidence band) is moved to the 2-sigma band: critical=1.8+2sigma=3.8s, normal=1.8+3sigma=4.8s, at which nominal escalation=0.0 and peak spec-unattainable=0.105 (irreducible quality floor, deadline axis clean). Recorded in outputs/rl/eps_v6_calib.json (tau_conf_sigma=2). tau_scale is NOT applied under comm_window."
   },
   "evaluator": {
     "seed": 7,

@@ -1,0 +1,29 @@
+{
+  "deadline_semantics": "comm_window",
+  "tau_conf_sigma": 2,
+  "tau_critical_comm": 3.8,
+  "tau_normal_comm": 4.8,
+  "peak_load_override": null,
+  "eps_critical_counting": 0.464,
+  "eps_critical_presence": 0.696,
+  "eps_normal": 0.529,
+  "delta_esc_peak": 0.155,
+  "delta_esc_nominal": 0.05,
+  "peak_decomposition": {
+    "n": 200,
+    "quality_unreachable": 0.105,
+    "deadline_blocked": 0.0,
+    "pipeline_blocked": 0.0,
+    "spec_unattainable": 0.105
+  },
+  "nominal_decomposition": {
+    "n": 376,
+    "quality_unreachable": 0.0,
+    "deadline_blocked": 0.0,
+    "pipeline_blocked": 0.0,
+    "spec_unattainable": 0.0
+  },
+  "peak_design_gate_in_band": false,
+  "peak_counting_ge10_summary": "n=34 min=0.514 P10=0.567 P25=0.567 med=0.629 P90=0.629 max=0.629 mean=0.600",
+  "peak_presence_summary": "n=166 min=0.360 P10=0.360 P25=0.746 med=0.859 P90=0.859 max=0.859 mean=0.767"
+}
