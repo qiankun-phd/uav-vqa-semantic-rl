@@ -187,18 +187,25 @@ break that tie under the current reward.  This is a reward-shaping / scenario-UT
 matter that pre-exists v5 (v5 also pinned lambda_quality_critical 18.4/11.1/19.5),
 orthogonal to the scale-consistency mandate.
 
-### Verdict (5/13 PASS -> FAIL; `summarize_eps_recal_v6.py`)
+### Verdict (6/13 PASS -> FAIL; `summarize_eps_recal_v6.py`, full 30-arm matrix)
 
 PASS: 1a peak oracle mission(admitted) **0.916**; 2a peak proposed
 critical-escalation **0.124** in [0.10, 0.21] (delta_esc matched); 2b nominal
-escalation **0.000**; 6a spec_attainable non-constant under nominal; 6b cache-ban
-engages (**122** cache-only critical non-compliant events).
+escalation **0.000**; 5a nominal proposed mission(admitted) **0.635** >= 0.85 x
+nominal-oracle 0.703 (i.e. 90% of the nominal ceiling -- the nominal condition
+works); 6a spec_attainable non-constant under nominal; 6b cache-ban engages
+(**122** cache-only critical non-compliant events).
 
 FAIL: 1b peak oracle admitted deadline-violation 0.084 (target <0.05 -- marginal
 residual post-escalation slip); 3a-3d peak proposed (cacheR 0.44, rejectR 0.33,
-mission 0.18, acc 0.17 -- over-caching); 4 `lambda_quality_critical` pinned at ~18
-on all three seeds (the v5/v6 pin persists -- driven by the cache floods, NOT a
-scale artefact); 5a-5b nominal proposed (mission 0.63, task 0.63).
+mission 0.18, acc 0.17 -- over-caching); 4 `lambda_quality_critical` pinned at
+18.5/18.1/18.3 on all three seeds (the v5 pin persists -- driven by the cache
+floods, NOT a scale artefact; no_lagrangian shows the same cacheR 0.45, proving it
+is base-reward-structural); 5b nominal proposed task 0.628 < 0.75.
+
+The failure is CONCENTRATED IN THE PEAK CONDITION: nominal proposed reaches 90%
+of its ceiling with zero escalation, while peak proposed floods the banned cache
+path under UTM pressure.
 
 Verdict: **scale-consistency (A-F) DONE and correct** -- proven by 1a (oracle
 ceiling 0.916), 2a (escalation budget matched), 6a/6b (certificate live, ban

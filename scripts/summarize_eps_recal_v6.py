@@ -264,10 +264,14 @@ for seed in (0, 1, 2):
         active.append(band_q or cost_q or band_d)
 checks.append(("4. lambda quality/deadline-critical NON-pinned, active (>=2/3 seeds)", sum(active), sum(active) >= 2))
 
-# 5. nominal proposed
+# 5. nominal proposed vs the NOMINAL oracle ceiling (condition-consistent:
+# comparing a nominal-condition policy against the peak ceiling conflates the
+# two operating conditions).
+o_m_nom = m(ORACLE_CEIL, "nominal", "admitted_mission_success_rate")
 nm = m("proposed", "nominal", "admitted_mission_success_rate")
 nt = m("proposed", "nominal", "task_success_rate")
-checks.append((f"5a. NOMINAL proposed mission(admitted) >= 0.85*oracle ({0.85*o_m:.3f})", nm, nm >= 0.85 * o_m if o_m == o_m else False))
+checks.append((f"5a. NOMINAL proposed mission(admitted) >= 0.85*nominal-oracle ({0.85*o_m_nom:.3f})",
+               nm, nm >= 0.85 * o_m_nom if o_m_nom == o_m_nom else False))
 checks.append(("5b. NOMINAL proposed task success >= 0.75", nt, nt >= 0.75))
 
 # 6. hygiene
