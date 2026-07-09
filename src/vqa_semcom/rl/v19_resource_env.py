@@ -212,6 +212,10 @@ class V19StepRecord:
     operational_intent_state: str
     off_nominal_planning_penalty: float
     reward: float
+    # Change 5 (task #28 v5): spec-attainability certificate + escalation.
+    spec_attainable: bool = False
+    escalated: bool = False
+    escalation_cost: float = 0.0
 
     def to_row(self) -> dict[str, Any]:
         return asdict(self)
@@ -607,6 +611,9 @@ class V19LUTResourceEnv:
             operational_intent_state=str(info.get("operational_intent_state", "accepted")),
             off_nominal_planning_penalty=float(info.get("off_nominal_planning_penalty", 0.0)),
             reward=float(info.get("reward", reward)),
+            spec_attainable=bool(info.get("spec_attainable", False)),
+            escalated=bool(info.get("escalated", False)),
+            escalation_cost=float(info.get("escalation", float(bool(info.get("escalated", False))))),
         )
 
     def _enrich_semantic_info(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:

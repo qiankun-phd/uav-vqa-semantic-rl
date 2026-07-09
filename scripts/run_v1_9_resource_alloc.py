@@ -203,6 +203,14 @@ class EvalSummary:
     average_defer_count: float
     bc_loss: float
     average_reward: float
+    # Change 5 (task #28 v5): escalation layer accounting.  semSucc / accuracy on
+    # the ADMITTED set = non-escalated tasks (the criteria measure quality there).
+    escalation_rate: float = 0.0
+    critical_escalation_rate: float = 0.0
+    spec_attainable_rate: float = 0.0
+    admitted_semantic_success_rate: float = 0.0
+    admitted_average_accuracy: float = 0.0
+    admitted_quality_violation_rate: float = 0.0
 
 
 def make_env(
@@ -441,6 +449,12 @@ def summarize(
                 average_defer_count=round(_mean(records, "defer_count"), 6),
                 bc_loss=round(float(bc_loss), 6),
                 average_reward=round(_mean(records, "reward"), 6),
+                escalation_rate=round(_rate(records, "escalated"), 6),
+                critical_escalation_rate=round(_critical_escalation_rate(records), 6),
+                spec_attainable_rate=round(_rate(records, "spec_attainable"), 6),
+                admitted_semantic_success_rate=round(_admitted_rate(records, "semantic_success"), 6),
+                admitted_average_accuracy=round(_admitted_mean(records, "answer_accuracy_est"), 6),
+                admitted_quality_violation_rate=round(_admitted_rate(records, "quality_violation"), 6),
             )
         )
     return out
@@ -1170,6 +1184,25 @@ def _false_rate(records: list[V19StepRecord], field: str) -> float:
     if not records:
         return 0.0
     return sum(float(not bool(getattr(record, field))) for record in records) / len(records)
+
+
+def _admitted_records(records: list[V19StepRecord]) -> list[V19StepRecord]:
+    """Change 5: admitted set = non-escalated tasks (the criteria measure quality
+    and accuracy here; escalated tasks are routed to the escalation channel)."""
+    return [r for r in records if not bool(getattr(r, "escalated", False))]
+
+
+def _admitted_rate(records: list[V19StepRecord], field: str) -> float:
+    return _rate(_admitted_records(records), field)
+
+
+def _admitted_mean(records: list[V19StepRecord], field: str) -> float:
+    return _mean(_admitted_records(records), field)
+
+
+def _critical_escalation_rate(records: list[V19StepRecord]) -> float:
+    crit = [r for r in records if str(getattr(r, "risk_level", "")) in ("critical", "high")]
+    return _rate(crit, "escalated")
 
 
 def _failed_epsilons(records: list[V19StepRecord]) -> list[float]:
