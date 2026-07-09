@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import asdict, dataclass
 from numbers import Integral
 from pathlib import Path
@@ -8,11 +9,105 @@ from typing import Any
 from vqa_semcom.config import resolve_path
 from vqa_semcom.quality.persample_predictor import PersamplePredictor
 from vqa_semcom.semantic.utility import SemanticUtilityModel
-from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv
+from vqa_semcom.sim.multi_uav_env import MultiUAVVQAEnv, count_bucket_v5
 from vqa_semcom.sim.resource_env import LUTEntry
+from vqa_semcom.snr import channel_bin_from_snr, snr_db_from_label
 
-QUALITY_BACKENDS = ("lut", "persample")
+QUALITY_BACKENDS = ("lut", "persample", "lut_v5")
 DEFAULT_PERSAMPLE_MODEL = Path("outputs") / "models" / "persample_predictor_v1.json"
+DEFAULT_LUT_V5 = Path("outputs") / "lut" / "v5_unified_lut.csv"
+
+
+class LutV5Table:
+    """v5 unified semantic-quality table (task #28 v5, EPSILON_RECAL_V5.md change 2).
+
+    Single source of truth read identically by the offline calibrator and the RL
+    record layer.  Keyed by
+
+        (question_type, service_level, channel_bin, snr_bin, view_quality_bin,
+         count_bucket)
+
+    channel_bin is derived at lookup time from the SNR label via
+    channel_bin_from_snr (bad/medium/good) so the runtime query needs only the
+    task's snr_bin.  Sparse cells already inherited their pooled parent Wilson
+    interval offline; this loader adds runtime fallbacks (pool over
+    view->count_bucket->parent) so an unseen key never crashes control.
+    """
+
+    def __init__(self, rows: list[dict[str, str]]) -> None:
+        self._exact: dict[tuple, tuple[float, float, float, float]] = {}
+        # parent pools (weighted by sample_count) for graceful fallback
+        self._parent: dict[tuple, list[float]] = {}   # (qt,svc,ch,snr) -> [w*lcb, w*mean, w*pay, w]
+        self._qsvc: dict[tuple, list[float]] = {}     # (qt,svc) -> [w*lcb, w*mean, w*pay, w]
+        for r in rows:
+            try:
+                svc = int(r["service_level"])
+                n = max(0, int(float(r.get("sample_count", 0) or 0)))
+            except (KeyError, ValueError):
+                continue
+            qt = str(r.get("question_type", ""))
+            ch = str(r.get("channel_bin", ""))
+            snr = str(r.get("snr_bin", ""))
+            view = str(r.get("view_quality_bin", ""))
+            bucket = str(r.get("count_bucket", "na"))
+            mean = float(r.get("expected_accuracy", 0.0) or 0.0)
+            lcb = float(r.get("wilson_low", 0.0) or 0.0)
+            pay_kb = float(r.get("avg_payload_bytes", 0.0) or 0.0) / 1024.0
+            unc = max(0.0, mean - lcb)
+            self._exact[(qt, svc, ch, snr, view, bucket)] = (mean, lcb, unc, pay_kb)
+            w = float(max(n, 1))
+            for store, key in ((self._parent, (qt, svc, ch, snr)), (self._qsvc, (qt, svc))):
+                acc = store.setdefault(key, [0.0, 0.0, 0.0, 0.0])
+                acc[0] += w * lcb
+                acc[1] += w * mean
+                acc[2] += w * pay_kb
+                acc[3] += w
+
+    @classmethod
+    def from_csv(cls, path: Path) -> "LutV5Table":
+        with Path(path).open(newline="", encoding="utf-8") as f:
+            return cls(list(csv.DictReader(f)))
+
+    @staticmethod
+    def _pool(acc: list[float]) -> tuple[float, float, float, float] | None:
+        w = acc[3]
+        if w <= 0:
+            return None
+        lcb, mean, pay = acc[0] / w, acc[1] / w, acc[2] / w
+        return mean, lcb, max(0.0, mean - lcb), pay
+
+    def lookup(
+        self,
+        question_type: str,
+        service_level: int,
+        snr_bin: str,
+        view_quality_bin: str,
+        count_bucket: str,
+    ) -> tuple[float, float, float, float] | None:
+        try:
+            snr_db = snr_db_from_label(snr_bin)
+            channel = channel_bin_from_snr(snr_db)
+        except (ValueError, TypeError):
+            channel = "medium"
+        qt, svc = str(question_type), int(service_level)
+        view, bucket = str(view_quality_bin), str(count_bucket)
+        hit = self._exact.get((qt, svc, channel, snr_bin, view, bucket))
+        if hit is not None:
+            return hit
+        # fallback 1: pool over view for this (qt,svc,ch,snr,bucket)
+        cand = [v for k, v in self._exact.items()
+                if k[0] == qt and k[1] == svc and k[2] == channel and k[3] == snr_bin and k[5] == bucket]
+        if cand:
+            mean = sum(c[0] for c in cand) / len(cand)
+            lcb = sum(c[1] for c in cand) / len(cand)
+            pay = sum(c[3] for c in cand) / len(cand)
+            return mean, lcb, max(0.0, mean - lcb), pay
+        # fallback 2: parent pool (qt,svc,ch,snr) over view x bucket
+        pooled = self._pool(self._parent.get((qt, svc, channel, snr_bin), [0, 0, 0, 0]))
+        if pooled is not None:
+            return pooled
+        # fallback 3: (qt,svc) pool
+        return self._pool(self._qsvc.get((qt, svc), [0, 0, 0, 0]))
 
 
 @dataclass(frozen=True)
@@ -190,6 +285,19 @@ class V19LUTResourceEnv:
             raise ValueError(f"unknown quality_backend: {self.quality_backend} (expected {QUALITY_BACKENDS})")
         self._persample: PersamplePredictor | None = None
         self._persample_cache: dict[tuple[str, str, str, str, str], tuple[float, float]] = {}
+        self._lut_v5: LutV5Table | None = None
+        if self.quality_backend == "lut_v5":
+            lut_v5_path = resolve_path(
+                cfg.get("paths", {}).get("lut_v5_csv")
+                or rl_cfg.get("lut_v5_path")
+                or DEFAULT_LUT_V5
+            )
+            if not Path(lut_v5_path).exists():
+                raise FileNotFoundError(
+                    f"lut_v5 quality backend requested but table not found: {lut_v5_path} "
+                    "(run scripts/build_lut_v5.py first)"
+                )
+            self._lut_v5 = LutV5Table.from_csv(lut_v5_path)
         if self.quality_backend == "persample":
             model_path = resolve_path(
                 cfg.get("paths", {}).get("persample_model_json")
@@ -528,6 +636,8 @@ class V19LUTResourceEnv:
             info["semantic_payload_kb"] = float(estimate.payload_kb)
         if self._persample is not None and semantic_path != "defer":
             self._apply_persample_quality(info, obs, raw_accuracy)
+        if self._lut_v5 is not None and semantic_path != "defer":
+            self._apply_lut_v5_quality(info, obs, raw_accuracy)
 
         epsilon = self._epsilon_from_obs_or_info(info, obs)
         accuracy_lcb = float(info.get("semantic_accuracy_lcb", info.get("answer_accuracy_est", 0.0)))
@@ -631,14 +741,59 @@ class V19LUTResourceEnv:
 
     def _semantic_query(self, info: dict[str, Any], obs: dict[str, Any] | None) -> dict[str, Any]:
         obs = obs or self._last_obs or self.current_context or {}
+        qtype = str(info.get("question_type", obs.get("question_type", obs.get("task_type", ""))))
+        # v5 count bucket: prefer the explicit key; else derive from object_count.
+        bucket = info.get("count_bucket", obs.get("count_bucket"))
+        if bucket is None:
+            if qtype == "counting":
+                oc = info.get("object_count", obs.get("object_count", -1))
+                try:
+                    bucket = count_bucket_v5(int(oc))
+                except (ValueError, TypeError):
+                    bucket = "na"
+            else:
+                bucket = "na"
         return {
-            "question_type": str(info.get("question_type", obs.get("question_type", obs.get("task_type", "")))),
+            "question_type": qtype,
             "service_level": int(info.get("service_level", self.service_levels[0])),
             "snr_bin": str(info.get("snr_bin", obs.get("snr_bin", ""))),
             "view_quality_bin": str(info.get("view_quality_bin", obs.get("view_quality_bin", "medium"))),
             "freshness_bin": str(info.get("freshness_bin", obs.get("freshness_bin", "fresh"))),
             "risk_level": str(info.get("risk_level", obs.get("risk_level", "normal"))),
+            "count_bucket": str(bucket),
         }
+
+    def _apply_lut_v5_quality(self, info: dict[str, Any], obs: dict[str, Any] | None,
+                              raw_accuracy: float) -> None:
+        """v5 quality backend: authoritative accuracy for transmit services (1/2).
+
+        Reads the v5 unified LUT (qtype x service x channel x snr x view x count
+        bucket) and overrides the accuracy/LCB/uncertainty/payload fields.  Cache
+        (service 0) and defer keep their existing sources -- s0 runtime quality is
+        governed by cache_quality=entry_v2 (change 3), not this table (its s0 rows
+        are simulator_derived).  The LCB is what RL control consumes.
+        """
+        assert self._lut_v5 is not None
+        service = int(info.get("service_level", 0))
+        if service not in (1, 2):
+            return
+        query = self._semantic_query(info, obs)
+        hit = self._lut_v5.lookup(
+            query["question_type"], service, query["snr_bin"],
+            query["view_quality_bin"], query["count_bucket"],
+        )
+        if hit is None:
+            return
+        mean, lcb, unc, payload_kb = hit
+        info["semantic_accuracy_mean"] = float(mean)
+        info["semantic_accuracy_lcb"] = float(lcb)
+        info["semantic_uncertainty"] = float(unc)
+        info["answer_accuracy_raw"] = raw_accuracy
+        info["answer_accuracy_est"] = float(lcb)
+        info["quality_backend"] = self.quality_backend
+        if payload_kb > 0.0:
+            info["payload_kb"] = float(payload_kb)
+            info["semantic_payload_kb"] = float(payload_kb)
 
     def _apply_persample_quality(self, info: dict[str, Any], obs: dict[str, Any] | None,
                                  raw_accuracy: float) -> None:

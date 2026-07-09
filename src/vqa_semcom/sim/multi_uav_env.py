@@ -14,6 +14,32 @@ from vqa_semcom.sim.resource_env import LUTEntry, load_lut, read_csv
 from vqa_semcom.snr import channel_bin_from_snr, snr_bins_from_config, snr_db_from_label, snr_db_to_bin_label
 
 
+# v5 count-bucket dimension (task #28 v5, EPSILON_RECAL_V5.md change 2).  MUST
+# match scripts/build_lut_v5.py::COUNT_BUCKETS bit-for-bit so the runtime
+# lut_v5 quality lookup and the offline LUT builder agree on the counting
+# key.  Non-counting question types carry the sentinel "na".
+COUNT_BUCKETS_V5 = [(1, 4, "1-4"), (5, 9, "5-9"), (10, 19, "10-19"), (20, 49, "20-49"), (50, 10 ** 9, "50+")]
+
+
+def count_bucket_v5(gt: int) -> str:
+    for lo, hi, label in COUNT_BUCKETS_V5:
+        if lo <= gt <= hi:
+            return label
+    if gt <= 0:
+        return "0"
+    return "50+"
+
+
+def _safe_int(text: Any, default: int = -1) -> int:
+    try:
+        s = str(text).strip().lower()
+        if not s or s in ("unknown", "none", "nan"):
+            return default
+        return int(float(s))
+    except (ValueError, TypeError):
+        return default
+
+
 @dataclass(frozen=True)
 class Area4D:
     center_x_m: float
@@ -93,6 +119,9 @@ class EnvTask:
     generation_time: int
     area_id: int
     area4d: Area4D
+    object_count: int = -1
+    spec_attainable: bool = False
+    escalated: bool = False
     completed: bool = False
     task_status: str = "pending"
     defer_count: int = 0
@@ -1653,6 +1682,13 @@ class MultiUAVVQAEnv:
         elapsed = max(0, self.step_count - int(task.generation_time)) * float(self.env_cfg["slot_s"])
         return max(0.0, float(task.tau_k) - elapsed)
 
+    @staticmethod
+    def _count_bucket_for_task(task: EnvTask) -> str:
+        """v5 count-bucket key: only counting tasks carry a numeric bucket."""
+        if str(task.task_type) != "counting":
+            return "na"
+        return count_bucket_v5(int(task.object_count))
+
     def _cache_freshness_from_age(self, cache_age: int) -> str:
         return self._freshness_from_age(int(cache_age))
 
@@ -1798,6 +1834,8 @@ class MultiUAVVQAEnv:
             "task_type": task.task_type,
             "question_type": task.task_type,
             "risk_level": task.risk_level,
+            "object_count": int(task.object_count),
+            "count_bucket": self._count_bucket_for_task(task),
             "task_status": task.task_status,
             "remaining_deadline_s": round(float(remaining_deadline_s), 6),
             "defer_count": int(task.defer_count),
@@ -2278,6 +2316,7 @@ class MultiUAVVQAEnv:
                     task_type=row.get("question_type", "presence"),
                     question=row.get("question", ""),
                     risk_level=risk,
+                    object_count=_safe_int(row.get("object_count", -1), -1),
                     epsilon_k=self._epsilon_for_task(row, risk),
                     tau_k=tau,
                     priority=2.0 if risk == "critical" else 1.0,
@@ -3199,6 +3238,9 @@ class MultiUAVVQAEnv:
             "task_type": task.task_type,
             "question_type": task.task_type,
             "risk_level": task.risk_level,
+            "object_count": int(task.object_count),
+            "count_bucket": self._count_bucket_for_task(task),
+            "spec_attainable": bool(task.spec_attainable),
             "view_quality_bin": task.view_quality_bin,
             "freshness_bin": task.freshness_bin,
             "task_status": task.task_status,
