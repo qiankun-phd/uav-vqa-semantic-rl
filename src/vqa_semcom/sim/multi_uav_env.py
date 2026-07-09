@@ -176,6 +176,28 @@ ATTAINABILITY_V3_EPSILON: dict[str, float] = {
 }
 
 
+# Attainability recalibration iteration 4 (task #28): TRANSMISSION-ONLY anchor.
+# See docs/EPSILON_RECAL_V4.md and scripts/calibrate_epsilon_v4.py.  v3's 0.504
+# was the v2 P10 of the oracle realised best-*feasible*-service LCB, a
+# distribution that STILL contained the s0 cache in the feasible set.  Once cache
+# is compliance-banned (v3), ~44% of the peak all-critical mix (counting) has no
+# transmission path reaching 0.504, so the peak oracle collapses (semSucc 0.556)
+# and every learning arm collapses (semSucc 0.008, lambda pinned).  v4 re-anchors
+# on the PURE-TRANSMISSION feasible set: eps_critical = floor_3dp(P10) of the
+# per-task best-transmission LCB max(token, image) over the peak all-critical mix
+# with s0 cache excluded = 0.355 (P10 = 0.355225, counting cluster; rounded DOWN
+# so the P10 cluster stays >= threshold).  eps_normal held at the v1/v3
+# attainability anchor 0.166 (nominal normal unaffected by the cache ban).  Pure-
+# tx anchor 0.355 <= cache-inclusive v3 anchor 0.504 (invariant).  Pair with
+# env_cfg["critical_cache_compliance"] == "forbidden".
+# Selected via env_cfg["epsilon_calibration"] == "attainability_v4".
+ATTAINABILITY_V4_EPSILON: dict[str, float] = {
+    "critical": 0.355,
+    "normal": 0.166,
+    "high": 0.355,
+}
+
+
 SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "nominal": {
         "description": "Default mixed task queue with calibrated physical constants.",
@@ -2274,6 +2296,9 @@ class MultiUAVVQAEnv:
 
     def _epsilon_for_task(self, row: dict[str, str], risk: str) -> float:
         mode = str(self.env_cfg.get("epsilon_calibration", "legacy") or "legacy").lower()
+        if mode == "attainability_v4":
+            table = ATTAINABILITY_V4_EPSILON
+            return float(table.get(risk, table["critical"]))
         if mode == "attainability_v3":
             table = ATTAINABILITY_V3_EPSILON
             return float(table.get(risk, table["critical"]))

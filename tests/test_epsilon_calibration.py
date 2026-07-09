@@ -11,6 +11,7 @@ from vqa_semcom.sim.multi_uav_env import (  # noqa: E402
     ATTAINABILITY_V1_EPSILON,
     ATTAINABILITY_V2_EPSILON,
     ATTAINABILITY_V3_EPSILON,
+    ATTAINABILITY_V4_EPSILON,
     MultiUAVVQAEnv,
     SemanticCacheEntry,
 )
@@ -153,6 +154,48 @@ class EpsilonCalibrationTest(unittest.TestCase):
         self.assertAlmostEqual(self._eps("attainability_v2", "critical"), 0.633, places=9)
         self.assertAlmostEqual(self._eps("attainability_v2", "normal"), 0.297, places=9)
         self.assertEqual(ATTAINABILITY_V2_EPSILON, {"critical": 0.633, "normal": 0.297, "high": 0.633})
+
+    # --- v4 (transmission-only anchor) --------------------------------------
+
+    def test_attainability_v4_values(self):
+        # v4 re-anchors on the pure-transmission feasible set: eps_critical =
+        # floor_3dp(P10) of the per-task best-tx LCB max(token,image) over the
+        # peak all-critical mix, s0 cache excluded = 0.355; eps_normal held at
+        # the v1/v3 attainability anchor 0.166 (docs/EPSILON_RECAL_V4.md).
+        self.assertAlmostEqual(self._eps("attainability_v4", "critical"), 0.355, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v4", "normal"), 0.166, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v4", "high"), 0.355, places=9)
+        self.assertEqual(ATTAINABILITY_V4_EPSILON, {"critical": 0.355, "normal": 0.166, "high": 0.355})
+
+    def test_attainability_v4_ignores_row_and_scaling(self):
+        # v4, like v1/v2/v3, is a flat per-risk constant.
+        self.env.env_cfg = {"epsilon_calibration": "attainability_v4"}
+        self.env.scenario_cfg = {"task_layout": {"epsilon_scale": 0.5,
+                                                 "epsilon_cap_by_risk": {"critical": 0.4}}}
+        eps = self.env._epsilon_for_task({"epsilon_k": "0.99"}, "critical")
+        self.assertAlmostEqual(eps, 0.355, places=9)
+
+    def test_v4_pure_tx_anchor_below_cache_inclusive_v3(self):
+        # Core v4 invariant: the pure-transmission anchor must not exceed the
+        # cache-inclusive v3 anchor (0.504) -- removing cache from the feasible
+        # set can only lower, never raise, the attainable quality bar.
+        self.assertLessEqual(ATTAINABILITY_V4_EPSILON["critical"],
+                             ATTAINABILITY_V3_EPSILON["critical"] + 1e-9)
+        self.assertLessEqual(ATTAINABILITY_V4_EPSILON["high"],
+                             ATTAINABILITY_V3_EPSILON["high"] + 1e-9)
+        # eps_normal is unchanged across v3 -> v4 (nominal normal tasks are not
+        # affected by the cache ban).
+        self.assertAlmostEqual(ATTAINABILITY_V4_EPSILON["normal"],
+                               ATTAINABILITY_V3_EPSILON["normal"], places=9)
+
+    def test_legacy_v1_v2_v3_unaffected_by_v4(self):
+        # Adding v4 must not perturb legacy / v1 / v2 / v3 selection.
+        self.assertAlmostEqual(self._eps("legacy", "critical"), 0.82, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v1", "critical"), 0.615, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v2", "critical"), 0.633, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v3", "critical"), 0.504, places=9)
+        self.assertAlmostEqual(self._eps("attainability_v3", "normal"), 0.166, places=9)
+        self.assertEqual(ATTAINABILITY_V3_EPSILON, {"critical": 0.504, "normal": 0.166, "high": 0.504})
 
 
 class CriticalCacheComplianceGateTest(unittest.TestCase):
