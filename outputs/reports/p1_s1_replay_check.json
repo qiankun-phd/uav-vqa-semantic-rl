@@ -1,0 +1,21 @@
+{
+  "note": "s1 symbolic-decoder verdicts on the Rician test split, per unique (image,question,snr)",
+  "v3_0": {
+    "n": 5616,
+    "acc": 0.6339
+  },
+  "v25": {
+    "n_common": 2808,
+    "acc": 0.6709,
+    "frac_same_verdict": 0.991453,
+    "frac_same_normalized_prediction": 0.957265,
+    "n_verdict_diff": 24
+  },
+  "v26": {
+    "n_common": 2808,
+    "acc": 0.6709,
+    "frac_same_verdict": 0.991453,
+    "frac_same_normalized_prediction": 0.957265,
+    "n_verdict_diff": 24
+  }
+}
