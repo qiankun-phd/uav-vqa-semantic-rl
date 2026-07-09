@@ -102,7 +102,7 @@ run_nom_eval() {
 echo "[recal6] ==== epsilon recalibration v5 start $(date) | cal=$CAL ccc=$CCC cacheq=$CACHEQ esc=$ESC qb=$QB delta_peak=$DELTA_PEAK delta_nom=$DELTA_NOM train_ep=$TRAIN_EP seeds=$SEEDS ===="
 
 # --- Non-learning baselines, both conditions ---
-for pol in oracle_best_feasible_evidence semantic_greedy always_cache; do
+for pol in oracle_best_feasible_evidence oracle_escalation_aware semantic_greedy always_cache; do
   run_one "bl_${pol}" 0 --policy "$pol" --scenario "$SCENARIO" \
     --state-version v2 --episodes "$EVAL_EP" --tasks-per-episode "$TPE" \
     "${V5_GATES[@]}" --escalation-cost-limit "$DELTA_PEAK"

@@ -183,6 +183,51 @@ class CertificateDistributionTest(unittest.TestCase):
         self.assertFalse(legacy._compute_spec_attainable(tl, "20dB"))
 
 
+class EscalationAwareOracleTest(unittest.TestCase):
+    """Task #33/#34: the escalation-aware oracle rejects spec-unattainable
+    critical/high tasks (routing them to escalation) instead of serving-and-failing."""
+
+    def _wrap(self):
+        import importlib
+        import sys as _sys
+        from types import SimpleNamespace
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        from vqa_semcom.config import load_config, resolve_path
+        from vqa_semcom.sim.resource_env import filter_tasks_supported_by_lut, load_lut, read_csv
+        R = importlib.import_module("run_v1_9_resource_alloc")
+        cfg = load_config(str(ROOT / "configs/v1_9_bubbles.yaml"))
+        eo = dict(cfg.get("multi_uav_env", {}))
+        eo.update({"escalation_mode": "spec_attainable", "critical_cache_compliance": "forbidden",
+                   "deadline_semantics": "comm_window", "epsilon_calibration": "attainability_v5"})
+        cfg["multi_uav_env"] = eo
+        tasks = read_csv(resolve_path(cfg["paths"]["tasks_csv"]))
+        lut = load_lut(ROOT / "outputs/lut/v1_9_snr_semantic_quality_lut.csv")
+        tasks = filter_tasks_supported_by_lut(tasks, lut)
+        args = SimpleNamespace(scenario="utm_conflict", seed=0, snr_bins=None, tasks_per_episode=10,
+                               formal_scenario=None, state_version="v2", num_uavs=None,
+                               quality_backend="lut_v5", disable_semantic_token=False)
+        return R, R.make_env(args, cfg, tasks, lut, "oracle_escalation_aware")
+
+    def test_registered_policy(self):
+        import importlib
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "scripts"))
+        R = importlib.import_module("run_v1_9_resource_alloc")
+        self.assertIn("oracle_escalation_aware", R.BASELINE_POLICIES)
+
+    def test_rejects_unattainable_critical(self):
+        if not (ROOT / "configs/v1_9_bubbles.yaml").exists():
+            self.skipTest("bubbles config not present")
+        R, w = self._wrap()
+        obs = w.reset(seed=0, options={"policy_name": "oracle_escalation_aware"})
+        # force a spec-UNattainable critical front task in the obs
+        obs = dict(obs)
+        obs["risk_level"] = "critical"
+        obs["spec_attainable"] = False
+        act = R.choose_baseline_action("oracle_escalation_aware", w, obs)
+        self.assertEqual(str(act.get("semantic_path")), "reject")
+
+
 class MissionSuccessMetricTest(unittest.TestCase):
     """Task #34-(iv): mission_success = quality AND deadline compliant."""
 

@@ -40,6 +40,7 @@ METRICS = ["average_epsilon_k", "semantic_success_rate", "quality_violation_rate
            "admitted_deadline_violation_rate"]
 POLICY_OF = {"proposed": "ppo", "no_lagrangian": "ppo", "fixed_penalty": "ppo", "e4lut": "ppo",
              "bl_oracle_best_feasible_evidence": "oracle_best_feasible_evidence",
+             "bl_oracle_escalation_aware": "oracle_escalation_aware",
              "bl_semantic_greedy": "semantic_greedy", "bl_always_cache": "always_cache",
              "bl_random": "random"}
 
@@ -144,8 +145,14 @@ def m(arm, cond, key):
     return agg(rows, key)[0] if rows else float("nan")
 
 
-ARMS = ["bl_oracle_best_feasible_evidence", "bl_always_cache", "bl_random",
+ARMS = ["bl_oracle_best_feasible_evidence", "bl_oracle_escalation_aware",
+        "bl_always_cache", "bl_random",
         "proposed", "no_lagrangian", "fixed_penalty", "e4lut"]
+
+# Criterion-1 ceiling: the escalation-aware oracle (honours the certificate);
+# fall back to the plain best-feasible oracle if the aware arm is absent.
+ORACLE_CEIL = ("bl_oracle_escalation_aware"
+               if DATA.get("bl_oracle_escalation_aware") else "bl_oracle_best_feasible_evidence")
 
 for cond in ("peak", "nominal", "nomtrain"):
     print("=" * 140)
@@ -216,9 +223,11 @@ spec_unattain = float(CAL.get("peak_decomposition", {}).get("spec_unattainable",
 checks = []
 
 # 1. PEAK oracle mission(admitted) >= 0.85 AND admitted deadline-violation ~ 0
-o_m = m("bl_oracle_best_feasible_evidence", "peak", "admitted_mission_success_rate")
-o_ddl = m("bl_oracle_best_feasible_evidence", "peak", "admitted_deadline_violation_rate")
-o_acc = m("bl_oracle_best_feasible_evidence", "peak", "admitted_average_accuracy")
+# (ceiling = escalation-aware oracle, which honours the spec-attainability cert).
+o_m = m(ORACLE_CEIL, "peak", "admitted_mission_success_rate")
+o_ddl = m(ORACLE_CEIL, "peak", "admitted_deadline_violation_rate")
+o_acc = m(ORACLE_CEIL, "peak", "admitted_average_accuracy")
+print(f"(criterion-1 oracle ceiling = {ORACLE_CEIL})")
 checks.append(("1a. PEAK oracle mission(admitted) >= 0.85", o_m, o_m >= 0.85))
 checks.append(("1b. PEAK oracle admitted deadline-violation ~ 0 (<0.05)", o_ddl, o_ddl < 0.05))
 

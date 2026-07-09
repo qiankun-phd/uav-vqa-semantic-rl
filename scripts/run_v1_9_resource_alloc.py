@@ -107,6 +107,7 @@ BASELINE_POLICIES = (
     "semantic_lcb_greedy",
     "lyapunov_greedy",
     "oracle_best_feasible_evidence",
+    "oracle_escalation_aware",
     "random",
 )
 
@@ -276,6 +277,35 @@ def choose_baseline_action(policy: str, env: V19LUTResourceEnv, obs: dict[str, A
         if candidates:
             return _with_action_defaults(env, env.candidate_action(min(candidates)[1], obs))
         best_level = max(env.service_levels, key=lambda level: env.candidate_metrics(level, obs)["accuracy"])
+        return _with_action_defaults(env, env.candidate_action(best_level, obs))
+    if policy == "oracle_escalation_aware":
+        # Escalation-aware ceiling (task #33/#34): honour the spec-attainability
+        # certificate.  A critical/high task that the env flags spec-UNattainable
+        # is REJECTED (-> routed to the escalation channel, not served-and-failed).
+        # Otherwise pick the min-payload service that is BOTH quality- and
+        # deadline-feasible (not merely success>0, which conflates the UTM axis);
+        # if none is deadline-feasible, reject rather than serve an infeasible one.
+        risk = str(obs.get("risk_level", ""))
+        spec_ok = bool(obs.get("spec_attainable", False))
+        if risk in ("critical", "high") and not spec_ok:
+            return _with_action_defaults(env, {"semantic_path": "reject", "service_level": -1})
+        feasible = []
+        for level in env.service_levels:
+            if int(level) == 0:
+                continue  # cache-only is compliance-banned for critical/high
+            metrics = env.candidate_metrics(level, obs)
+            info = env.evaluate_action(env.candidate_action(level, obs), obs)
+            if not bool(info.get("quality_violation", False)) and not bool(info.get("deadline_violation", False)):
+                feasible.append((metrics["payload_kb"], level))
+        if feasible:
+            return _with_action_defaults(env, env.candidate_action(min(feasible)[1], obs))
+        # no quality+deadline-feasible tx: reject (critical/high -> escalation).
+        if risk in ("critical", "high"):
+            return _with_action_defaults(env, {"semantic_path": "reject", "service_level": -1})
+        # normal: fall back to best-accuracy served (legacy oracle behaviour).
+        best_level = max((l for l in env.service_levels if l != 0),
+                         key=lambda level: env.candidate_metrics(level, obs)["accuracy"],
+                         default=env.service_levels[0])
         return _with_action_defaults(env, env.candidate_action(best_level, obs))
     raise ValueError(f"unknown policy: {policy}")
 
