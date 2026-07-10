@@ -65,13 +65,13 @@ M6_USES = 9.2215e4
 M6_ACC = {-5.0: 0.564, 0.0: 0.578, 5.0: 0.592, 10.0: 0.599, 15.0: 0.600, 20.0: 0.596}
 
 # Descriptive method names (paper-facing; internal codes stay in the CSVs).
-STYLE = {
-    "M0_naive":    ("#ff6b6b", "x", "Fixed-rate image"),
-    "M1_image":    ("#ffb454", "o", "Rate-adaptive image"),
-    "M2_analog":   ("#c678dd", "v", "Uncoded analog"),
-    "M6_djscc":    ("#8b5e3c", "P", "DJSCC (learned)"),
-    "M3_token":    ("#9aa7b4", "s", "Fixed token"),
-    "M4_adaptive": ("#5ad19a", "D", "Evidence routing (ours)"),
+STYLE = {  # color, marker, label, linestyle (distinct ls = grayscale-safe)
+    "M0_naive":    ("#ff6b6b", "x", "Fixed-rate image", ":"),
+    "M1_image":    ("#ffb454", "o", "Rate-adaptive image", "-"),
+    "M2_analog":   ("#c678dd", "v", "Uncoded analog", "--"),
+    "M6_djscc":    ("#8b5e3c", "P", "DJSCC (learned)", "-."),
+    "M3_token":    ("#9aa7b4", "s", "Fixed token", "-"),
+    "M4_adaptive": ("#5ad19a", "D", "Evidence routing (ours)", "-"),
 }
 ORDER = ["M4_adaptive", "M3_token", "M6_djscc", "M2_analog", "M1_image", "M0_naive"]
 F_IMG = {  # image-route (VLM-invoking) fraction per method
@@ -162,10 +162,9 @@ def main() -> None:
     for m in ORDER:
         pts = [(summary["per_method"][m][s]["j_per_answer"],
                 rows[m][s]["acc"], s) for s in snrs if s in rows[m]]
-        c, mk, lb = STYLE[m]
+        c, mk, lb, ls = STYLE[m]
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2,
-                ls="-" if m != "M4_adaptive" else "-",
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2, ls=ls,
                 zorder=5 if m == "M4_adaptive" else 3)
         if m == "M4_adaptive":  # Wilson bars
             for s, x, y in zip([p[2] for p in pts], xs, ys):
@@ -176,14 +175,35 @@ def main() -> None:
             e_hi = [energy_j(m, rows[m][s]["uses"], P_TX_HEAD, e_vlm_inc, E_DET_HI_J)[0] for s in snrs]
             for ylo_x, yhi_x, y in zip(e_lo, e_hi, ys):
                 ax.hlines(y, ylo_x, yhi_x, color=c, alpha=0.4, lw=2.2, zorder=2)
-    # annotate SNR direction on M4 and M1 (the -5 dB end is the rightmost
-    # point: center the label above/below it so it cannot clip at the edge)
-    for m, dy in (("M4_adaptive", 0.008), ("M1_image", -0.016)):
-        s0, s1 = snrs[0], snrs[-1]
-        for s, ha, k in ((s0, "center", 2.2), (s1, "right", 1.0)):
-            e = summary["per_method"][m][s]["j_per_answer"]
-            ax.annotate(f"{s:+.0f} dB", (e, rows[m][s]["acc"] + k * dy),
-                        fontsize=5.5, color=STYLE[m][0], ha=ha)
+    # C1: energy-controllable per-sample frontier (lambda sweep over the
+    # per-sample correctness predictors; scripts/p1_review_fix_analysis.py).
+    frontier_csv = out_dir / f"c1_frontier_{args.channel}.csv"
+    if frontier_csv.exists():
+        fr = sorted((float(r["E_j"]), float(r["acc"]))
+                    for r in csv.DictReader(open(frontier_csv)))
+        ax.plot([p[0] for p in fr], [p[1] for p in fr], color="#2f2f2f",
+                ls="--", lw=0.9, marker=".", ms=2.2, zorder=6,
+                label="Budget-tunable per-sample routing")
+        ax.annotate("energy price $\\lambda$ sweep", (0.55, 0.702),
+                    fontsize=5.5, color="#2f2f2f", ha="left")
+    # annotate SNR direction on M4 and M1 with offset-point labels placed in
+    # the empty regions (the -5 dB label previously collided with markers).
+    ann = {("M4_adaptive", snrs[-1]): ((0, 5), "center"),
+           ("M4_adaptive", snrs[0]): ((6, -7), "left"),
+           ("M1_image", snrs[-1]): ((-7, -1), "right"),
+           ("M1_image", snrs[0]): ((0, -12), "center")}
+    for (m, s), (off, ha) in ann.items():
+        e = summary["per_method"][m][s]["j_per_answer"]
+        ax.annotate(f"{s:+.0f} dB", (e, rows[m][s]["acc"]),
+                    textcoords="offset points", xytext=off,
+                    fontsize=5.5, color=STYLE[m][0], ha=ha,
+                    bbox=dict(fc="white", ec="none", alpha=0.65, pad=0.15))
+    # fixed-rate -5 dB outlier: name the mechanism inside the figure
+    e_n5 = summary["per_method"]["M0_naive"][snrs[0]]["j_per_answer"]
+    ax.annotate("fixed-rate @$-5$ dB:\ndigital cliff (FER${\\approx}$1)",
+                (e_n5, rows["M0_naive"][snrs[0]]["acc"]),
+                textcoords="offset points", xytext=(-8, 2), fontsize=5.0,
+                color=STYLE["M0_naive"][0], ha="right")
     ax.set_xscale("log")
     ax.set_xlabel("joint energy per answer (J)", fontsize=8)
     ax.set_ylabel("VQA accuracy (test)", fontsize=8)
@@ -201,8 +221,21 @@ def main() -> None:
     for m in ORDER:
         xs = [s for s in snrs if s in rows[m]]
         ys = [summary["per_method"][m][s]["answers_per_joule"] for s in xs]
-        c, mk, lb = STYLE[m]
-        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2)
+        c, mk, lb, ls = STYLE[m]
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2, ls=ls)
+    # direct plateau labels (values readable without chasing the legend)
+    apj = lambda m, s: summary["per_method"][m][s]["answers_per_joule"]
+    ax.annotate(f"{apj('M3_token', 20.0):.2f}", (-4.7, apj("M3_token", -5.0)),
+                textcoords="offset points", xytext=(0, -9), fontsize=5.5,
+                color=STYLE["M3_token"][0])
+    ax.annotate("0.043--0.047".replace("--", "–"),
+                (-4.7, apj("M4_adaptive", -5.0)),
+                textcoords="offset points", xytext=(0, 5), fontsize=5.5,
+                color="#2e9e6e")
+    ax.annotate("$\\approx$0.018 (all full-image pipelines)",
+                (2.0, apj("M1_image", 10.0)),
+                textcoords="offset points", xytext=(0, -11), fontsize=5.5,
+                color=STYLE["M1_image"][0])
     ax.set_yscale("log")
     ax.set_xlabel("SNR (dB)", fontsize=8)
     ax.set_ylabel("correct answers per joule", fontsize=8)
