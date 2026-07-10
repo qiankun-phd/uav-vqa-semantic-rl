@@ -33,7 +33,11 @@ import json
 from pathlib import Path
 
 import matplotlib
-matplotlib.rcParams.update({"xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "axes.labelsize": 8})
+matplotlib.rcParams.update({
+    "xtick.labelsize": 7, "ytick.labelsize": 7, "axes.labelsize": 8,
+    "pdf.fonttype": 42, "ps.fonttype": 42, "axes.linewidth": 0.6,
+    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+})
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -60,13 +64,14 @@ F_IMG_M4 = 410.0 / 936.0
 M6_USES = 9.2215e4
 M6_ACC = {-5.0: 0.564, 0.0: 0.578, 5.0: 0.592, 10.0: 0.599, 15.0: 0.600, 20.0: 0.596}
 
+# Descriptive method names (paper-facing; internal codes stay in the CSVs).
 STYLE = {
-    "M0_naive":    ("#ff6b6b", "x", "M0 naive digital (fixed-rate LDPC)"),
-    "M1_image":    ("#ffb454", "o", "M1 traditional (rate-adaptive image)"),
-    "M2_analog":   ("#c678dd", "v", "M2 uncoded analog (JSCC-lite)"),
-    "M6_djscc":    ("#8b5e3c", "P", "M6 compact DeepJSCC (learned)"),
-    "M3_token":    ("#9aa7b4", "s", "M3 fixed token"),
-    "M4_adaptive": ("#5ad19a", "D", "M4 ours (adaptive)"),
+    "M0_naive":    ("#ff6b6b", "x", "Fixed-rate image"),
+    "M1_image":    ("#ffb454", "o", "Rate-adaptive image"),
+    "M2_analog":   ("#c678dd", "v", "Uncoded analog"),
+    "M6_djscc":    ("#8b5e3c", "P", "DJSCC (learned)"),
+    "M3_token":    ("#9aa7b4", "s", "Fixed token"),
+    "M4_adaptive": ("#5ad19a", "D", "Evidence routing (ours)"),
 }
 ORDER = ["M4_adaptive", "M3_token", "M6_djscc", "M2_analog", "M1_image", "M0_naive"]
 F_IMG = {  # image-route (VLM-invoking) fraction per method
@@ -171,23 +176,24 @@ def main() -> None:
             e_hi = [energy_j(m, rows[m][s]["uses"], P_TX_HEAD, e_vlm_inc, E_DET_HI_J)[0] for s in snrs]
             for ylo_x, yhi_x, y in zip(e_lo, e_hi, ys):
                 ax.hlines(y, ylo_x, yhi_x, color=c, alpha=0.4, lw=2.2, zorder=2)
-    # annotate SNR direction on M4 and M1
+    # annotate SNR direction on M4 and M1 (the -5 dB end is the rightmost
+    # point: center the label above/below it so it cannot clip at the edge)
     for m, dy in (("M4_adaptive", 0.008), ("M1_image", -0.016)):
         s0, s1 = snrs[0], snrs[-1]
-        for s, ha in ((s0, "left"), (s1, "right")):
+        for s, ha, k in ((s0, "center", 2.2), (s1, "right", 1.0)):
             e = summary["per_method"][m][s]["j_per_answer"]
-            ax.annotate(f"{s:+.0f} dB", (e, rows[m][s]["acc"] + dy),
-                        fontsize=4.8, color=STYLE[m][0], ha=ha)
+            ax.annotate(f"{s:+.0f} dB", (e, rows[m][s]["acc"] + k * dy),
+                        fontsize=5.5, color=STYLE[m][0], ha=ha)
     ax.set_xscale("log")
     ax.set_xlabel("joint energy per answer (J)", fontsize=8)
     ax.set_ylabel("VQA accuracy (test)", fontsize=8)
     ax.grid(True, which="both", alpha=0.25)
-    ax.text(0.02, 0.97, "Rician K=6 dB", transform=ax.transAxes, fontsize=6,
+    ax.text(0.02, 0.97, "Rician K=6 dB", transform=ax.transAxes, fontsize=6.5,
             va="top")
-    ax.legend(fontsize=4.8, loc="lower right", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
+    ax.legend(fontsize=6.2, loc="lower left", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
     fig.tight_layout()
     for ext in ("pdf", "png"):
-        fig.savefig(out_dir / f"F5_pareto_energy.{ext}", dpi=150)
+        fig.savefig(out_dir / f"F5_pareto_energy.{ext}", dpi=300)
     plt.close(fig)
 
     # ---- F11: answers per joule vs SNR -------------------------------------
@@ -202,11 +208,11 @@ def main() -> None:
     ax.set_ylabel("correct answers per joule", fontsize=8)
     ax.grid(True, which="both", alpha=0.25)
     ax.text(0.02, 0.97, f"Rician K=6 dB, $P_{{\\mathrm{{tx}}}}$={P_TX_HEAD} W",
-            transform=ax.transAxes, fontsize=6, va="top")
-    ax.legend(fontsize=4.8, loc="center right", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
+            transform=ax.transAxes, fontsize=6.5, va="top")
+    ax.legend(fontsize=6.2, loc="center right", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
     fig.tight_layout()
     for ext in ("pdf", "png"):
-        fig.savefig(out_dir / f"F11_answers_per_joule.{ext}", dpi=150)
+        fig.savefig(out_dir / f"F11_answers_per_joule.{ext}", dpi=300)
     plt.close(fig)
 
     # ---- LaTeX snippets ----------------------------------------------------

@@ -22,6 +22,12 @@ import build_comparison_v2 as bc  # noqa: E402  (reuse split/policy/uses logic)
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams.update({
+    "font.size": 8, "axes.labelsize": 8, "xtick.labelsize": 7.5,
+    "ytick.labelsize": 7.5, "axes.linewidth": 0.6, "grid.linewidth": 0.4,
+    "pdf.fonttype": 42, "ps.fonttype": 42,
+    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+})
 import matplotlib.pyplot as plt  # noqa: E402
 
 
@@ -135,11 +141,17 @@ def main():
     methods = [m for m in ("M0_naive", "M1_image", "M2_analog", "M3_token", "M4_adaptive")
                if any(r[1] == m for r in rows)]
     snrs = sorted({r[2] for r in rows})
+    # Descriptive method names (paper-facing; internal codes stay in the CSV).
     style = {
         "M0_naive": "#ff6b6b", "M1_image": "#ffb454", "M2_analog": "#c678dd",
         "M3_token": "#9aa7b4", "M4_adaptive": "#5ad19a",
     }
-    fig, ax = plt.subplots(figsize=(8.2, 4.4))
+    label = {
+        "M0_naive": "Fixed-rate image", "M1_image": "Rate-adaptive image",
+        "M2_analog": "Uncoded analog", "M3_token": "Fixed token",
+        "M4_adaptive": "Evidence routing (ours)",
+    }
+    fig, ax = plt.subplots(figsize=(3.5, 2.6))
     x = np.arange(len(snrs)); w = 0.8 / max(len(methods), 1)
     for i, m in enumerate(methods):
         ups, txs, infs = [], [], []
@@ -148,22 +160,25 @@ def main():
             ups.append(rr[0][3] if rr else 0); txs.append(rr[0][4] if rr else 0)
             infs.append(rr[0][5] if rr else 0)
         base = np.array(ups); mid = np.array(txs)
-        ax.bar(x + i * w, ups, w, color=style[m], label=m.replace("_", " "))
+        ax.bar(x + i * w, ups, w, color=style[m], label=label[m])
         ax.bar(x + i * w, txs, w, bottom=base, color=style[m], alpha=0.55, hatch="//")
         ax.bar(x + i * w, infs, w, bottom=base + mid, color=style[m], alpha=0.30, hatch="..")
     ax.set_yscale("log")
+    ymax = max(r[6] for r in rows)
+    ax.set_ylim(top=ymax * 12)  # log-scale headroom so the legend clears the bars
     ax.set_xticks(x + 0.4 - w / 2); ax.set_xticklabels([f"{s:g}" for s in snrs])
-    ax.set_xlabel("SNR (dB)"); ax.set_ylabel("latency per query (s, log)")
-    ax.text(0.99, 0.97, {"awgn": "AWGN", "rayleigh": "Rayleigh",
-                         "rician": "Rician K=6 dB"}.get(ch, ch),
-            transform=ax.transAxes, va="top", ha="right", fontsize=9, fontweight="bold",
-            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
-    ax.text(0.01, 0.97, "solid=upload   //=tx-side detector   ..=inference",
-            transform=ax.transAxes, va="top", ha="left", fontsize=7.5, color="0.3")
-    ax.grid(True, alpha=0.3, axis="y", which="both"); ax.legend(fontsize=8, ncol=3)
-    fig.tight_layout()
+    ax.set_xlabel("SNR (dB)"); ax.set_ylabel("latency per query (s)")
+    ch_name = {"awgn": "AWGN", "rayleigh": "Rayleigh",
+               "rician": "Rician K=6 dB"}.get(ch, ch)
+    ax.text(0.01, 1.02, f"{ch_name}   |   solid = upload   // = tx-side detector"
+            "   .. = inference",
+            transform=ax.transAxes, va="bottom", ha="left", fontsize=6, color="0.3")
+    ax.grid(True, alpha=0.3, axis="y", which="both")
+    ax.legend(fontsize=5.8, ncol=2, loc="upper right", handlelength=1.2,
+              labelspacing=0.25, columnspacing=0.7, borderpad=0.3, framealpha=0.9)
+    fig.tight_layout(pad=0.4)
     for ext in ("png", "pdf"):
-        fig.savefig(f"{args.out_dir}/F3_latency_{args.tag}.{ext}", dpi=140)
+        fig.savefig(f"{args.out_dir}/F3_latency_{args.tag}.{ext}", dpi=300)
     print(f"wrote F3_latency_{args.tag} -> {args.out_dir}")
 
 

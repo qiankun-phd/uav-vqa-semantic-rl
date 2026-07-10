@@ -231,41 +231,68 @@ def draw_f8(rows, ch, out_dir, tag):
     rows: list of [channel, t_budget, snr_db(float), qtype, accuracy(float), n,
                    mean_tokens_sent(float), mean_payload_bytes(float),
                    mean_channel_uses(float)].
-    IEEE styling: no in-figure titles; per-panel operating point as a small label.
+    IEEE styling: no in-figure titles; per-panel operating point as a small
+    label.  Two outputs: `..._{tag}` (7.16 in, IEEE figure*/one-column review
+    layout) and `..._{tag}_col` (3.5 in, IEEE single column).
     """
+    plt.rcParams.update({
+        "pdf.fonttype": 42, "ps.fonttype": 42, "axes.linewidth": 0.6,
+        "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+    })
     sub = [r for r in rows if r[0] == ch]
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.3))
     colors = {"counting": "#e06c75", "comparison": "#61afef", "co_presence": "#98c379",
               "threshold": "#c678dd", "all": "#444444"}
-    for ax, snr in zip(axes[:2], (-5.0, 20.0)):
+    ch_tag = {"awgn": "AWGN", "rayleigh": "Rayleigh",
+              "rician": "Rician K=6 dB"}.get(ch, ch)
+
+    for variant, figsize, f_lab, f_tick, f_leg, f_tag in (
+            ("", (7.16, 2.3), 8, 7.5, 7, 7),
+            ("_col", (3.5, 1.55), 6.5, 5.5, 5.2, 5.2)):
+        fig, axes = plt.subplots(1, 3, figsize=figsize)
+        for ax, snr in zip(axes[:2], (-5.0, 20.0)):
+            for qt in list(QT_SYMBOLIC) + ["all"]:
+                pts = sorted([(r[6], r[4]) for r in sub if r[2] == snr and r[3] == qt])
+                if pts:
+                    ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-",
+                            color=colors[qt], label=qt, linewidth=1.1, markersize=2.6)
+            ax.set_xscale("log")
+            ax.set_xlabel("mean tokens sent (top-$t$)", fontsize=f_lab)
+            ax.grid(True, alpha=0.3)
+            ax.text(0.05, 0.05, f"SNR = {snr:g} dB", transform=ax.transAxes,
+                    va="bottom", ha="left", fontsize=f_tag, fontweight="bold",
+                    bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
+        ax = axes[2]
         for qt in list(QT_SYMBOLIC) + ["all"]:
-            pts = sorted([(r[6], r[4]) for r in sub if r[2] == snr and r[3] == qt])
+            pts = sorted([(r[8], r[4]) for r in sub if r[2] == 5.0 and r[3] == qt])
             if pts:
                 ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-",
-                        color=colors[qt], label=qt, linewidth=2, markersize=4)
-        ax.set_xscale("log"); ax.set_xlabel("mean tokens sent (top-t budget)")
-        ax.set_ylabel("accuracy"); ax.grid(True, alpha=0.3)
-        ax.text(0.03, 0.03, f"{ch}, SNR = {snr:g} dB", transform=ax.transAxes,
-                va="bottom", ha="left", fontsize=9, fontweight="bold",
+                        color=colors[qt], label=qt, linewidth=1.1, markersize=2.6)
+        ax.set_xscale("log")
+        # narrow (<1 decade) log range: fixed ticks, no minor labels
+        from matplotlib.ticker import FixedLocator, NullFormatter
+        ax.xaxis.set_major_locator(FixedLocator([1.2e4, 1.6e4, 2.0e4]))
+        ax.xaxis.set_major_formatter(
+            plt.FuncFormatter(lambda v, _p: f"{v/1e4:g}"))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+        ax.set_xlabel(r"uses / query ($\times 10^4$)", fontsize=f_lab)
+        ax.grid(True, alpha=0.3)
+        ax.text(0.05, 0.05, "SNR = 5 dB", transform=ax.transAxes,
+                va="bottom", ha="left", fontsize=f_tag, fontweight="bold",
                 bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
-    axes[0].legend(fontsize=8)
-    ax = axes[2]
-    for qt in list(QT_SYMBOLIC) + ["all"]:
-        pts = sorted([(r[8], r[4]) for r in sub if r[2] == 5.0 and r[3] == qt])
-        if pts:
-            ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-",
-                    color=colors[qt], label=qt, linewidth=2, markersize=4)
-    ax.set_xscale("log"); ax.set_xlabel("mean complex channel uses / query")
-    ax.set_ylabel("accuracy"); ax.grid(True, alpha=0.3)
-    ax.text(0.03, 0.03, f"{ch}, SNR = 5 dB (bandwidth axis)", transform=ax.transAxes,
-            va="bottom", ha="left", fontsize=9, fontweight="bold",
-            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.85))
-    fig.tight_layout()
-    for ext in ("png", "pdf"):
-        fig.savefig(f"{out_dir}/F8_token_budget_{tag}.{ext}", dpi=140,
-                    bbox_inches="tight")
-    plt.close(fig)
-    print(f"wrote F8_token_budget_{tag} -> {out_dir}")
+        for a in axes:
+            a.tick_params(labelsize=f_tick)
+        axes[0].set_ylabel("accuracy", fontsize=f_lab)
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="upper center", ncol=5, fontsize=f_leg,
+                   frameon=False, handlelength=1.5, columnspacing=1.0,
+                   bbox_to_anchor=(0.48, 1.02))
+        fig.text(0.995, 0.965, ch_tag, ha="right", va="top", fontsize=f_tag,
+                 fontweight="bold")
+        fig.tight_layout(rect=(0, 0, 1, 0.88), pad=0.4, w_pad=0.7)
+        for ext in ("png", "pdf"):
+            fig.savefig(f"{out_dir}/F8_token_budget_{tag}{variant}.{ext}", dpi=300)
+        plt.close(fig)
+    print(f"wrote F8_token_budget_{tag}[,_col] -> {out_dir}")
 
 
 if __name__ == "__main__":

@@ -34,12 +34,13 @@ plt.rcParams.update({
     "figure.dpi": 150,
 })
 
+# Descriptive method names (paper-facing; internal codes stay in the CSVs).
 SERVICE_STYLE = {
-    "M0_naive": dict(color="#7f7f7f", ls=":", marker="v", label="M0 fixed-rate image"),
-    "M1_image": dict(color="#d62728", ls="-", marker="o", label="M1 image (rate-adaptive)"),
-    "M4_adaptive": dict(color="#1f77b4", ls="-", marker="s", label="M4 adaptive (ours)"),
-    "M2_analog": dict(color="#ff7f0e", ls="--", marker="^", label="M2 analog image"),
-    "M3_token": dict(color="#2ca02c", ls="-", marker="D", label="M3 token"),
+    "M0_naive": dict(color="#7f7f7f", ls=":", marker="v", label="Fixed-rate image"),
+    "M1_image": dict(color="#d62728", ls="-", marker="o", label="Rate-adaptive image"),
+    "M4_adaptive": dict(color="#1f77b4", ls="-", marker="s", label="Evidence routing (ours)"),
+    "M2_analog": dict(color="#ff7f0e", ls="--", marker="^", label="Uncoded analog"),
+    "M3_token": dict(color="#2ca02c", ls="-", marker="D", label="Fixed token"),
 }
 ORDER = ["M0_naive", "M1_image", "M4_adaptive", "M2_analog", "M3_token"]
 
@@ -58,7 +59,7 @@ def make_f9() -> None:
         ax2.plot(g.snr_db, 100.0 * (1.0 - g.rel_capacity), color=st["color"], ls=st["ls"],
                  marker=st["marker"], ms=3, label=st["label"])
     ax1.axhline(default, color="k", ls="--", lw=0.8)
-    ax1.annotate(f"BUBBLES baseline ({default:.1f} m)", xy=(7.5, default - 2.6), fontsize=6.8)
+    ax1.annotate(f"BUBBLES baseline ({default:.1f} m)", xy=(7.5, 367.1), fontsize=6.8)
     ax1.set_ylim(366.5, 414)
     ax1.set_ylabel(r"separation minimum $d_{\mathrm{TC}}$ (m)")
     ax1.grid(alpha=0.25, lw=0.4)

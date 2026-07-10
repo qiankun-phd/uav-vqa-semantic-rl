@@ -21,6 +21,12 @@ from collections import defaultdict
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams.update({
+    "font.size": 8, "axes.labelsize": 8, "xtick.labelsize": 7,
+    "ytick.labelsize": 7.5, "axes.linewidth": 0.6, "grid.linewidth": 0.4,
+    "pdf.fonttype": 42, "ps.fonttype": 42,
+    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+})
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
@@ -111,25 +117,25 @@ def main():
         print(f"  {q:12s} {REASONING[q]:11s} token={s['token']:.3f} "
               f"image={s['image']:.3f}  Delta={s['delta']:+.3f} +/-{s['ci']:.3f}")
 
-    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
     bars = ax.bar(qt, delta, color=colors, edgecolor="#2a3340",
-                  yerr=ci, error_kw=dict(ecolor="0.25", lw=1.0, capsize=3))
-    ax.axhline(0, color="#2a3340", lw=1)
+                  yerr=ci, error_kw=dict(ecolor="0.25", lw=0.8, capsize=2))
+    ax.axhline(0, color="#2a3340", lw=0.8)
     for b, d, e in zip(bars, delta, ci):
         off = (e + 0.010) if d >= 0 else -(e + 0.020)
         ax.text(b.get_x() + b.get_width() / 2, d + off,
-                f"{d:+.3f}", ha="center", fontsize=9)
+                f"{d:+.3f}", ha="center", fontsize=6.5)
     ax.set_ylabel("token-gain  Δ = acc(token) − acc(image)")
     ax.text(0.02, 0.95, "Δ>0 → detector token wins\nΔ<0 → image wins",
-            transform=ax.transAxes, va="top", fontsize=9,
+            transform=ax.transAxes, va="top", fontsize=6.5,
             bbox=dict(boxstyle="round", fc="#f2f6ff", ec="#4ea1ff"))
     ax.legend(handles=[Patch(color="#5ad19a", label="symbolic (count-based)"),
                        Patch(color="#ffb454", label="perceptual (existence)")],
-              loc="upper right", fontsize=9)
+              loc="upper right", fontsize=6.5)
     ax.grid(axis="y", alpha=0.3)
-    fig.tight_layout()
+    fig.tight_layout(pad=0.4)
     for ext in ("png", "pdf"):
-        fig.savefig(f"outputs/figures/comparison/F6_complementarity.{ext}", dpi=140)
+        fig.savefig(f"outputs/figures/comparison/F6_complementarity.{ext}", dpi=300)
     print("wrote F6_complementarity")
 
 

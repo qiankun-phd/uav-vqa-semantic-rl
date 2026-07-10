@@ -23,6 +23,10 @@ import build_comparison_v2 as bc  # noqa: E402
 
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")
+matplotlib.rcParams.update({
+    "pdf.fonttype": 42, "ps.fonttype": 42, "axes.linewidth": 0.5,
+    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+})
 import matplotlib.pyplot as plt  # noqa: E402
 
 
@@ -93,27 +97,42 @@ def main():
     print(f"wrote {len(all_rows)} rows -> {args.out}")
 
     # ---- F7: heatmaps (qtype=all), one panel per channel ----
+    # Sized for an IEEE single column (3.5 in): shared color scale + one
+    # colorbar; y tick labels only on the first panel.
     chs = [c for c in bc.CHANNELS if c in mats]
-    fig, axes = plt.subplots(1, len(chs), figsize=(4.6 * len(chs), 4.2), squeeze=False)
-    for ax, ch in zip(axes[0], chs):
+    fig, axes = plt.subplots(1, len(chs), figsize=(3.5, 1.5), squeeze=False)
+    allv = [v for c in chs for row in mats[c][1] for v in row if v is not None]
+    vmin, vmax = min(allv), max(allv)
+    thr = vmin + 0.55 * (vmax - vmin)
+    im = None
+    for k, (ax, ch) in enumerate(zip(axes[0], chs)):
         snrs, mat = mats[ch]
         vals = [[v if v is not None else float("nan") for v in row] for row in mat]
-        im = ax.imshow(vals, origin="lower", cmap="viridis", aspect="auto")
-        ax.set_xticks(range(len(snrs))); ax.set_xticklabels([f"{bc.snr_val(s):g}" for s in snrs])
-        ax.set_yticks(range(len(snrs))); ax.set_yticklabels([f"{bc.snr_val(s):g}" for s in snrs])
-        ax.set_xlabel("true SNR (dB)"); ax.set_ylabel("assumed SNR at selection (dB)")
-        ax.text(0.02, 1.02, {"awgn": "AWGN", "rayleigh": "Rayleigh",
+        im = ax.imshow(vals, origin="lower", cmap="viridis", aspect="auto",
+                       vmin=vmin, vmax=vmax)
+        ax.set_xticks(range(len(snrs)))
+        ax.set_xticklabels([f"{bc.snr_val(s):g}" for s in snrs], fontsize=5)
+        ax.set_yticks(range(len(snrs)))
+        if k == 0:
+            ax.set_yticklabels([f"{bc.snr_val(s):g}" for s in snrs], fontsize=5)
+            ax.set_ylabel("assumed SNR (dB)", fontsize=6.5)
+        else:
+            ax.set_yticklabels([])
+        ax.set_xlabel("true SNR (dB)", fontsize=6.5)
+        ax.text(0.02, 1.04, {"awgn": "AWGN", "rayleigh": "Rayleigh",
                              "rician": "Rician K=6 dB"}.get(ch, ch),
-                transform=ax.transAxes, va="bottom", ha="left", fontsize=9, fontweight="bold")
+                transform=ax.transAxes, va="bottom", ha="left", fontsize=6,
+                fontweight="bold")
         for i in range(len(snrs)):
             for j in range(len(snrs)):
                 if vals[i][j] == vals[i][j]:
                     ax.text(j, i, f"{vals[i][j]:.2f}", ha="center", va="center",
-                            fontsize=7, color="white" if vals[i][j] < 0.64 else "black")
-        fig.colorbar(im, ax=ax, fraction=0.046)
-    fig.tight_layout()
+                            fontsize=4.2,
+                            color="white" if vals[i][j] < thr else "black")
+    cbar = fig.colorbar(im, ax=axes[0].tolist(), fraction=0.03, pad=0.02)
+    cbar.ax.tick_params(labelsize=5)
     for ext in ("png", "pdf"):
-        fig.savefig(f"{args.out_dir}/F7_mismatch_{args.tag}.{ext}", dpi=140, bbox_inches="tight")
+        fig.savefig(f"{args.out_dir}/F7_mismatch_{args.tag}.{ext}", dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote F7_mismatch_{args.tag} -> {args.out_dir}")
 
