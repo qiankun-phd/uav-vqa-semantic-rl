@@ -33,6 +33,7 @@ import json
 from pathlib import Path
 
 import matplotlib
+matplotlib.rcParams.update({"xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "axes.labelsize": 8})
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -152,58 +153,57 @@ def main() -> None:
             }
 
     # ---- F5 (energy axis): accuracy vs J/answer, log x ---------------------
-    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    fig, ax = plt.subplots(figsize=(3.4, 2.7))
     for m in ORDER:
         pts = [(summary["per_method"][m][s]["j_per_answer"],
                 rows[m][s]["acc"], s) for s in snrs if s in rows[m]]
         c, mk, lb = STYLE[m]
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.4, ms=6,
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2,
                 ls="-" if m != "M4_adaptive" else "-",
                 zorder=5 if m == "M4_adaptive" else 3)
         if m == "M4_adaptive":  # Wilson bars
             for s, x, y in zip([p[2] for p in pts], xs, ys):
                 lc, uc = rows[m][s]["lcb"], rows[m][s]["ucb"]
-                ax.vlines(x, lc, uc, color=c, alpha=0.55, lw=1.1, zorder=4)
+                ax.vlines(x, lc, uc, color=c, alpha=0.55, lw=0.9, zorder=4)
         if m == "M3_token":  # Jetson detector-energy band (dominates M3 E)
             e_lo = [energy_j(m, rows[m][s]["uses"], P_TX_HEAD, e_vlm_inc, E_DET_LO_J)[0] for s in snrs]
             e_hi = [energy_j(m, rows[m][s]["uses"], P_TX_HEAD, e_vlm_inc, E_DET_HI_J)[0] for s in snrs]
             for ylo_x, yhi_x, y in zip(e_lo, e_hi, ys):
-                ax.hlines(y, ylo_x, yhi_x, color=c, alpha=0.4, lw=3, zorder=2)
+                ax.hlines(y, ylo_x, yhi_x, color=c, alpha=0.4, lw=2.2, zorder=2)
     # annotate SNR direction on M4 and M1
     for m, dy in (("M4_adaptive", 0.008), ("M1_image", -0.016)):
         s0, s1 = snrs[0], snrs[-1]
         for s, ha in ((s0, "left"), (s1, "right")):
             e = summary["per_method"][m][s]["j_per_answer"]
             ax.annotate(f"{s:+.0f} dB", (e, rows[m][s]["acc"] + dy),
-                        fontsize=7, color=STYLE[m][0], ha=ha)
+                        fontsize=4.8, color=STYLE[m][0], ha=ha)
     ax.set_xscale("log")
-    ax.set_xlabel(f"measured joint energy per answered question (J), "
-                  f"$P_{{\\mathrm{{tx}}}}$={P_TX_HEAD} W, incremental compute")
-    ax.set_ylabel("VQA accuracy (test)")
+    ax.set_xlabel("joint energy per answer (J)", fontsize=8)
+    ax.set_ylabel("VQA accuracy (test)", fontsize=8)
     ax.grid(True, which="both", alpha=0.25)
-    ax.text(0.02, 0.97, "Rician K=6 dB", transform=ax.transAxes, fontsize=8,
+    ax.text(0.02, 0.97, "Rician K=6 dB", transform=ax.transAxes, fontsize=6,
             va="top")
-    ax.legend(fontsize=7.5, loc="lower right")
+    ax.legend(fontsize=4.8, loc="lower right", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(out_dir / f"F5_pareto_energy.{ext}", dpi=150)
     plt.close(fig)
 
     # ---- F11: answers per joule vs SNR -------------------------------------
-    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    fig, ax = plt.subplots(figsize=(3.4, 2.7))
     for m in ORDER:
         xs = [s for s in snrs if s in rows[m]]
         ys = [summary["per_method"][m][s]["answers_per_joule"] for s in xs]
         c, mk, lb = STYLE[m]
-        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.4, ms=6)
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.0, ms=3.2)
     ax.set_yscale("log")
-    ax.set_xlabel("SNR (dB)")
-    ax.set_ylabel("correct answers per joule")
+    ax.set_xlabel("SNR (dB)", fontsize=8)
+    ax.set_ylabel("correct answers per joule", fontsize=8)
     ax.grid(True, which="both", alpha=0.25)
     ax.text(0.02, 0.97, f"Rician K=6 dB, $P_{{\\mathrm{{tx}}}}$={P_TX_HEAD} W",
-            transform=ax.transAxes, fontsize=8, va="top")
-    ax.legend(fontsize=7.5, loc="center right")
+            transform=ax.transAxes, fontsize=6, va="top")
+    ax.legend(fontsize=4.8, loc="center right", handlelength=1.4, labelspacing=0.25, borderpad=0.3)
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(out_dir / f"F11_answers_per_joule.{ext}", dpi=150)
