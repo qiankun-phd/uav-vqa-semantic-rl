@@ -69,7 +69,7 @@ def main():
     channels = [c for c in ["awgn", "rayleigh", "rician"] if any(r["channel"] == c for r in rows)]
 
     # ---- F1: 3-panel acc vs SNR (qtype=all, split=test); figure* width ----
-    fig, axes = plt.subplots(1, len(channels), figsize=(7.16, 2.15), sharey=True)
+    fig, axes = plt.subplots(1, len(channels), figsize=(7.16, 1.9), sharey=True)
     if len(channels) == 1:
         axes = [axes]
     # Wilson 95% band drawn for the adaptive policy and the two key baselines.
@@ -97,7 +97,7 @@ def main():
     fig.legend(handles, labels, loc="upper center", ncol=4, fontsize=7,
                frameon=False, borderaxespad=0.1, handlelength=1.8,
                columnspacing=1.0, bbox_to_anchor=(0.5, 1.02))
-    fig.tight_layout(rect=(0, 0, 1, 0.85), pad=0.4, w_pad=0.8)
+    fig.tight_layout(rect=(0, 0, 1, 0.83), pad=0.4, w_pad=0.8)
     for ext in ("png", "pdf"):
         fig.savefig(f"{args.out_dir}/F1_acc_snr_3panel_{args.tag}.{ext}",
                     dpi=300)
@@ -106,7 +106,7 @@ def main():
     # ---- F2: cliff effect (one channel); single-column width ----
     cliff_ch = args.cliff_channel
     if any(r["channel"] == cliff_ch for r in rows):
-        fig, ax = plt.subplots(figsize=(3.5, 2.5))
+        fig, ax = plt.subplots(figsize=(3.5, 2.35))
         for m in ["M0_errorfree", "M5_oracle", "M4_adaptive", "M1_image", "M2_analog", "M0_naive"]:
             pts = sorted([(r["snr_db"], r["accuracy"]) for r in rows
                           if r["channel"] == cliff_ch and r["method"] == m and r["qtype"] == "all"])
@@ -135,7 +135,7 @@ def main():
     qtypes = sorted({r["qtype"] for r in rows if r["qtype"] not in ("all",)})
     methods = [m for m in ORDER if any(r["method"] == m for r in rows)]
     import numpy as np
-    fig, ax = plt.subplots(figsize=(3.5, 2.7))
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
     x = np.arange(len(qtypes)); w = 0.8 / max(len(methods), 1)
     for i, m in enumerate(methods):
         vals, lo, hi = [], [], []
@@ -170,7 +170,7 @@ def main():
 
     # ---- F5: Pareto acc vs channel uses per query (unified analog/digital axis) ----
     use_uses = any(r["mean_channel_uses"] > 0 for r in rows)
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    fig, ax = plt.subplots(figsize=(3.5, 2.35))
     pareto_methods = (["M0_naive", "M1_image", "M2_analog", "M3_token", "M4_adaptive"]
                       if use_uses else ["M1_image", "M3_token", "M4_adaptive"])
     xkey = "mean_channel_uses" if use_uses else "mean_payload_bytes"

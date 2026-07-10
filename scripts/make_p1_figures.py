@@ -49,7 +49,7 @@ def make_f9() -> None:
     df = pd.read_csv(REPO / "outputs/reports/separation_v2/sepcap_peak_shared.csv")
     sub = df[(df.channel == "rayleigh") & (df.sigma_band == 2)]
     default = float(sub.d_TC_default_m.iloc[0])
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.45, 3.7), sharex=True,
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.45, 3.35), sharex=True,
                                    gridspec_kw={"hspace": 0.12})
     for svc in ORDER:
         g = sub[sub.service == svc].sort_values("snr_db")

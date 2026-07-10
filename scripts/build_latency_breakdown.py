@@ -151,7 +151,7 @@ def main():
         "M2_analog": "Uncoded analog", "M3_token": "Fixed token",
         "M4_adaptive": "Evidence routing (ours)",
     }
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    fig, ax = plt.subplots(figsize=(3.5, 2.4))
     x = np.arange(len(snrs)); w = 0.8 / max(len(methods), 1)
     for i, m in enumerate(methods):
         ups, txs, infs = [], [], []

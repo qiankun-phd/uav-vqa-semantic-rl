@@ -117,7 +117,7 @@ def main():
         print(f"  {q:12s} {REASONING[q]:11s} token={s['token']:.3f} "
               f"image={s['image']:.3f}  Delta={s['delta']:+.3f} +/-{s['ci']:.3f}")
 
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    fig, ax = plt.subplots(figsize=(3.5, 2.3))
     bars = ax.bar(qt, delta, color=colors, edgecolor="#2a3340",
                   yerr=ci, error_kw=dict(ecolor="0.25", lw=0.8, capsize=2))
     ax.axhline(0, color="#2a3340", lw=0.8)
