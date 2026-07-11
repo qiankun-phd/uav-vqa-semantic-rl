@@ -8,16 +8,23 @@ outputs/energy/gpu_power_phases.json with the identical energy model
 outputs/figures/naturefig/. It does NOT rewrite energy_summary.json or the
 LaTeX table snippets -- the numbers of record stay untouched.
 
-Design deltas vs the previous assets (data unchanged):
-  (a) F5_pareto_energy: grey staircase marks the empirical energy-accuracy
-      Pareto frontier over all plotted operating points; SNR endpoint labels
-      get short leaders so they cannot sit on the markers; the measured VLM
-      compute floor (incremental J/answer) is a light vertical guide that
-      explains why four image pipelines pile up in one column; panel letter.
+Content baseline = make_energy_figures.py at 84d1e11 (paper commit 6eb551a):
+  (a) keeps the C1 budget-tunable per-sample routing frontier (lambda sweep,
+      outputs/energy/c1_frontier_<channel>.csv, drawn point-for-point), the
+      "energy price lambda sweep" tag, the fixed-rate digital-cliff note and
+      the grayscale-safe per-method linestyles;
+  (b) keeps the three direct plateau labels (1.46 / 0.043--0.047 /
+      ~0.018 all full-image pipelines) and the same linestyles.
+
+Design deltas vs those assets (presentation only, data unchanged):
+  (a) F5_pareto_energy: SNR endpoint labels get short leaders so they cannot
+      sit on the markers; the measured VLM compute floor (incremental
+      J/answer) is a light vertical guide that explains why four image
+      pipelines pile up in one column; hero-curve emphasis; panel letter.
+      (The earlier grey empirical-Pareto staircase is dropped: the lambda
+      frontier is the frontier object of record and the two would overlap.)
   (b) F11_answers_per_joule: y-headroom so the fixed-token line is not
-      pinned to the frame; condition tag moved into the empty mid-band;
-      endpoint value labels (1.46 / 0.047) tie the panel to the text; panel
-      letter.
+      pinned to the frame; panel letter.
 """
 from __future__ import annotations
 
@@ -50,13 +57,13 @@ M6_USES = 9.2215e4
 M6_ACC = {-5.0: 0.564, 0.0: 0.578, 5.0: 0.592, 10.0: 0.599, 15.0: 0.600,
           20.0: 0.596}
 
-STYLE = {
-    "M0_naive":    ("#ff6b6b", "x", "Fixed-rate image"),
-    "M1_image":    ("#ffb454", "o", "Rate-adaptive image"),
-    "M2_analog":   ("#c678dd", "v", "Uncoded analog"),
-    "M6_djscc":    ("#8b5e3c", "P", "DJSCC (learned)"),
-    "M3_token":    ("#9aa7b4", "s", "Fixed token"),
-    "M4_adaptive": ("#5ad19a", "D", "Evidence routing (ours)"),
+STYLE = {  # color, marker, label, linestyle (distinct ls = grayscale-safe)
+    "M0_naive":    ("#ff6b6b", "x", "Fixed-rate image", ":"),
+    "M1_image":    ("#ffb454", "o", "Rate-adaptive image", "-"),
+    "M2_analog":   ("#c678dd", "v", "Uncoded analog", "--"),
+    "M6_djscc":    ("#8b5e3c", "P", "DJSCC (learned)", "-."),
+    "M3_token":    ("#9aa7b4", "s", "Fixed token", "-"),
+    "M4_adaptive": ("#5ad19a", "D", "Evidence routing (ours)", "-"),
 }
 ORDER = ["M4_adaptive", "M3_token", "M6_djscc", "M2_analog", "M1_image",
          "M0_naive"]
@@ -85,17 +92,6 @@ def energy_j(method, uses, p_tx, e_vlm, e_det=E_DET_MID_J):
     return e_tx + f * e_vlm + (1.0 - f) * e_det
 
 
-def pareto_frontier(points):
-    """Non-dominated set (min energy, max accuracy) of (E, acc) pairs."""
-    pts = sorted(points)
-    front, best = [], -1.0
-    for e, a in pts:
-        if a > best:
-            front.append((e, a))
-            best = a
-    return front
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default="outputs/reports/comparison_v3_5qt.csv")
@@ -116,24 +112,17 @@ def main() -> None:
 
     # ---- (a) F5: accuracy vs J/answer, log x -------------------------------
     fig, ax = plt.subplots(figsize=(3.4, 2.7))
-    # Pareto frontier over every plotted operating point (grey staircase,
-    # drawn first so data sits on top).
-    all_pts = [(E[m][s], rows[m][s]["acc"]) for m in ORDER for s in E[m]]
-    front = pareto_frontier(all_pts)
-    ax.step([p[0] for p in front], [p[1] for p in front], where="post",
-            color="0.55", lw=0.7, ls=(0, (4, 2)), alpha=0.9, zorder=1)
-    ax.text(1.6, front[0][1] + 0.010, "Pareto frontier", fontsize=5.8,
-            color="0.35", ha="left", va="bottom")
     # measured VLM compute floor (incremental) -- explains the image column
     ax.axvline(e_vlm_inc, color="0.6", lw=0.6, ls=":", zorder=0)
-    ax.text(e_vlm_inc * 0.88, 0.415, "VLM compute floor",
+    ax.text(e_vlm_inc * 0.88, 0.435, "VLM compute floor",
             rotation=90, fontsize=5.5, color="0.4", ha="right", va="bottom")
     for m in ORDER:
-        c, mk, lb = STYLE[m]
+        c, mk, lb, ls = STYLE[m]
         xs = [E[m][s] for s in snrs if s in E[m]]
         ys = [rows[m][s]["acc"] for s in snrs if s in E[m]]
         hero = m == "M4_adaptive"
-        ax.plot(xs, ys, marker=mk, color=c, label=lb, lw=1.3 if hero else 0.9,
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, ls=ls,
+                lw=1.3 if hero else 0.9,
                 ms=3.6 if hero else 3.0, zorder=6 if hero else 3)
         if hero:  # Wilson bars (as before)
             for s in snrs:
@@ -147,6 +136,23 @@ def main() -> None:
                               E_DET_HI_J)
                 ax.hlines(rows[m][s]["acc"], lo, hi, color=c, alpha=0.4,
                           lw=2.2, zorder=2)
+    # C1: energy-controllable per-sample frontier (lambda sweep over the
+    # per-sample correctness predictors; scripts/p1_review_fix_analysis.py).
+    # Content of record -- drawn point-for-point from the frontier CSV.
+    frontier_csv = REPO / "outputs/energy" / f"c1_frontier_{args.channel}.csv"
+    if frontier_csv.exists():
+        fr = sorted((float(r["E_j"]), float(r["acc"]))
+                    for r in csv.DictReader(open(frontier_csv)))
+        ax.plot([p[0] for p in fr], [p[1] for p in fr], color="#2f2f2f",
+                ls="--", lw=0.9, marker=".", ms=2.2, zorder=7,
+                label="Budget-tunable per-sample routing")
+        ax.annotate("energy price $\\lambda$ sweep", (0.55, 0.702),
+                    fontsize=5.5, color="#2f2f2f", ha="left")
+    # fixed-rate -5 dB outlier: name the mechanism inside the figure
+    ax.annotate("fixed-rate @$-5$ dB:\ndigital cliff (FER${\\approx}$1)",
+                (E["M0_naive"][snrs[0]], rows["M0_naive"][snrs[0]]["acc"]),
+                textcoords="offset points", xytext=(-8, 2), fontsize=5.0,
+                color=STYLE["M0_naive"][0], ha="right")
     # SNR endpoint labels with short leaders (off the markers, off the spine)
     s_lo, s_hi = snrs[0], snrs[-1]
     for m, s, fx, dy, ha, va in (
@@ -179,30 +185,36 @@ def main() -> None:
     # ---- (b) F11: answers per joule vs SNR ---------------------------------
     fig, ax = plt.subplots(figsize=(3.4, 2.7))
     for m in ORDER:
-        c, mk, lb = STYLE[m]
+        c, mk, lb, ls = STYLE[m]
         xs = [s for s in snrs if s in E[m]]
         ys = [rows[m][s]["acc"] / E[m][s] for s in xs]
-        hero = m in ("M4_adaptive", "M3_token")
-        ax.plot(xs, ys, marker=mk, color=c, label=lb,
-                lw=1.3 if m == "M4_adaptive" else 0.9, ms=3.2)
-        if m == "M3_token":
-            ax.annotate(f"{ys[-1]:.2f}", xy=(xs[-1], ys[-1]),
-                        xytext=(xs[-1] - 0.4, ys[-1] * 1.35), fontsize=5.8,
-                        color=c, ha="right", va="bottom")
-        if m == "M4_adaptive":
-            ax.annotate(f"{ys[-1]:.3f}", xy=(xs[-1], ys[-1]),
-                        xytext=(xs[-1] - 0.4, ys[-1] * 1.40), fontsize=5.8,
-                        color=c, ha="right", va="bottom")
+        ax.plot(xs, ys, marker=mk, color=c, label=lb, ls=ls,
+                lw=1.3 if m == "M4_adaptive" else 0.9, ms=3.2,
+                zorder=5 if m == "M4_adaptive" else 3)
+    # direct plateau labels (values readable without chasing the legend);
+    # content of record: 1.46 / 0.043--0.047 / ~0.018.
+    apj = lambda m, s: rows[m][s]["acc"] / E[m][s]
+    ax.annotate(f"{apj('M3_token', 20.0):.2f}", (-4.7, apj("M3_token", -5.0)),
+                textcoords="offset points", xytext=(0, -9), fontsize=5.5,
+                color=STYLE["M3_token"][0])
+    ax.annotate("0.043--0.047".replace("--", "–"),
+                (-4.7, apj("M4_adaptive", -5.0)),
+                textcoords="offset points", xytext=(0, 5), fontsize=5.5,
+                color="#2e9e6e")
+    ax.annotate("$\\approx$0.018 (all full-image pipelines)",
+                (2.0, apj("M1_image", 10.0)),
+                textcoords="offset points", xytext=(0, -11), fontsize=5.5,
+                color=STYLE["M1_image"][0])
     ax.set_yscale("log")
     ax.set_ylim(top=4.0)  # headroom: token line off the frame
     ax.set_xlabel("SNR (dB)", fontsize=8)
     ax.set_ylabel("correct answers per joule", fontsize=8)
     ax.grid(True, which="both", alpha=0.25)
-    ax.text(0.97, 0.78, f"Rician K=6 dB, $P_{{\\mathrm{{tx}}}}$={P_TX_HEAD} W",
-            transform=ax.transAxes, fontsize=6.5, va="top", ha="right")
+    ax.text(0.02, 0.97, f"Rician K=6 dB, $P_{{\\mathrm{{tx}}}}$={P_TX_HEAD} W",
+            transform=ax.transAxes, fontsize=6.5, va="top")
     ax.text(-0.16, 1.02, "(b)", transform=ax.transAxes, fontsize=9,
             fontweight="bold", va="bottom")
-    ax.legend(fontsize=6.2, loc="center left", handlelength=1.4,
+    ax.legend(fontsize=6.2, loc="center right", handlelength=1.4,
               labelspacing=0.25, borderpad=0.3)
     fig.tight_layout()
     for ext in ("pdf", "svg"):
