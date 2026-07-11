@@ -99,8 +99,8 @@ def main() -> None:
     ax.set_xticks(snrs)
     ax.set_ylim(0.3, 60)
     ax.grid(True, which="both", alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.text(0.03, 0.97, "Rician K=6 dB, incremental compute",
             transform=ax.transAxes, fontsize=6.5, va="top")
     ax.legend(loc="center right", bbox_to_anchor=(1.0, 0.40), frameon=False,

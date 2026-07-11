@@ -198,8 +198,8 @@ def main() -> None:
     ax_b.set_title("(b)", loc="left", fontsize=9, fontweight="bold", pad=2)
 
     for ax in (ax_a, ax_b):
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(True)
+        ax.spines["right"].set_visible(True)
 
     print("=== panel (a) per-arm (pooled 3ch test) ===")
     for q in ORDER:

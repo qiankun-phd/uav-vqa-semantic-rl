@@ -77,8 +77,8 @@ def main() -> None:
     ax.set_ylabel("accuracy (Rician, test)")
     ax.set_ylim(0, 1.0)
     ax.grid(axis="y", alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.legend(handles=[
         Patch(fc=C_TOKEN, hatch="///", ec="white",
               label="fixed token (VLM-agnostic symbolic decoder)"),

@@ -79,8 +79,8 @@ def main() -> None:
     ax.set_xticks(sorted(acc["M4_adaptive"]))
     ax.set_ylim(0.44, 0.72)
     ax.grid(True, alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.text(0.985, 0.03,
             f"{DDAG}: presence+counting subset\n(analog coverage)",
             transform=ax.transAxes, fontsize=6.0, color="0.35",

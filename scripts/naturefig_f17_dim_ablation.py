@@ -77,8 +77,8 @@ def main() -> None:
     ax.set_xlim(0.628, 0.6775)
     ax.set_ylim(0.4, len(ROWS) + 0.6)
     ax.grid(axis="x", alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.annotate("further features: $\\leq\\pm0.003$",
                 xy=(0.6595, 4.4), fontsize=6.2, color="0.35", ha="right")
     fig.tight_layout()

@@ -114,8 +114,8 @@ def main() -> None:
     ax.set_ylabel("energy per answered question (J)")
     ax.set_ylim(0, 41.5)
     ax.grid(axis="y", alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.text(0.02, 0.97, "Rician K=6 dB, $-5$ dB, "
             "$P_{\\mathrm{tx}}{=}0.5$ W", transform=ax.transAxes,
             fontsize=6.5, va="top")
