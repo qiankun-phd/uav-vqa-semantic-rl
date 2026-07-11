@@ -24,8 +24,10 @@ matplotlib.use("Agg")
 matplotlib.rcParams.update({
     "font.size": 8, "pdf.fonttype": 42, "ps.fonttype": 42,
     "svg.fonttype": "none",
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Nimbus Roman", "Liberation Serif",
+                   "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
     "hatch.linewidth": 0.6,
 })
 import matplotlib.pyplot as plt

@@ -29,7 +29,10 @@ matplotlib.rcParams.update({
     "xtick.labelsize": 7.5, "ytick.labelsize": 7.5, "legend.fontsize": 7,
     "lines.linewidth": 1.1, "axes.linewidth": 0.6, "grid.linewidth": 0.4,
     "pdf.fonttype": 42, "ps.fonttype": 42, "svg.fonttype": "none",
-    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Nimbus Roman", "Liberation Serif",
+                   "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
 })
 import matplotlib.pyplot as plt
 

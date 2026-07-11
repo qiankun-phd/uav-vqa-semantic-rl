@@ -37,8 +37,10 @@ matplotlib.rcParams.update({
     "ytick.labelsize": 7.5, "axes.linewidth": 0.6, "grid.linewidth": 0.4,
     "legend.frameon": False,
     "pdf.fonttype": 42, "ps.fonttype": 42, "svg.fonttype": "none",
-    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans",
-                        "DejaVu Sans"],
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Nimbus Roman", "Liberation Serif",
+                   "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
 })
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -154,6 +156,9 @@ def main() -> None:
     ax_a.set_title("(a)", loc="left", fontsize=9, fontweight="bold", pad=2)
 
     # ---- (b) Delta with clustered-bootstrap CI, both datasets --------------
+    # Enhanced (table-to-figure batch): this panel now IS the manuscript's
+    # former Table `tab:comp` -- each point carries its numeric Delta of
+    # record, with a dagger when the clustered-bootstrap CI crosses zero.
     ax_b.axhline(0, color=C_INK, lw=0.8)
     for i, q in enumerate(ORDER):
         for dx, src, color, filled in ((-0.13, vd, C_VD, True),
@@ -162,6 +167,14 @@ def main() -> None:
             ax_b.errorbar(i + dx, d, yerr=[[d - lo], [hi - d]], fmt="D",
                           ms=4, color=color, mfc=color if filled else "white",
                           ecolor=color, elinewidth=1.0, capsize=2, zorder=3)
+            dag = "$^\\dagger$" if src[q]["ci_crosses_zero"] else ""
+            above = filled  # VisDrone label above its CI, DroneVehicle below
+            ax_b.annotate(f"{d:+.3f}{dag}",
+                          xy=(i + dx, hi if above else lo),
+                          textcoords="offset points",
+                          xytext=(0, 2.5 if above else -3.0),
+                          ha="center", va="bottom" if above else "top",
+                          fontsize=5.8, color=color, zorder=4)
     ax_b.set_xticks(list(xs))
     ax_b.set_xticklabels(LABELS)
     ax_b.set_ylabel("$\\Delta$ = acc(token) $-$ acc(image)")
@@ -178,7 +191,7 @@ def main() -> None:
                label="VisDrone (primary)"),
         Line2D([], [], marker="D", ls="", ms=4, color=C_DV, mfc="white",
                label="DroneVehicle")],
-        loc="upper left", bbox_to_anchor=(0.0, 1.0), fontsize=7,
+        loc="lower left", bbox_to_anchor=(0.0, 0.02), fontsize=7,
         handletextpad=0.3)
     ax_b.set_title("(b)", loc="left", fontsize=9, fontweight="bold", pad=2)
 
