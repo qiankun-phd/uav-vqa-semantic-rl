@@ -7,8 +7,7 @@
     "v26_prefix": "v26_rician",
     "out": "outputs/reports/paper1_stats.json",
     "boot": 5000,
-    "seed": 0,
-    "legacy_dedup": false
+    "seed": 0
   },
   "true_n": {
     "unique_questions_per_type": {
@@ -31,62 +30,62 @@
   },
   "table3_delta_visdrone": {
     "presence": {
-      "delta": -0.0814,
+      "delta": -0.0866,
       "ci95": [
-        -0.1138,
-        -0.0498
+        -0.1199,
+        -0.0543
       ],
       "token_acc": 0.678,
-      "image_acc": 0.7595,
-      "n_tasks": 7380,
+      "image_acc": 0.7646,
+      "n_tasks": 2460,
       "n_images": 104,
       "ci_crosses_zero": false
     },
     "counting": {
-      "delta": 0.1706,
+      "delta": 0.1745,
       "ci95": [
-        0.121,
-        0.222
+        0.1248,
+        0.2256
       ],
-      "token_acc": 0.4509,
-      "image_acc": 0.2804,
-      "n_tasks": 3852,
+      "token_acc": 0.4533,
+      "image_acc": 0.2788,
+      "n_tasks": 1284,
       "n_images": 104,
       "ci_crosses_zero": false
     },
     "comparison": {
-      "delta": 0.148,
+      "delta": 0.1506,
       "ci95": [
         0.0545,
-        0.2425
+        0.2484
       ],
       "token_acc": 0.8462,
-      "image_acc": 0.6982,
-      "n_tasks": 1872,
+      "image_acc": 0.6955,
+      "n_tasks": 624,
       "n_images": 104,
       "ci_crosses_zero": false
     },
     "co_presence": {
-      "delta": 0.1084,
+      "delta": 0.1186,
       "ci95": [
-        0.0027,
-        0.2115
+        0.0112,
+        0.2244
       ],
       "token_acc": 0.6635,
-      "image_acc": 0.555,
-      "n_tasks": 1872,
+      "image_acc": 0.5449,
+      "n_tasks": 624,
       "n_images": 104,
       "ci_crosses_zero": false
     },
     "threshold": {
-      "delta": -0.0155,
+      "delta": -0.0144,
       "ci95": [
         -0.117,
-        0.086
+        0.0881
       ],
-      "token_acc": 0.5967,
-      "image_acc": 0.6122,
-      "n_tasks": 1872,
+      "token_acc": 0.5962,
+      "image_acc": 0.6106,
+      "n_tasks": 624,
       "n_images": 104,
       "ci_crosses_zero": true
     }
@@ -139,9 +138,9 @@
     }
   },
   "rule_vs_lcb_visdrone": {
-    "rule_acc": 0.6698,
-    "lcb_acc": 0.6686,
-    "n": 16848,
+    "rule_acc": 0.6725,
+    "lcb_acc": 0.6725,
+    "n": 5616,
     "policy_per_channel": {
       "awgn": {
         "presence|-5dB": "2",
@@ -242,13 +241,13 @@
     }
   },
   "mcnemar_rule_vs_lcb_visdrone": {
-    "n_discordant": 167,
-    "a_right_b_wrong": 94,
-    "a_wrong_b_right": 73,
-    "chi2_cc": 2.395,
-    "p_exact": 0.12144802122959858,
-    "acc_a": 0.6698124406457739,
-    "acc_b": 0.6685660018993352
+    "n_discordant": 0,
+    "a_right_b_wrong": 0,
+    "a_wrong_b_right": 0,
+    "chi2_cc": 0.0,
+    "p_exact": 1.0,
+    "acc_a": 0.6725427350427351,
+    "acc_b": 0.6725427350427351
   },
   "rule_vs_lcb_dronevehicle": {
     "rule_acc": 0.7293,
@@ -260,68 +259,68 @@
     "a_right_b_wrong": 122,
     "a_wrong_b_right": 102,
     "chi2_cc": 1.612,
-    "p_exact": 0.20416375469888803,
+    "p_exact": 0.2041637546988884,
     "acc_a": 0.7293427230046948,
     "acc_b": 0.7246478873239437
   },
   "mcnemar_m4_vs_m1_visdrone": {
-    "n_discordant": 2690,
-    "a_right_b_wrong": 1899,
-    "a_wrong_b_right": 791,
-    "chi2_cc": 455.557,
-    "p_exact": 4.4491940990532376e-104,
-    "acc_a": 0.6698124406457739,
-    "acc_b": 0.6040479582146249
+    "n_discordant": 903,
+    "a_right_b_wrong": 643,
+    "a_wrong_b_right": 260,
+    "chi2_cc": 161.599,
+    "p_exact": 3.7563010762520937e-38,
+    "acc_a": 0.6725427350427351,
+    "acc_b": 0.6043447293447294
   },
   "mcnemar_m4_vs_m3_visdrone": {
-    "n_discordant": 1583,
-    "a_right_b_wrong": 1092,
-    "a_wrong_b_right": 491,
-    "chi2_cc": 227.416,
-    "p_exact": 1.2100321360038739e-52,
-    "acc_a": 0.6698124406457739,
-    "acc_b": 0.6341405508072174
+    "n_discordant": 531,
+    "a_right_b_wrong": 372,
+    "a_wrong_b_right": 159,
+    "chi2_cc": 84.64,
+    "p_exact": 1.0755178159999492e-20,
+    "acc_a": 0.6725427350427351,
+    "acc_b": 0.6346153846153846
   },
   "table4_methods_visdrone": {
     "M3_token": {
-      "acc": 0.6341,
+      "acc": 0.6346,
       "ci95": [
-        0.6012,
-        0.6666
+        0.6025,
+        0.6667
       ],
-      "n": 16848
+      "n": 5616
     },
     "M1_image": {
-      "acc": 0.604,
+      "acc": 0.6043,
       "ci95": [
-        0.5786,
-        0.6305
+        0.5789,
+        0.6312
       ],
-      "n": 16848
+      "n": 5616
     },
     "M4_rule": {
-      "acc": 0.6698,
+      "acc": 0.6725,
       "ci95": [
-        0.6401,
-        0.6999
+        0.6425,
+        0.7028
       ],
-      "n": 16848
+      "n": 5616
     },
     "M4_lcb": {
-      "acc": 0.6686,
+      "acc": 0.6725,
       "ci95": [
-        0.6389,
-        0.6987
+        0.6425,
+        0.7028
       ],
-      "n": 16848
+      "n": 5616
     },
     "M5_oracle": {
-      "acc": 0.7459,
+      "acc": 0.7472,
       "ci95": [
-        0.7171,
-        0.7759
+        0.7183,
+        0.7771
       ],
-      "n": 16848
+      "n": 5616
     }
   },
   "table5_crossvlm": {

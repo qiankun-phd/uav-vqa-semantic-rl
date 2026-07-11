@@ -88,7 +88,9 @@ def per_arm_counts():
                 continue
             if not is_test(r["image_id"]):
                 continue
-            key = (r["image_id"], r["question"], r["snr_bin"])
+            # channel in the key: one decision per (task, channel), so the pool
+            # is a true 3-channel pool (not first-channel-wins / AWGN-only)
+            key = (c, r["image_id"], r["question"], r["snr_bin"])
             dec[key].setdefault(r["service_level"], ok(r["correct"]))
             qt[key] = r["question_type"]
     agg = defaultdict(lambda: {"1": [0, 0], "2": [0, 0]})

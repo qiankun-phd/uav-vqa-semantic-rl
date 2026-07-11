@@ -33,6 +33,9 @@ import numpy as np
 import pandas as pd
 
 CHANNELS = ("awgn", "rayleigh", "rician")
+# Dedup key includes 'channel' by default (true 3-channel pooling). Set False
+# via --legacy-dedup to reproduce the archived AWGN-only report (bug-compatible).
+DEDUP_CHANNEL = True
 TAGS = ("", "_cmp", "_extra")  # main(presence,counting) + comparison + (co_presence,threshold)
 QTYPES = ("presence", "counting", "comparison", "co_presence", "threshold")
 
@@ -264,7 +267,14 @@ def main():
     ap.add_argument("--out", default="outputs/reports/paper1_stats.json")
     ap.add_argument("--boot", type=int, default=5000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--legacy-dedup", action="store_true",
+                    help="Reproduce the historical dedup key WITHOUT 'channel' "
+                         "(collapses multi-channel pools to the first-loaded "
+                         "channel, i.e. AWGN-only; archival use only)")
     args = ap.parse_args()
+
+    global DEDUP_CHANNEL
+    DEDUP_CHANNEL = not args.legacy_dedup
 
     report = {"config": vars(args)}
     print("=" * 78)
@@ -427,18 +437,29 @@ def main():
     print("\nWrote", args.out)
 
 
-def _pivot_ok(big: pd.DataFrame) -> pd.DataFrame:
-    """Dedup to one row per (image_id, question, snr_bin) task, keeping the FIRST
-    CSV occurrence of each service level (matches the paper build scripts, which
-    use dict.setdefault; some merged CSVs replay a task several times with
-    channel-seed noise). Preserves CSV row order for a deterministic 'first'."""
+def _pivot_ok(big: pd.DataFrame, dedup_channel: bool = None) -> pd.DataFrame:
+    """Dedup to one row per (image_id, question, snr_bin, channel) task, keeping
+    the FIRST CSV occurrence of each service level (matches the paper build
+    scripts, which use dict.setdefault; some merged CSVs replay a task several
+    times with channel-seed noise). Preserves CSV row order for a deterministic
+    'first'.
+
+    dedup_channel=True (default) includes 'channel' in the dedup key so that
+    multi-channel pools keep one row per channel. The historical behavior
+    (dedup_channel=False) omitted 'channel' with keep='first', which silently
+    collapsed a 3-channel pool to the first channel loaded (AWGN); it is kept
+    only for reproducing the archived AWGN-only report (--legacy-dedup)."""
+    if dedup_channel is None:
+        dedup_channel = DEDUP_CHANNEL
     big = big[big.image_id.map(is_test)].copy()
     big["ok"] = big.correct.map(cc)
     big["service_level"] = big["service_level"].astype(str)
     big = big[big.service_level.isin(["0", "1", "2"])]
-    # keep first occurrence of each (task, service)
-    big = big.drop_duplicates(
-        subset=["image_id", "question", "snr_bin", "service_level"], keep="first")
+    # keep first occurrence of each (task, service[, channel])
+    key = ["image_id", "question", "snr_bin", "service_level"]
+    if dedup_channel:
+        key.append("channel")
+    big = big.drop_duplicates(subset=key, keep="first")
     piv = big.pivot_table(
         index=["image_id", "question", "snr_bin", "question_type", "channel"],
         columns="service_level", values="ok", aggfunc="first", sort=False).reset_index()
